@@ -1,0 +1,63 @@
+# ============================================================
+# Ψηφιακή Πύλη Σχολείου & Εργαστηρίου — .gitignore
+# ============================================================
+
+# --- ΜΥΣΤΙΚΑ: ποτέ στο repository ---
+.env.keys
+.env
+*.pem
+*.key
+.htpasswd
+.school-htpasswd
+
+# --- Python virtual environment ---
+venv/
+env/
+.venv/
+
+# --- Python artifacts ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- MkDocs build output ---
+mkdocs-site/site/
+site/
+
+# --- Pyodide (μεγάλα δυαδικά, κατεβαίνουν από το install.sh) ---
+mkdocs-site/docs/assets/pyodide/
+
+# --- Frontend vendor assets (κατεβαίνουν από το install.sh) ---
+dashboard/assets/tailwind.min.js
+dashboard/assets/alpine.min.js
+
+# --- Δεδομένα εφαρμογών / ανεβάσματα ---
+pandoc-app/data/uploads/
+pandoc-app/data/templates/*.docx
+lab-app/*.db
+lab-app/*.sqlite
+lab-app/*.sqlite3
+*.db
+*.sqlite
+*.sqlite3
+data/build/
+data/*.lock
+
+# --- Logs & προσωρινά ---
+*.log
+logs/
+tmp/
+.tmp/
+*.tmp
+*.swp
+*~
+
+# --- Λειτουργικό σύστημα ---
+.DS_Store
+Thumbs.db

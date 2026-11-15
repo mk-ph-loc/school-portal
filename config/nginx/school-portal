@@ -1,0 +1,159 @@
+# ===========================================================================
+# Ψηφιακή Πύλη Σχολείου & Εργαστηρίου — Nginx site (θύρα 80)
+#
+#   /               → Dashboard (στατικό HTML/Tailwind/Alpine)
+#   /docs/          → Εκπαιδευτικό υλικό (static MkDocs στο /var/www/docs)
+#   /docs/teachers/ → Λύσεις Καθηγητή (HTTP Basic Auth)
+#   /pandoc/        → Visual Pandoc Studio (FastAPI @127.0.0.1:8002, Basic Auth)
+#   /lab/           → Διαχείριση Εργαστηρίου (placeholder· μελλοντικά :8001)
+# ===========================================================================
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    root /opt/school-portal/dashboard;
+    index index.html;
+
+    charset utf-8;
+    client_max_body_size 100M;
+    client_body_timeout 120s;
+
+    access_log /var/log/nginx/school-portal.access.log;
+    error_log  /var/log/nginx/school-portal.error.log warn;
+
+    # --- Συμπίεση (εξοικονόμηση bandwidth στο σχολικό LAN) ---
+    gzip on;
+    gzip_vary on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_types text/plain text/css text/xml application/json application/javascript
+               application/xml+rss image/svg+xml application/wasm;
+
+    # --- Ασφάλεια: βασικές κεφαλίδες ---
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # -----------------------------------------------------------------
+    # 1. Κεντρικό Dashboard
+    # -----------------------------------------------------------------
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    location /assets/ {
+        alias /opt/school-portal/dashboard/assets/;
+        expires 7d;
+        add_header Cache-Control "public";
+        access_log off;
+    }
+
+    # -----------------------------------------------------------------
+    # 2. Εκπαιδευτικό Υλικό — static MkDocs (μηδέν RAM)
+    # -----------------------------------------------------------------
+
+    # 2α. Περιοχή Καθηγητών — HTTP Basic Auth (προηγείται του /docs/)
+    location ^~ /docs/teachers/ {
+        alias /var/www/docs/teachers/;
+        index index.html;
+
+        auth_basic "Περιοχή Καθηγητών — Ψηφιακή Πύλη";
+        auth_basic_user_file /etc/nginx/.school-htpasswd;
+
+        try_files $uri $uri/ =404;
+    }
+
+    # 2β. Pyodide — μεγάλα αρχεία WASM, μακροχρόνια cache
+    location ^~ /docs/assets/pyodide/ {
+        alias /var/www/docs/assets/pyodide/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+
+        types {
+            application/wasm wasm;
+            application/javascript js mjs;
+            application/json json;
+            application/zip zip;
+        }
+        default_type application/octet-stream;
+    }
+
+    # 2γ. Υπόλοιπο εκπαιδευτικό υλικό (ελεύθερη πρόσβαση)
+    location ^~ /docs/ {
+        alias /var/www/docs/;
+        index index.html;
+        try_files $uri $uri/ =404;
+    }
+    # -----------------------------------------------------------------
+    # 3. Visual Pandoc Studio — reverse proxy + Basic Auth
+    # -----------------------------------------------------------------
+    location ^~ /pandoc/ {
+        auth_basic "Visual Pandoc Studio — Πρόσβαση Καθηγητών";
+        auth_basic_user_file /etc/nginx/.school-htpasswd;
+
+        proxy_pass http://127.0.0.1:8002/;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /pandoc;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "";
+
+        # Οι μετατροπές PDF/DOCX μπορεί να διαρκέσουν
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    180s;
+        proxy_read_timeout    180s;
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+
+    # -----------------------------------------------------------------
+    # 4. Διαχείριση Εργαστηρίου
+    #    ΤΩΡΑ: στατική σελίδα «Υπό Κατασκευή» (Προβολή για μαθητές).
+    #    ΜΕΛΛΟΝΤΙΚΑ: αντικατάσταση με proxy_pass στο 127.0.0.1:8001
+    #    όταν υλοποιηθεί το school-lab.service (FastAPI + SQLite).
+    # -----------------------------------------------------------------
+    location ^~ /lab/ {
+        alias /opt/school-portal/dashboard/lab/;
+        index index.html;
+        try_files $uri $uri/ =404;
+
+        # --- ΜΕΛΛΟΝΤΙΚΗ ΡΥΘΜΙΣΗ (σχολιασμένη) ---
+        # proxy_pass http://127.0.0.1:8001/;
+        # proxy_http_version 1.1;
+        # proxy_set_header Host $host;
+        # proxy_set_header X-Real-IP $remote_addr;
+        # proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # proxy_set_header X-Forwarded-Proto $scheme;
+        # proxy_set_header X-Forwarded-Prefix /lab;
+    }
+
+    # -----------------------------------------------------------------
+    # 5. Διάφορα
+    # -----------------------------------------------------------------
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "school-portal OK\n";
+    }
+
+    location = /favicon.ico {
+        alias /opt/school-portal/dashboard/assets/favicon.svg;
+        access_log off;
+        log_not_found off;
+    }
+
+    # Απόκρυψη κρυφών αρχείων (.git, .env.keys κ.λπ.)
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+}

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Παιχνίδι Δυαδικού Συστήματος — Ψηφιακή Πύλη</title>
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#334155; --txt:#e2e8f0;
+    --muted:#94a3b8; --accent:#6366f1; --ok:#22c55e; --err:#ef4444; --warn:#f59e0b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(160deg,#0f172a,#1e1b4b);color:var(--txt);
+       font-family:"DejaVu Sans","Liberation Sans",system-ui,sans-serif;min-height:100vh}
+  .wrap{max-width:900px;margin:0 auto;padding:1.5rem 1rem 3rem}
+  header{text-align:center;margin-bottom:1.5rem}
+  h1{font-size:1.7rem;margin:.3rem 0}
+  .sub{color:var(--muted);font-size:.9rem}
+  a.back{display:inline-block;margin-bottom:.8rem;color:#a5b4fc;text-decoration:none;font-size:.85rem}
+  a.back:hover{text-decoration:underline}
+  .stats{display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap;margin:1rem 0}
+  .stat{background:var(--panel);border:1px solid #475569;border-radius:.6rem;padding:.5rem 1rem;text-align:center;min-width:88px}
+  .stat b{display:block;font-size:1.25rem;color:#fff}
+  .stat span{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .card{background:var(--panel);border:1px solid #475569;border-radius:.9rem;padding:1.4rem;margin-bottom:1rem}
+  .modes{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-bottom:1rem}
+  .mode-btn{padding:.5rem 1rem;border-radius:.5rem;border:1px solid #475569;background:var(--panel2);
+            color:var(--txt);cursor:pointer;font-size:.8rem;font-weight:600}
+  .mode-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .question{text-align:center;font-size:1.05rem;margin-bottom:1rem;color:var(--muted)}
+  .target{text-align:center;font-size:2.6rem;font-weight:800;letter-spacing:.08em;margin:.4rem 0 1rem;
+          font-family:"DejaVu Sans Mono",monospace;color:#fff}
+  .bits{display:flex;gap:.4rem;justify-content:center;flex-wrap:wrap;margin:1rem 0}
+  .bit{width:56px;height:70px;border-radius:.5rem;border:2px solid #475569;background:var(--panel2);
+       cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all .15s}
+  .bit:hover{border-color:var(--accent)}
+  .bit.on{background:var(--accent);border-color:#a5b4fc;color:#fff}
+  .bit .val{font-size:1.5rem;font-weight:800;font-family:"DejaVu Sans Mono",monospace}
+  .bit .weight{font-size:.6rem;color:var(--muted);margin-top:.15rem}
+  .bit.on .weight{color:#e0e7ff}
+  .sumline{text-align:center;font-size:1.1rem;margin:.6rem 0;color:#a5b4fc;font-family:"DejaVu Sans Mono",monospace}
+  .answer-row{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;margin-top:1rem}
+  input[type=text]{padding:.7rem 1rem;font-size:1.1rem;border-radius:.5rem;border:1px solid #475569;
+                   background:#0f172a;color:#fff;text-align:center;width:200px;font-family:"DejaVu Sans Mono",monospace}
+  input[type=text]:focus{outline:2px solid var(--accent)}
+  button.primary{padding:.7rem 1.4rem;font-size:.9rem;font-weight:700;border:none;border-radius:.5rem;
+                 background:var(--accent);color:#fff;cursor:pointer}
+  button.primary:hover{background:#4f46e5}
+  button.ghost{padding:.7rem 1.2rem;font-size:.85rem;border:1px solid #475569;border-radius:.5rem;
+               background:transparent;color:var(--muted);cursor:pointer}
+  button.ghost:hover{color:#fff;border-color:var(--muted)}
+  .feedback{margin-top:1rem;padding:.8rem 1rem;border-radius:.5rem;font-size:.9rem;display:none;text-align:center}
+  .feedback.show{display:block}
+  .feedback.ok{background:rgba(34,197,94,.15);border:1px solid var(--ok);color:#86efac}
+  .feedback.err{background:rgba(239,68,68,.15);border:1px solid var(--err);color:#fca5a5}
+  .hint{font-size:.78rem;color:var(--muted);text-align:center;margin-top:.8rem;line-height:1.6}
+  .progress{height:6px;background:#0f172a;border-radius:3px;overflow:hidden;margin-top:1rem}
+  .progress > div{height:100%;background:linear-gradient(90deg,var(--accent),#a855f7);width:0;transition:width .3s}
+  footer{text-align:center;color:var(--muted);font-size:.75rem;margin-top:1.5rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="back" href="./">← Επιστροφή στα Παιχνίδια</a>
+    <h1>🔢 Παιχνίδι Δυαδικού Συστήματος</h1>
+    <p class="sub">Εξάσκηση στις μετατροπές δυαδικού ↔ δεκαδικού</p>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><b id="score">0</b><span>Πόντοι</span></div>
+    <div class="stat"><b id="level">1</b><span>Επίπεδο</span></div>
+    <div class="stat"><b id="streak">0</b><span>Σερί</span></div>
+    <div class="stat"><b id="correct">0/0</b><span>Σωστές</span></div>
+  </div>
+
+  <div class="modes">
+    <button class="mode-btn active" data-mode="b2d">Δυαδικό → Δεκαδικό</button>
+    <button class="mode-btn" data-mode="d2b">Δεκαδικό → Δυαδικό</button>
+    <button class="mode-btn" data-mode="bits">Άναψε τα Bits</button>
+  </div>
+
+  <div class="card">
+    <p class="question" id="question">Μετέτρεψε τον δυαδικό αριθμό σε δεκαδικό:</p>
+    <div class="target" id="target">1011</div>
+
+    <div class="bits" id="bitsArea" style="display:none"></div>
+    <div class="sumline" id="sumLine" style="display:none"></div>
+
+    <div class="answer-row" id="answerRow">
+      <input type="text" id="answer" placeholder="Η απάντησή σου" autocomplete="off">
+      <button class="primary" id="checkBtn">Έλεγχος</button>
+      <button class="ghost" id="skipBtn">Παράλειψη</button>
+    </div>
+
+    <div class="feedback" id="feedback"></div>
+    <div class="progress"><div id="progressBar"></div></div>
+    <p class="hint" id="hint"></p>
+  </div>
+
+  <footer>Ψηφιακή Πύλη Σχολείου &amp; Εργαστηρίου · Τμήμα Πληροφορικής</footer>
+</div>
+<script src="binary-game.js"></script>
+</body>
+</html>

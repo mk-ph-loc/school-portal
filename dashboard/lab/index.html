@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Πρόγραμμα Εργαστηρίου — Ψηφιακή Πύλη</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<script src="/assets/tailwind.min.js"></script>
+<style>body{font-family:"DejaVu Sans","Liberation Sans",system-ui,sans-serif}</style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+<header class="bg-gradient-to-br from-teal-700 to-emerald-600 text-white">
+  <div class="max-w-5xl mx-auto px-4 py-8">
+    <a href="/" class="text-teal-100 hover:text-white text-sm">← Επιστροφή στην Πύλη</a>
+    <h1 class="mt-2 text-3xl font-extrabold">🧪 Διαχείριση Εργαστηρίου &amp; Εξοπλισμού</h1>
+    <p class="text-teal-50 mt-1">Κρατήσεις αιθουσών · Αναφορά βλαβών · Δανεισμός εξοπλισμού</p>
+  </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-4 py-10">
+  <div class="rounded-2xl bg-white ring-1 ring-slate-200 p-10 text-center shadow-sm">
+    <div class="text-6xl">🚧</div>
+    <h2 class="mt-4 text-2xl font-bold text-slate-900">Υπό Κατασκευή</h2>
+    <p class="mt-3 text-slate-600 max-w-2xl mx-auto leading-relaxed">
+      Η εφαρμογή διαχείρισης εργαστηρίου βρίσκεται σε ανάπτυξη και θα είναι σύντομα διαθέσιμη.
+      Θα περιλαμβάνει τρεις καρτέλες λειτουργιών:
+    </p>
+
+    <div class="mt-8 grid gap-4 sm:grid-cols-3 text-left">
+      <div class="rounded-xl bg-teal-50 ring-1 ring-teal-100 p-5">
+        <div class="text-2xl">🗓️</div>
+        <h3 class="mt-2 font-bold text-slate-900">Κρατήσεις</h3>
+        <p class="text-sm text-slate-600 mt-1">Κράτηση αίθουσας εργαστηρίου ανά ώρα και τμήμα, με έλεγχο συγκρούσεων.</p>
+      </div>
+      <div class="rounded-xl bg-amber-50 ring-1 ring-amber-100 p-5">
+        <div class="text-2xl">🔧</div>
+        <h3 class="mt-2 font-bold text-slate-900">Βλάβες</h3>
+        <p class="text-sm text-slate-600 mt-1">Αναφορά και παρακολούθηση βλαβών εξοπλισμού με κατάσταση αποκατάστασης.</p>
+      </div>
+      <div class="rounded-xl bg-indigo-50 ring-1 ring-indigo-100 p-5">
+        <div class="text-2xl">💻</div>
+        <h3 class="mt-2 font-bold text-slate-900">Δανεισμός</h3>
+        <p class="text-sm text-slate-600 mt-1">Καταγραφή δανεισμού laptops, tablets και λοιπού εξοπλισμού με ημερομηνίες επιστροφής.</p>
+      </div>
+    </div>
+
+    <div class="mt-8 rounded-lg bg-slate-50 ring-1 ring-slate-200 p-4 text-sm text-slate-600">
+      <strong>Τεχνική σημείωση:</strong> Η υπηρεσία θα τρέχει ως
+      <code class="px-1.5 py-0.5 bg-slate-200 rounded text-xs">school-lab.service</code>
+      (FastAPI + SQLite) στο <code class="px-1.5 py-0.5 bg-slate-200 rounded text-xs">127.0.0.1:8001</code>.
+      Η διαδρομή <code class="px-1.5 py-0.5 bg-slate-200 rounded text-xs">/lab/</code> είναι ήδη ρυθμισμένη στον Nginx.
+    </div>
+
+    <div class="mt-8 flex flex-wrap gap-3 justify-center">
+      <a href="/" class="px-5 py-2.5 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-700 transition">🏠 Κεντρική Πύλη</a>
+      <a href="/docs/" class="px-5 py-2.5 rounded-lg bg-white ring-1 ring-slate-300 font-semibold hover:bg-slate-50 transition">📚 Εκπαιδευτικό Υλικό</a>
+    </div>
+  </div>
+</main>
+
+<footer class="max-w-5xl mx-auto px-4 py-6 text-center text-sm text-slate-500">
+  Ψηφιακή Πύλη Σχολείου &amp; Εργαστηρίου · Τμήμα Πληροφορικής
+</footer>
+</body>
+</html>

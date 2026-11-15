@@ -1,0 +1,27 @@
+[Unit]
+Description=Ψηφιακή Πύλη — Αυτόματη ανακατασκευή υλικού όταν αλλάζουν τα Markdown
+Documentation=file:///opt/school-portal/README.md
+# Χαλάρωση των ορίων επανεκκίνησης: ένα batch αλλαγών (π.χ. git pull)
+# μπορεί να προκαλέσει πολλά διαδοχικά triggers.
+StartLimitIntervalSec=120
+StartLimitBurst=30
+
+# Παρακολουθεί αλλαγές και ενεργοποιεί το school-mkdocs.service (oneshot).
+# Μηδενική κατανάλωση RAM σε ηρεμία — χρησιμοποιεί inotify του kernel.
+#
+# ΣΗΜΕΙΩΣΗ: ΔΕΝ χρησιμοποιούμε DirectoryNotEmpty, γιατί ο φάκελος docs/
+# είναι μόνιμα μη-κενός και θα προκαλούσε συνεχή re-trigger (start-limit-hit).
+[Path]
+PathModified=/opt/school-portal/mkdocs-site/mkdocs.yml
+PathChanged=/opt/school-portal/mkdocs-site/docs
+PathChanged=/opt/school-portal/mkdocs-site/docs/gymnasio-a
+PathChanged=/opt/school-portal/mkdocs-site/docs/gymnasio-b
+PathChanged=/opt/school-portal/mkdocs-site/docs/gymnasio-g
+PathChanged=/opt/school-portal/mkdocs-site/docs/lykeio-a
+PathChanged=/opt/school-portal/mkdocs-site/docs/lykeio-b
+PathChanged=/opt/school-portal/mkdocs-site/docs/lykeio-g
+PathChanged=/opt/school-portal/mkdocs-site/docs/teachers
+Unit=school-mkdocs.service
+
+[Install]
+WantedBy=multi-user.target

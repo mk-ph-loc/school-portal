@@ -1,0 +1,40 @@
+[Unit]
+Description=Ψηφιακή Πύλη — Ανακατασκευή εκπαιδευτικού υλικού (MkDocs → static HTML)
+Documentation=file:///opt/school-portal/README.md
+After=network.target
+# Επιτρέπουμε συχνά διαδοχικά builds (π.χ. μετά από git pull ή μαζική επεξεργασία)
+StartLimitIntervalSec=120
+StartLimitBurst=30
+
+# Oneshot: ΔΕΝ παραμένει διεργασία στη μνήμη.
+# Χτίζει static HTML στο /var/www/docs που σερβίρει απευθείας ο Nginx.
+# Έτσι η κατανάλωση RAM σε ηρεμία είναι 0 MB (αντί ~90 MB του mkdocs serve).
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/school-portal/mkdocs-site
+Environment=NO_MKDOCS_2_WARNING=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/bin/bash /opt/school-portal/scripts/build-docs.sh
+
+# --- Περιορισμοί πόρων κατά το build ---
+MemoryMax=512M
+CPUWeight=30
+Nice=10
+TimeoutStartSec=300
+
+# --- Hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+# Το RestrictSUIDSGID παραλείπεται σκόπιμα: οι φάκελοι εξόδου χρησιμοποιούν
+# setgid (2775) και η δημιουργία υποφακέλων θα αποτύγχανε με EPERM.
+ReadWritePaths=/var/www
+ReadWritePaths=/opt/school-portal/mkdocs-site
+ReadWritePaths=/opt/school-portal/data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="el" class="scroll-smooth">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ψηφιακή Πύλη Σχολείου &amp; Εργαστηρίου</title>
+<meta name="description" content="Ψηφιακή Πύλη Σχολείου &amp; Εργαστηρίου — Εκπαιδευτικό υλικό Πληροφορικής για Γυμνάσιο και Λύκειο.">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<script src="/assets/tailwind.min.js"></script>
+<script defer src="/assets/alpine.min.js"></script>
+<style>
+  [x-cloak]{display:none !important}
+  body{font-family:"DejaVu Sans","Liberation Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .card-hover{transition:transform .18s ease, box-shadow .18s ease}
+  .card-hover:hover{transform:translateY(-4px);box-shadow:0 18px 40px -12px rgba(15,23,42,.35)}
+  .grid-bg{background-image:radial-gradient(circle at 1px 1px, rgba(255,255,255,.16) 1px, transparent 0);background-size:22px 22px}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased" x-data="portal()" x-init="init()">
+
+<!-- ================= HEADER ================= -->
+<header class="bg-gradient-to-br from-indigo-900 via-blue-800 to-sky-700 text-white">
+  <div class="grid-bg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <div class="w-14 h-14 rounded-2xl bg-white/15 ring-1 ring-white/30 grid place-items-center text-3xl">🏫</div>
+          <div>
+            <h1 class="text-2xl sm:text-4xl font-extrabold tracking-tight">Ψηφιακή Πύλη Σχολείου &amp; Εργαστηρίου</h1>
+            <p class="text-blue-100 mt-1 text-sm sm:text-base">Εκπαιδευτικό υλικό Πληροφορικής · Γυμνάσιο &amp; Λύκειο</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span x-show="!unlocked" class="text-xs px-3 py-1.5 rounded-full bg-white/10 ring-1 ring-white/25">Λειτουργία Μαθητή</span>
+          <span x-show="unlocked" x-cloak class="text-xs px-3 py-1.5 rounded-full bg-emerald-400/20 ring-1 ring-emerald-300/50 text-emerald-50">✓ Λειτουργία Καθηγητή</span>
+          <button x-show="unlocked" x-cloak @click="lock()" class="text-xs px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 ring-1 ring-white/25 transition">Κλείδωμα</button>
+        </div>
+      </div>
+      <nav class="mt-6 flex flex-wrap gap-2 text-sm">
+        <a href="#mathites" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">👨‍🎓 Ζώνη Μαθητών</a>
+        <a href="#kathigites" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">🔐 Ζώνη Καθηγητών</a>
+        <a href="/docs/" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">📚 Όλο το Υλικό</a>
+        <a href="/docs/games/binary-game.html" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">🎮 Παιχνίδι Δυαδικού</a>
+      </nav>
+    </div>
+  </div>
+</header>
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-14">
+
+  <!-- ================= ΖΩΝΗ ΜΑΘΗΤΩΝ ================= -->
+  <section id="mathites">
+    <div class="flex items-end justify-between flex-wrap gap-3 mb-6">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-900 flex items-center gap-2">👨‍🎓 Ζώνη Μαθητών</h2>
+        <p class="text-slate-600 mt-1">Ελεύθερη πρόσβαση. Διάλεξε την τάξη σου για να δεις <strong>μόνο</strong> τα μαθήματά της.</p>
+      </div>
+      <span class="text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">Χωρίς κωδικό</span>
+    </div>
+
+    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <template x-for="c in classes" :key="c.slug">
+        <a :href="'/docs/' + c.slug + '/'"
+           class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+          <div class="flex items-start justify-between">
+            <div class="w-12 h-12 rounded-xl grid place-items-center text-2xl" :class="c.bg" x-text="c.icon"></div>
+            <span class="text-[11px] font-bold px-2.5 py-1 rounded-full" :class="c.badge" x-text="c.level"></span>
+          </div>
+          <h3 class="mt-4 text-lg font-bold text-slate-900" x-text="c.title"></h3>
+          <p class="mt-1 text-sm text-slate-600 leading-relaxed" x-text="c.desc"></p>
+          <div class="mt-4 flex items-center gap-1.5 text-sm font-semibold text-blue-700">
+            Μαθήματα τάξης <span aria-hidden="true">→</span>
+          </div>
+        </a>
+      </template>
+    </div>
+
+    <!-- Κάρτα Προγράμματος Εργαστηρίου (Προβολή) -->
+    <a href="/lab/" class="card-hover mt-5 block rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 p-6 text-white shadow-sm">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-white/20 ring-1 ring-white/30 grid place-items-center text-2xl">🗓️</div>
+          <div>
+            <h3 class="text-lg font-bold">Πρόγραμμα Εργαστηρίου (Προβολή)</h3>
+            <p class="text-teal-50 text-sm mt-0.5">Δες τις κρατήσεις αιθουσών και τη διαθεσιμότητα εξοπλισμού — μόνο για προβολή.</p>
+          </div>
+        </div>
+        <span class="text-sm font-semibold px-4 py-2 rounded-lg bg-white/15 ring-1 ring-white/30 whitespace-nowrap">Προβολή →</span>
+      </div>
+    </a>
+  </section>
+  <!-- ================= ΖΩΝΗ ΚΑΘΗΓΗΤΩΝ ================= -->
+  <section id="kathigites">
+    <div class="flex items-end justify-between flex-wrap gap-3 mb-6">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-900 flex items-center gap-2">🔐 Ζώνη Καθηγητών</h2>
+        <p class="text-slate-600 mt-1">Απαιτείται κωδικός πρόσβασης για τα εργαλεία διαχείρισης.</p>
+      </div>
+      <button x-show="!unlocked" @click="openModal()"
+              class="text-sm font-semibold px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-700 transition">
+        Εισαγωγή Κωδικού
+      </button>
+      <span x-show="unlocked" x-cloak class="text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">Ξεκλειδώθηκε</span>
+    </div>
+
+    <div x-show="!unlocked" class="rounded-2xl border-2 border-dashed border-slate-300 bg-white/60 p-10 text-center">
+      <div class="text-5xl">🔒</div>
+      <h3 class="mt-3 text-lg font-bold text-slate-800">Προστατευόμενη Περιοχή</h3>
+      <p class="mt-1 text-slate-600 text-sm max-w-xl mx-auto">
+        Η Διαχείριση Εργαστηρίου, το Visual Pandoc Studio και οι Λύσεις Καθηγητή είναι διαθέσιμα μόνο στους εκπαιδευτικούς.
+      </p>
+      <button @click="openModal()" class="mt-5 px-5 py-2.5 rounded-lg bg-blue-700 text-white font-semibold hover:bg-blue-800 transition">
+        Ξεκλείδωμα με κωδικό
+      </button>
+    </div>
+
+    <div x-show="unlocked" x-cloak class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <a href="/lab/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="w-12 h-12 rounded-xl bg-teal-100 grid place-items-center text-2xl">🧪</div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">Διαχείριση Εργαστηρίου</h3>
+        <p class="mt-1 text-sm text-slate-600">Κρατήσεις αιθουσών, αναφορά βλαβών και δανεισμός εξοπλισμού.</p>
+        <div class="mt-4 text-sm font-semibold text-teal-700">Άνοιγμα →</div>
+      </a>
+      <a href="/pandoc/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="w-12 h-12 rounded-xl bg-violet-100 grid place-items-center text-2xl">📝</div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">Visual Pandoc Studio</h3>
+        <p class="mt-1 text-sm text-slate-600">Μετατροπή Markdown σε DOCX/PDF, σχολικά πρότυπα και αποστολή στο υλικό.</p>
+        <div class="mt-4 text-sm font-semibold text-violet-700">Άνοιγμα →</div>
+      </a>
+      <a href="/docs/teachers/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="w-12 h-12 rounded-xl bg-amber-100 grid place-items-center text-2xl">🗝️</div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">Λύσεις Καθηγητή</h3>
+        <p class="mt-1 text-sm text-slate-600">Απαντήσεις ασκήσεων, φύλλα εργασίας και παιδαγωγικές σημειώσεις.</p>
+        <div class="mt-4 text-sm font-semibold text-amber-700">Άνοιγμα →</div>
+      </a>
+    </div>
+
+    <p x-show="unlocked" x-cloak class="mt-4 text-xs text-slate-500">
+      ℹ️ Οι περιοχές <code>/pandoc/</code> και <code>/docs/teachers/</code> προστατεύονται επιπλέον από τον διακομιστή (HTTP Basic Auth).
+      Χρησιμοποίησε όνομα χρήστη <strong>teacher</strong> και τον ίδιο κωδικό.
+    </p>
+  </section>
+  <!-- ================= ΓΡΗΓΟΡΗ ΠΡΟΣΒΑΣΗ ================= -->
+  <section>
+    <h2 class="text-2xl font-bold text-slate-900 mb-6">⚡ Γρήγορη Πρόσβαση</h2>
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <a href="/docs/games/binary-game.html" class="card-hover rounded-xl bg-white p-5 ring-1 ring-slate-200 block">
+        <div class="text-2xl">🎮</div><h3 class="mt-2 font-bold">Παιχνίδι Δυαδικού</h3>
+        <p class="text-sm text-slate-600 mt-1">Μετατροπές δυαδικού ↔ δεκαδικού.</p>
+      </a>
+      <a href="/docs/gymnasio-a/python/" class="card-hover rounded-xl bg-white p-5 ring-1 ring-slate-200 block">
+        <div class="text-2xl">🐍</div><h3 class="mt-2 font-bold">Python στον Browser</h3>
+        <p class="text-sm text-slate-600 mt-1">Εκτέλεση κώδικα χωρίς εγκατάσταση.</p>
+      </a>
+      <a href="/docs/lykeio-a/quiz/" class="card-hover rounded-xl bg-white p-5 ring-1 ring-slate-200 block">
+        <div class="text-2xl">❓</div><h3 class="mt-2 font-bold">Διαδραστικά Κουίζ</h3>
+        <p class="text-sm text-slate-600 mt-1">Αυτοαξιολόγηση με άμεση ανατροφοδότηση.</p>
+      </a>
+      <a href="/docs/about/" class="card-hover rounded-xl bg-white p-5 ring-1 ring-slate-200 block">
+        <div class="text-2xl">ℹ️</div><h3 class="mt-2 font-bold">Σχετικά με την Πύλη</h3>
+        <p class="text-sm text-slate-600 mt-1">Οδηγίες χρήσης &amp; πληροφορίες.</p>
+      </a>
+    </div>
+  </section>
+</main>
+
+<!-- ================= MODAL ΚΩΔΙΚΟΥ ================= -->
+<div x-show="modal" x-cloak class="fixed inset-0 z-50 grid place-items-center p-4" @keydown.escape.window="modal=false">
+  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="modal=false"></div>
+  <div class="relative w-full max-w-md rounded-2xl bg-white p-7 shadow-2xl" @click.stop>
+    <div class="text-center">
+      <div class="text-4xl">🔐</div>
+      <h3 class="mt-2 text-xl font-bold text-slate-900">Πρόσβαση Καθηγητή</h3>
+      <p class="mt-1 text-sm text-slate-600">Εισήγαγε τον κωδικό της Ζώνης Καθηγητών.</p>
+    </div>
+    <form @submit.prevent="unlock()" class="mt-5 space-y-3">
+      <input x-ref="pw" type="password" x-model="password" autocomplete="current-password"
+             placeholder="Κωδικός πρόσβασης"
+             class="w-full rounded-lg border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+             :class="error ? 'border-red-400 ring-1 ring-red-300' : ''">
+      <p x-show="error" x-cloak class="text-sm text-red-600 font-medium" x-text="error"></p>
+      <div class="flex gap-2 pt-1">
+        <button type="button" @click="modal=false" class="flex-1 px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-semibold transition">Άκυρο</button>
+        <button type="submit" class="flex-1 px-4 py-2.5 rounded-lg bg-blue-700 text-white hover:bg-blue-800 font-semibold transition">Ξεκλείδωμα</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ================= FOOTER ================= -->
+<footer class="mt-10 border-t border-slate-200 bg-white">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
+    <span>© <span x-text="year"></span> Ψηφιακή Πύλη Σχολείου &amp; Εργαστηρίου</span>
+    <span class="flex items-center gap-3">
+      <a href="/docs/" class="hover:text-blue-700">Εκπαιδευτικό Υλικό</a>
+      <a href="/docs/about/" class="hover:text-blue-700">Βοήθεια</a>
+    </span>
+  </div>
+</footer>
+
+<script src="/assets/portal.js"></script>
+</body>
+</html>

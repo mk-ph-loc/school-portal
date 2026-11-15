@@ -1,0 +1,132 @@
+/* ============================================================
+   Ψηφιακή Πύλη — επιπλέον στυλ για MkDocs Material
+   ============================================================ */
+
+/* ---------- Επιλογέας τάξης (class-filter.js) ---------- */
+.class-switcher {
+  padding: .6rem .8rem;
+  margin-bottom: .4rem;
+  border-bottom: 1px solid rgba(0, 0, 0, .07);
+}
+.class-switcher__label {
+  display: block;
+  font-size: .62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  opacity: .6;
+  margin-bottom: .25rem;
+}
+.class-switcher__select {
+  width: 100%;
+  padding: .35rem .5rem;
+  font-size: .72rem;
+  border-radius: .25rem;
+  border: 1px solid rgba(0, 0, 0, .18);
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  cursor: pointer;
+}
+[data-md-color-scheme="slate"] .class-switcher { border-bottom-color: rgba(255, 255, 255, .12); }
+[data-md-color-scheme="slate"] .class-switcher__select { border-color: rgba(255, 255, 255, .22); }
+
+/* ---------- Ελληνική ψευδογλώσσα (glossa.js) ---------- */
+.glossa-highlighted { line-height: 1.55; }
+.gl-k { color: #c2185b; font-weight: 700; }   /* λέξεις-κλειδιά */
+.gl-b { color: #00796b; font-weight: 600; }   /* ενσωματωμένες */
+.gl-s { color: #2e7d32; }                     /* strings */
+.gl-n { color: #ef6c00; }                     /* αριθμοί */
+.gl-c { color: #78909c; font-style: italic; } /* σχόλια */
+.gl-o { color: #5e35b1; font-weight: 600; }   /* τελεστές */
+.gl-v { color: inherit; }                     /* μεταβλητές */
+
+[data-md-color-scheme="slate"] .gl-k { color: #ff80ab; }
+[data-md-color-scheme="slate"] .gl-b { color: #4db6ac; }
+[data-md-color-scheme="slate"] .gl-s { color: #a5d6a7; }
+[data-md-color-scheme="slate"] .gl-n { color: #ffb74d; }
+[data-md-color-scheme="slate"] .gl-c { color: #90a4ae; }
+[data-md-color-scheme="slate"] .gl-o { color: #b39ddb; }
+
+/* ---------- Python runner (python-run.js) ---------- */
+.py-runner { margin: 1em 0; }
+.py-toolbar {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  padding: .4rem .6rem;
+  background: rgba(63, 81, 181, .08);
+  border: 1px solid rgba(63, 81, 181, .2);
+  border-bottom: none;
+  border-radius: .3rem .3rem 0 0;
+}
+.py-runner pre { margin-top: 0 !important; border-radius: 0 0 .3rem .3rem; }
+.py-run-btn {
+  padding: .3rem .8rem; font-size: .7rem; font-weight: 700;
+  color: #fff; background: #3f51b5; border: none; border-radius: .25rem;
+  cursor: pointer; transition: background .15s ease;
+}
+.py-run-btn:hover:not(:disabled) { background: #303f9f; }
+.py-run-btn:disabled { opacity: .6; cursor: wait; }
+.py-hint { font-size: .64rem; opacity: .65; }
+.py-output {
+  display: none; margin: 0; padding: .7rem .9rem;
+  font-family: "DejaVu Sans Mono", monospace; font-size: .72rem;
+  white-space: pre-wrap; word-break: break-word;
+  background: #1e1e2e; color: #e0e0e0;
+  border-radius: 0 0 .3rem .3rem; border-top: 2px solid #3f51b5;
+}
+.py-output.is-visible { display: block; }
+.py-output--ok { border-top-color: #43a047; }
+.py-output--err { border-top-color: #e53935; color: #ffcdd2; }
+
+.py-status {
+  position: fixed; right: 1rem; bottom: 1rem; z-index: 99;
+  max-width: 22rem; padding: .7rem 1rem;
+  font-size: .74rem; font-weight: 600; color: #fff;
+  background: #37474f; border-radius: .4rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
+  opacity: 0; transform: translateY(10px); pointer-events: none;
+  transition: opacity .25s ease, transform .25s ease;
+}
+.py-status.is-visible { opacity: 1; transform: translateY(0); }
+.py-status--ok { background: #2e7d32; }
+.py-status--err { background: #c62828; }
+
+/* ---------- Κουίζ (quiz.js) ---------- */
+.quiz-box {
+  margin: 1.2em 0; padding: 1.1rem 1.2rem;
+  border: 1px solid rgba(0, 0, 0, .12); border-left: 4px solid #3f51b5;
+  border-radius: .4rem; background: rgba(63, 81, 181, .04);
+}
+[data-md-color-scheme="slate"] .quiz-box { border-color: rgba(255,255,255,.15); background: rgba(255,255,255,.04); }
+.quiz-head { display: flex; justify-content: space-between; font-size: .68rem; font-weight: 700; opacity: .7; margin-bottom: .5rem; }
+.quiz-question { margin: .3rem 0 .8rem !important; font-size: .85rem; }
+.quiz-options { display: grid; gap: .45rem; }
+.quiz-option {
+  text-align: left; padding: .55rem .8rem; font-size: .76rem;
+  border: 1px solid rgba(0, 0, 0, .18); border-radius: .3rem;
+  background: var(--md-default-bg-color); color: var(--md-default-fg-color);
+  cursor: pointer; transition: all .15s ease;
+}
+.quiz-option:hover:not(:disabled) { border-color: #3f51b5; background: rgba(63, 81, 181, .08); }
+.quiz-option:disabled { cursor: default; }
+.quiz-option.is-correct { border-color: #43a047; background: rgba(67, 160, 71, .16); font-weight: 700; }
+.quiz-option.is-wrong { border-color: #e53935; background: rgba(229, 57, 53, .14); }
+.quiz-feedback { margin-top: .7rem; font-size: .74rem; min-height: 1.1em; }
+.quiz-feedback.is-ok { color: #2e7d32; font-weight: 600; }
+.quiz-feedback.is-err { color: #c62828; font-weight: 600; }
+[data-md-color-scheme="slate"] .quiz-feedback.is-ok { color: #a5d6a7; }
+[data-md-color-scheme="slate"] .quiz-feedback.is-err { color: #ef9a9a; }
+.quiz-actions { margin-top: .8rem; }
+.quiz-btn {
+  padding: .4rem 1rem; font-size: .72rem; font-weight: 700; color: #fff;
+  background: #3f51b5; border: none; border-radius: .25rem; cursor: pointer;
+}
+.quiz-btn:hover:not(:disabled) { background: #303f9f; }
+.quiz-btn:disabled { opacity: .45; cursor: not-allowed; }
+.quiz-result { text-align: center; padding: .8rem 0; }
+.quiz-result__emoji { font-size: 2.4rem; }
+.quiz-result__title { margin: .4rem 0 !important; }
+.quiz-result__msg { font-size: .78rem; opacity: .8; margin-bottom: .8rem !important; }
+
+/* ---------- Διάφορα ---------- */
+.md-typeset .grid.cards > ul > li { border-radius: .5rem; }
+.md-typeset table:not([class]) { font-size: .74rem; }

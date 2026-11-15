@@ -1,0 +1,153 @@
+site_name: Ψηφιακή Πύλη Σχολείου & Εργαστηρίου
+site_description: Εκπαιδευτικό υλικό Πληροφορικής για Γυμνάσιο και Λύκειο
+site_author: Τμήμα Πληροφορικής
+site_url: http://localhost/docs/
+copyright: © Τμήμα Πληροφορικής — Ψηφιακή Πύλη Σχολείου & Εργαστηρίου
+
+docs_dir: docs
+site_dir: /var/www/docs
+use_directory_urls: true
+
+theme:
+  name: material
+  language: el
+  custom_dir: overrides
+  font: false
+  favicon: assets/favicon.svg
+  logo: assets/favicon.svg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Σκοτεινή λειτουργία
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Φωτεινή λειτουργία
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+extra_javascript:
+  - assets/javascripts/class-filter.js
+  - assets/javascripts/glossa.js
+  - assets/javascripts/python-run.js
+  - assets/javascripts/quiz.js
+
+# ΣΗΜΕΙΩΣΗ: Το theme.language είναι 'el' (πλήρης ελληνική διεπαφή).
+# Ο μηχανισμός αναζήτησης (lunr) δεν διαθέτει stemmer για τα ελληνικά,
+# επομένως χρησιμοποιείται ο πολύγλωσσος tokenizer που υποστηρίζει
+# ελληνικούς χαρακτήρες χωρίς στέμινγκ.
+plugins:
+  - search:
+      lang: en
+      separator: '[\s\-,:!=\[\]()"/]+'
+  - glightbox:
+      touchNavigation: true
+      loop: false
+      effect: zoom
+      zoomable: true
+      draggable: true
+      auto_caption: true
+      caption_position: bottom
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      permalink_title: Μόνιμος σύνδεσμος
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+extra:
+  generator: false
+  social: []
+
+nav:
+  - Αρχική: index.md
+  - Γυμνάσιο:
+      - Α' Γυμνασίου:
+          - gymnasio-a/index.md
+          - Εισαγωγή στην Πληροφορική: gymnasio-a/eisagogi.md
+          - Ψευδογλώσσα: gymnasio-a/pseudoglossa.md
+          - Python: gymnasio-a/python.md
+      - Β' Γυμνασίου:
+          - gymnasio-b/index.md
+          - Δομές Επανάληψης: gymnasio-b/epanalipsi.md
+          - Δυαδικό Σύστημα: gymnasio-b/dyadiko.md
+          - Ασκήσεις Python: gymnasio-b/python.md
+      - Γ' Γυμνασίου:
+          - gymnasio-g/index.md
+          - Πίνακες: gymnasio-g/pinakes.md
+          - Συναρτήσεις: gymnasio-g/synartiseis.md
+  - Λύκειο:
+      - Α' Λυκείου:
+          - lykeio-a/index.md
+          - Αλγοριθμική: lykeio-a/algoritmiki.md
+          - Δομές Δεδομένων: lykeio-a/domes-dedomenon.md
+          - Κουίζ: lykeio-a/quiz.md
+      - Β' Λυκείου:
+          - lykeio-b/index.md
+          - Αναζήτηση & Ταξινόμηση: lykeio-b/taxinomisi.md
+          - Πολυπλοκότητα: lykeio-b/polyplokotita.md
+      - Γ' Λυκείου:
+          - lykeio-g/index.md
+          - Επανάληψη ύλης: lykeio-g/epanaliptiki.md
+          - Θέματα Πανελλαδικών: lykeio-g/themata.md
+  - Εργαστήρι:
+      - games/index.md
+      - Πολυμέσα: media/index.md
+  - Καθηγητές:
+      - teachers/index.md
+      - Λύσεις Ασκήσεων: teachers/lyseis.md
+  - Σχετικά: about.md

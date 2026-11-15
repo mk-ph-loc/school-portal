@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual Pandoc Studio — Ψηφιακή Πύλη</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="{{ url_for('static', path='studio.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar__left">
+    <a href="/" class="back" title="Επιστροφή στην Πύλη">←</a>
+    <span class="logo">📝</span>
+    <div>
+      <h1>Visual Pandoc Studio</h1>
+      <p class="ver">{{ pandoc_ver }}</p>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="editor">✍️ Επεξεργαστής</button>
+    <button class="tab" data-tab="flags">🎛️ Visual Flags</button>
+    <button class="tab" data-tab="templates">📄 Πρότυπα .docx</button>
+    <button class="tab" data-tab="publish">🚀 Αποστολή στο MkDocs</button>
+  </nav>
+</header>
+
+<div id="toast" class="toast"></div>
+
+<main class="container">
+
+  <!-- ============ ΚΑΡΤΕΛΑ: ΕΠΕΞΕΡΓΑΣΤΗΣ ============ -->
+  <section class="panel active" id="panel-editor">
+    <div class="toolbar">
+      <label class="field">
+        <span>Όνομα αρχείου</span>
+        <input type="text" id="filename" value="mathima" placeholder="π.χ. fyllo-ergasias">
+      </label>
+      <label class="field">
+        <span>Μορφή εξόδου</span>
+        <select id="format">
+          {% for f in formats %}<option value="{{ f.id }}">{{ f.label }}</option>{% endfor %}
+        </select>
+      </label>
+      <button class="btn btn--primary" id="convertBtn">⬇ Μετατροπή &amp; Λήψη</button>
+      <button class="btn" id="previewBtn">👁 Ανανέωση προεπισκόπησης</button>
+      <label class="check"><input type="checkbox" id="autoPreview" checked> Αυτόματη προεπισκόπηση</label>
+    </div>
+
+    <div class="split">
+      <div class="pane">
+        <div class="pane__head">
+          <span>Markdown</span>
+          <div class="snippets">
+            <button class="chip" data-snippet="heading">Επικεφαλίδα</button>
+            <button class="chip" data-snippet="table">Πίνακας</button>
+            <button class="chip" data-snippet="python">Python</button>
+            <button class="chip" data-snippet="glossa">Ψευδογλώσσα</button>
+            <button class="chip" data-snippet="quiz">Κουίζ</button>
+          </div>
+        </div>
+        <textarea id="markdown" spellcheck="false" placeholder="Γράψε εδώ το μάθημα σε Markdown…"></textarea>
+      </div>
+      <div class="pane">
+        <div class="pane__head"><span>Ζωντανή προεπισκόπηση</span><span id="previewStatus" class="muted"></span></div>
+        <div id="preview" class="preview"></div>
+      </div>
+    </div>
+
+    <div class="cmdbox">
+      <span class="cmdbox__label">Εντολή Pandoc:</span>
+      <code id="commandLine">pandoc …</code>
+      <button class="btn btn--sm" id="copyCmd">📋 Αντιγραφή</button>
+    </div>
+  </section>
+
+  <!-- ============ ΚΑΡΤΕΛΑ: VISUAL FLAGS ============ -->
+  <section class="panel" id="panel-flags">
+    <p class="lead">Επίλεξε οπτικά τις παραμέτρους του pandoc. Η εντολή ενημερώνεται αυτόματα.</p>
+    <div class="flags-grid">
+      {% for group in flags_catalog %}
+      <fieldset class="flaggroup">
+        <legend>{{ group.group }}</legend>
+        {% for spec in group.flags %}
+        <div class="flagrow">
+          <label class="flaglabel" for="flag-{{ spec.id }}">
+            {{ spec.label }}
+            <span class="help" title="{{ spec.help }}">?</span>
+          </label>
+          {% if spec.type == 'bool' %}
+            <input type="checkbox" id="flag-{{ spec.id }}" data-flag="{{ spec.id }}" data-type="bool"
+                   {% if spec.default %}checked{% endif %}>
+          {% elif spec.type == 'int' %}
+            <input type="number" id="flag-{{ spec.id }}" data-flag="{{ spec.id }}" data-type="int"
+                   value="{{ spec.default }}" min="{{ spec.min }}" max="{{ spec.max }}">
+          {% elif spec.type == 'select' %}
+            <select id="flag-{{ spec.id }}" data-flag="{{ spec.id }}" data-type="select">
+              {% for opt in spec.options %}
+              <option value="{{ opt }}" {% if opt == spec.default %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          {% elif spec.type == 'template' %}
+            <select id="flag-{{ spec.id }}" data-flag="{{ spec.id }}" data-type="template">
+              <option value="">— Κανένα (προεπιλογή pandoc) —</option>
+              {% for t in docx_templates %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+            </select>
+          {% else %}
+            <input type="text" id="flag-{{ spec.id }}" data-flag="{{ spec.id }}" data-type="text"
+                   value="{{ spec.default }}" placeholder="{{ spec.help }}">
+          {% endif %}
+          <small class="flaghelp">{{ spec.help }}</small>
+        </div>
+        {% endfor %}
+      </fieldset>
+      {% endfor %}
+    </div>
+    <div class="cmdbox">
+      <span class="cmdbox__label">Εντολή Pandoc:</span>
+      <code id="commandLine2">pandoc …</code>
+    </div>
+  </section>
+  <!-- ============ ΚΑΡΤΕΛΑ: ΠΡΟΤΥΠΑ .docx ============ -->
+  <section class="panel" id="panel-templates">
+    <p class="lead">
+      Τα πρότυπα <code>.docx</code> καθορίζουν γραμματοσειρές, στυλ και περιθώρια στα έγγραφα Word.
+      Επίλεξέ τα στο Visual Flags → «Πρότυπο .docx».
+    </p>
+
+    <div class="toolbar">
+      <label class="btn btn--primary filebtn">
+        ⬆ Ανέβασμα προτύπου
+        <input type="file" id="tplUpload" accept=".docx" hidden>
+      </label>
+      <button class="btn" id="genTplBtn">✨ Δημιουργία προεπιλεγμένου</button>
+      <button class="btn" id="refreshTplBtn">↻ Ανανέωση λίστας</button>
+    </div>
+
+    <table class="datatable" id="tplTable">
+      <thead><tr><th>Όνομα αρχείου</th><th>Μέγεθος</th><th>Ενέργειες</th></tr></thead>
+      <tbody id="tplBody"><tr><td colspan="3" class="muted">Φόρτωση…</td></tr></tbody>
+    </table>
+
+    <div class="note">
+      <strong>💡 Πώς φτιάχνω σχολικό πρότυπο:</strong>
+      <ol>
+        <li>Πάτησε «Δημιουργία προεπιλεγμένου» για να πάρεις το βασικό πρότυπο του pandoc.</li>
+        <li>Κατέβασέ το, άνοιξέ το στο Word/LibreOffice και άλλαξε τα στυλ (Heading 1, Normal κ.λπ.).</li>
+        <li>Αποθήκευσέ το ως <code>.docx</code> και ανέβασέ το εδώ.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ ΚΑΡΤΕΛΑ: ΑΠΟΣΤΟΛΗ ΣΤΟ MKDOCS ============ -->
+  <section class="panel" id="panel-publish">
+    <p class="lead">Δημοσίευσε το μάθημα απευθείας στο εκπαιδευτικό υλικό της επιλεγμένης τάξης.</p>
+
+    <div class="publish-grid">
+      <div class="publish-form">
+        <label class="field">
+          <span>Τάξη *</span>
+          <select id="pubClass">
+            {% for c in classes %}<option value="{{ c.slug }}">{{ c.label }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="field">
+          <span>Τίτλος μαθήματος *</span>
+          <input type="text" id="pubTitle" placeholder="π.χ. Δομές Επιλογής">
+        </label>
+        <label class="check"><input type="checkbox" id="pubOverwrite"> Αντικατάσταση αν υπάρχει ήδη</label>
+        <label class="check"><input type="checkbox" id="pubRebuild" checked> Άμεση ανακατασκευή site</label>
+        <button class="btn btn--primary btn--block" id="publishBtn">🚀 Αποστολή &amp; Δημοσίευση</button>
+        <button class="btn btn--block" id="rebuildBtn">🔄 Ανακατασκευή υλικού μόνο</button>
+        <div id="pubResult" class="result"></div>
+      </div>
+
+      <div class="publish-list">
+        <div class="pane__head">
+          <span>Υπάρχοντα μαθήματα τάξης</span>
+          <button class="btn btn--sm" id="refreshLessons">↻</button>
+        </div>
+        <ul id="lessonsList" class="lessons"><li class="muted">Φόρτωση…</li></ul>
+        <p class="muted small">Πάτησε ένα μάθημα για να το φορτώσεις στον επεξεργαστή.</p>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="{{ url_for('static', path='studio.js') }}"></script>
+</body>
+</html>
