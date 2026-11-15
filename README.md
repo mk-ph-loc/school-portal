@@ -123,9 +123,17 @@ tail -f /var/log/nginx/school-portal.error.log
 # Έλεγχος διαμόρφωσης Nginx
 sudo nginx -t && sudo systemctl reload nginx
 
-# Smoke test όλων των endpoints
+# Smoke test όλων των endpoints (HTTP)
 bash /opt/school-portal/scripts/smoke-test.sh
+
+# Έλεγχος διαδραστικών σε ΠΡΑΓΜΑΤΙΚΟ browser (headless Chromium + CDP)
+# Επαληθεύει: κουμπιά ▶ Εκτέλεση, εκτέλεση Pyodide, glossa, quiz, φίλτρο τάξης
+/opt/school-portal/venv/bin/python /opt/school-portal/scripts/browser-test.py
 ```
+
+> Ο `browser-test.py` απαιτεί `chromium` (`apt install chromium`) και
+> `websocket-client` στο venv. Δεν χρειάζεται για τη λειτουργία της πύλης —
+> είναι μόνο εργαλείο επαλήθευσης.
 
 ### Προσθήκη νέου μαθήματος
 
@@ -147,6 +155,11 @@ sudo systemctl start school-mkdocs.service
 - **Αναζήτηση MkDocs:** Το `theme.language: el` δίνει πλήρη ελληνική διεπαφή.
   Ο lunr δεν διαθέτει ελληνικό stemmer, επομένως χρησιμοποιείται `lang: en`
   που διατηρεί τους ελληνικούς χαρακτήρες ανέπαφους.
+- **DOM selectors:** Το Pygments βάζει την κλάση γλώσσας στο **wrapper**
+  (`div.language-python.highlight > pre > code`), όχι στο `<code>`. Οι
+  `python-run.js` / `glossa.js` ψάχνουν και τις δύο μορφές. Το marker
+  idempotency μπαίνει στο `<code>` (που δεν μετακινείται), αλλιώς η διπλή
+  κλήση της `apply()` (DOMContentLoaded + `document$`) δημιουργεί διπλά κουμπιά.
 - **Hardening:** `ProtectSystem=strict`, `PrivateTmp`, `NoNewPrivileges`,
   `CapabilityBoundingSet=` κ.ά. Το `RestrictSUIDSGID` παραλείπεται σκόπιμα
   (μπλοκάρει τα setgid directories που χρειάζεται το rebuild).

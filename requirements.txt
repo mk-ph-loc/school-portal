@@ -10,3 +10,6 @@ selectolax==1.0.2
 starlette==1.10.0
 uvicorn==0.54.0
 weasyprint==70.0
+
+# Εργαλεία επαλήθευσης (προαιρετικά, δεν απαιτούνται για τη λειτουργία)
+websocket-client==1.9.2

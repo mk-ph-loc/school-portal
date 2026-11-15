@@ -106,12 +106,24 @@
   }
 
   function decorate(code) {
+    // Idempotency: το marker μπαίνει στο ΙΔΙΟ το <code>, γιατί αυτό δεν
+    // μετακινείται ποτέ. Αν το βάζαμε στον γονέα, η δεύτερη κλήση της apply()
+    // (DOMContentLoaded + document$.subscribe του Material) θα έβλεπε νέο
+    // γονέα (.py-runner) χωρίς marker και θα δημιουργούσε ΔΙΠΛΑ κουμπιά.
+    if (code.getAttribute('data-py-ready') === '1') return;
+
     var pre = code.closest('pre');
     if (!pre) return;
     var container = pre.parentElement;
-    if (!container || container.getAttribute('data-py-ready') === '1') return;
-    // Αγνόησε μπλοκ μέσα σε highlight wrapper που ήδη έχει κουμπί αντιγραφής
-    container.setAttribute('data-py-ready', '1');
+    if (!container) return;
+
+    // Διπλή προστασία: αν υπάρχει ήδη runner/toolbar για αυτό το pre, έξοδος.
+    if (pre.closest('.py-runner')) {
+      code.setAttribute('data-py-ready', '1');
+      return;
+    }
+
+    code.setAttribute('data-py-ready', '1');
 
     var wrap = document.createElement('div');
     wrap.className = 'py-runner';
@@ -144,9 +156,47 @@
     });
   }
 
+  /**
+   * Εντοπίζει όλα τα μπλοκ Python.
+   *
+   * ΣΗΜΑΝΤΙΚΟ: Το Pygments/pymdownx βάζει την κλάση γλώσσας στο ΠΕΡΙΒΛΗΜΑ
+   * (<div class="language-python highlight"><pre><code>…), ΟΧΙ στο <code>.
+   * Γι' αυτό ψάχνουμε πρώτα τα wrappers και μετά τα code elements.
+   */
+  function findPythonCodes() {
+    var found = [];
+    var seen = new Set();
+
+    function add(code) {
+      if (code && !seen.has(code)) { seen.add(code); found.push(code); }
+    }
+
+    // 1. Κλασική μορφή Material/Pygments: div.language-python.highlight > pre > code
+    document.querySelectorAll(
+      'div.language-python > pre > code, div.language-py > pre > code,' +
+      'div.highlight-python > pre > code, div.highlight-py > pre > code,' +
+      '.language-python.highlight > pre > code, .language-py.highlight > pre > code'
+    ).forEach(add);
+
+    // 2. Μορφή με κλάση απευθείας στο code ή στο pre
+    document.querySelectorAll(
+      'code.language-python, code.lang-python, code.language-py,' +
+      'pre.language-python > code, pre.python > code'
+    ).forEach(add);
+
+    // 3. Fallback: οποιοδήποτε highlight wrapper που δηλώνει python στη data-* ή class
+    document.querySelectorAll('div[class*="highlight"]').forEach(function (div) {
+      if (/(^|\s)(language|highlight)-(python|py)(\s|$)/.test(div.className)) {
+        var c = div.querySelector('pre > code');
+        add(c);
+      }
+    });
+
+    return found;
+  }
+
   function apply() {
-    document.querySelectorAll('code.language-python, code.lang-python, .highlight-python code')
-      .forEach(decorate);
+    findPythonCodes().forEach(decorate);
   }
 
   if (document.readyState === 'loading') {
