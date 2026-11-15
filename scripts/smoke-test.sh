@@ -28,7 +28,7 @@ check() {
 
 echo
 echo "${B}=== 1. Υπηρεσίες systemd ===${N}"
-for svc in nginx school-pandoc.service school-mkdocs.path; do
+for svc in nginx school-pandoc.service school-mkdocs.path school-filebrowser.service school-exams.service; do
     state=$(systemctl is-active "$svc" 2>/dev/null || echo unknown)
     if [[ "$state" == "active" ]]; then
         printf '  %s✓%s %-30s %s\n' "$G" "$N" "$svc" "$state"; PASS=$((PASS+1))
@@ -45,6 +45,22 @@ check "/assets/portal.js"              200
 check "/assets/tailwind.min.js"        200
 check "/assets/alpine.min.js"          200
 check "/lab/"                          200
+
+echo
+echo "${B}=== 2β. Εργαλεία Εργαστηρίου ===${N}"
+check "/crypto/"                       200
+check "/crypto/assets/main.js"         200
+check "/tools/"                        200
+check "/tools/uuid-generator"          200
+check "/board/"                        200
+check "/share/"                        200
+fb_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 -X POST \
+    -d '{"username":"admin","password":"'"$TEACHER_PASS"'"}' "${BASE}/share/api/login")
+if [[ "$fb_code" == "200" ]]; then
+    printf '  %s✓%s FileBrowser login (admin)                      %s\n' "$G" "$N" "$fb_code"; PASS=$((PASS+1))
+else
+    printf '  %s✗%s FileBrowser login (admin)                      %s\n' "$R" "$N" "$fb_code"; FAIL=$((FAIL+1))
+fi
 
 echo
 echo "${B}=== 3. Εκπαιδευτικό υλικό (6 τάξεις) ===${N}"
@@ -106,6 +122,56 @@ if [[ "$rb" == *'"ok":true'* ]]; then
 else
     printf '  %s✗%s Ανακατασκευή MkDocs: %s\n' "$R" "$N" "${rb:0:150}"; FAIL=$((FAIL+1))
 fi
+
+echo
+echo "${B}=== 6β. Παράδοση Εργασιών & Ψηφιακά Διαγωνίσματα (/exams/) ===${N}"
+check "/exams/"                        200
+check "/exams/teacher"                 200
+check "/exams/static/student.js"       200
+check "/exams/api/activities"          200
+check "/exams/api/teacher/activities"  401
+
+# Πλήρης ροή: login καθηγητή → δημιουργία → υποβολή μαθητή → βαθμολογία → διαγραφή
+EJ="/tmp/exams-smoke-cookies.txt"; rm -f "$EJ"
+login_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 -c "$EJ" \
+    -H 'Content-Type: application/json' -d '{"password":"'"$TEACHER_PASS"'"}' \
+    "${BASE}/exams/api/teacher/login")
+if [[ "$login_code" == "200" ]]; then
+    printf '  %s✓%s Login καθηγητή (exams)                          %s\n' "$G" "$N" "$login_code"; PASS=$((PASS+1))
+else
+    printf '  %s✗%s Login καθηγητή (exams)                          %s\n' "$R" "$N" "$login_code"; FAIL=$((FAIL+1))
+fi
+
+act=$(curl -s --max-time 25 -b "$EJ" -H 'Content-Type: application/json' \
+    -d '{"title":"SMOKE TEST προσωρινό","class_slug":"gymnasio-a","kind":"test","duration":5,"active":true,"questions":[{"type":"mc","text":"2+2;","options":["3","4"],"correct":1,"points":2}]}' \
+    "${BASE}/exams/api/teacher/activities")
+# Το "id" είναι το ΠΡΩΤΟ πεδίο του JSON· το anchor ^ αποτρέπει greedy match σε άλλα ids.
+act_id=$(printf '%s' "$act" | sed -n 's/^{"id":\([0-9]*\).*/\1/p')
+if [[ -n "$act_id" ]]; then
+    printf '  %s✓%s Δημιουργία διαγωνίσματος (id=%s)\n' "$G" "$N" "$act_id"; PASS=$((PASS+1))
+    st=$(curl -s --max-time 25 -H 'Content-Type: application/json' \
+        -d '{"fullname":"Μαθητής Δοκιμής","section":"Α2"}' \
+        "${BASE}/exams/api/activities/${act_id}/start")
+    sub_id=$(printf '%s' "$st" | sed -n 's/^{"submission_id":\([0-9]*\).*/\1/p')
+    sb=$(curl -s --max-time 25 -H 'Content-Type: application/json' \
+        -d '{"answers":{"0":1},"auto":false}' \
+        "${BASE}/exams/api/submissions/${sub_id}/submit-test")
+    if [[ "$sb" == *'"code"'* ]]; then
+        printf '  %s✓%s Υποβολή διαγωνίσματος με κωδικό επιβεβαίωσης\n' "$G" "$N"; PASS=$((PASS+1))
+    else
+        printf '  %s✗%s Υποβολή διαγωνίσματος: %s\n' "$R" "$N" "${sb:0:120}"; FAIL=$((FAIL+1))
+    fi
+    csv_out=$(curl -s --max-time 25 -b "$EJ" "${BASE}/exams/api/teacher/activities/${act_id}/csv")
+    if [[ "$csv_out" == *"Μαθητής Δοκιμής"* && "$csv_out" == *"2"* ]]; then
+        printf '  %s✓%s Αυτόματη βαθμολογία MC & εξαγωγή CSV\n' "$G" "$N"; PASS=$((PASS+1))
+    else
+        printf '  %s✗%s Βαθμολογία/CSV: %s\n' "$R" "$N" "${csv_out:0:120}"; FAIL=$((FAIL+1))
+    fi
+    curl -s -o /dev/null --max-time 25 -b "$EJ" -X DELETE "${BASE}/exams/api/teacher/activities/${act_id}"
+else
+    printf '  %s✗%s Δημιουργία διαγωνίσματος: %s\n' "$R" "$N" "${act:0:120}"; FAIL=$((FAIL+1))
+fi
+rm -f "$EJ"
 
 echo
 echo "${B}=== 7. Κατανάλωση πόρων ===${N}"

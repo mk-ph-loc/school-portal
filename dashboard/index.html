@@ -41,6 +41,7 @@
         <a href="#kathigites" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">🔐 Ζώνη Καθηγητών</a>
         <a href="/docs/" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">📚 Όλο το Υλικό</a>
         <a href="/docs/games/binary-game.html" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">🎮 Παιχνίδι Δυαδικού</a>
+        <a href="#ergaleia" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">🧰 Εργαλεία</a>
       </nav>
     </div>
   </div>
@@ -73,6 +74,20 @@
         </a>
       </template>
     </div>
+
+    <!-- Κάρτα Παράδοσης Εργασιών & Ψηφιακών Διαγωνισμάτων -->
+    <a href="/exams/" class="card-hover mt-5 block rounded-2xl bg-gradient-to-r from-blue-700 to-indigo-600 p-6 text-white shadow-sm">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-white/20 ring-1 ring-white/30 grid place-items-center text-2xl">📤</div>
+          <div>
+            <h3 class="text-lg font-bold">Παράδοση Εργασιών &amp; Τεστ</h3>
+            <p class="text-blue-100 text-sm mt-0.5">Ανέβασε την εργασία σου (.py, .docx, .pdf, .zip…) ή κάνε το ψηφιακό διαγώνισμα της τάξης σου — χωρίς εγγραφή, με κωδικό επιβεβαίωσης.</p>
+          </div>
+        </div>
+        <span class="text-sm font-semibold px-4 py-2 rounded-lg bg-white/15 ring-1 ring-white/30 whitespace-nowrap">Υποβολή →</span>
+      </div>
+    </a>
 
     <!-- Κάρτα Προγράμματος Εργαστηρίου (Προβολή) -->
     <a href="/lab/" class="card-hover mt-5 block rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 p-6 text-white shadow-sm">
@@ -132,11 +147,75 @@
         <p class="mt-1 text-sm text-slate-600">Απαντήσεις ασκήσεων, φύλλα εργασίας και παιδαγωγικές σημειώσεις.</p>
         <div class="mt-4 text-sm font-semibold text-amber-700">Άνοιγμα →</div>
       </a>
+      <a href="/exams/teacher" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="w-12 h-12 rounded-xl bg-blue-100 grid place-items-center text-2xl">📤</div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">Εργασίες &amp; Διαγωνίσματα</h3>
+        <p class="mt-1 text-sm text-slate-600">Δημιουργία εργασιών/τεστ ανά τάξη, διακόπτης Ενεργό/Κλειστό, βαθμολόγηση, λήψη ZIP &amp; CSV.</p>
+        <div class="mt-4 text-sm font-semibold text-blue-700">Άνοιγμα →</div>
+      </a>
     </div>
 
     <p x-show="unlocked" x-cloak class="mt-4 text-xs text-slate-500">
       ℹ️ Οι περιοχές <code>/pandoc/</code> και <code>/docs/teachers/</code> προστατεύονται επιπλέον από τον διακομιστή (HTTP Basic Auth).
       Χρησιμοποίησε όνομα χρήστη <strong>teacher</strong> και τον ίδιο κωδικό.
+    </p>
+  </section>
+
+  <!-- ================= ΕΡΓΑΛΕΙΑ & ΕΦΑΡΜΟΓΕΣ ΕΡΓΑΣΤΗΡΙΟΥ ================= -->
+  <section id="ergaleia">
+    <div class="flex items-end justify-between flex-wrap gap-3 mb-6">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-900 flex items-center gap-2">🧰 Εργαλεία &amp; Εφαρμογές Εργαστηρίου</h2>
+        <p class="text-slate-600 mt-1">Ελαφριά, δωρεάν εργαλεία ανοικτού κώδικα — τα τρία πρώτα τρέχουν <strong>100% στον browser</strong> (μηδέν RAM στον server).</p>
+      </div>
+      <span class="text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">Χωρίς κωδικό*</span>
+    </div>
+
+    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <a href="/crypto/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div class="w-12 h-12 rounded-xl bg-rose-100 grid place-items-center text-2xl">🔐</div>
+          <span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">0 MB RAM</span>
+        </div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">CyberChef</h3>
+        <p class="mt-1 text-sm text-slate-600 leading-relaxed">Κρυπτογραφία &amp; κωδικοποιήσεις: Base64, Hex, hashes, XOR, ROT13 και 300+ πράξεις για το μάθημα.</p>
+        <div class="mt-4 text-sm font-semibold text-rose-700">Άνοιγμα →</div>
+      </a>
+
+      <a href="/tools/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div class="w-12 h-12 rounded-xl bg-sky-100 grid place-items-center text-2xl">🛠️</div>
+          <span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">0 MB RAM</span>
+        </div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">IT-Tools</h3>
+        <p class="mt-1 text-sm text-slate-600 leading-relaxed">Σουίτα 80+ εργαλείων IT: γεννήτριες UUID/κωδικών, μετατροπείς JSON/YAML, QR codes, υπολογιστές δικτύων.</p>
+        <div class="mt-4 text-sm font-semibold text-sky-700">Άνοιγμα →</div>
+      </a>
+
+      <a href="/board/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div class="w-12 h-12 rounded-xl bg-indigo-100 grid place-items-center text-2xl">🖍️</div>
+          <span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">0 MB RAM</span>
+        </div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">Ψηφιακός Πίνακας Τάξης</h3>
+        <p class="mt-1 text-sm text-slate-600 leading-relaxed">Whiteboard πλήρους οθόνης: μολύβι, σχήματα, βέλη, κείμενο, σβήστρα, εξαγωγή PNG &amp; αυτόματη αποθήκευση.</p>
+        <div class="mt-4 text-sm font-semibold text-indigo-700">Άνοιγμα →</div>
+      </a>
+
+      <a href="/share/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div class="w-12 h-12 rounded-xl bg-teal-100 grid place-items-center text-2xl">📁</div>
+          <span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200">~15 MB RAM</span>
+        </div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">Κοινόχρηστα Αρχεία</h3>
+        <p class="mt-1 text-sm text-slate-600 leading-relaxed">FileBrowser: ανέβασε &amp; μοιράσου αρχεία μαθημάτων έως 200 MB. Απαιτείται login διαχειριστή.</p>
+        <div class="mt-4 text-sm font-semibold text-teal-700">Άνοιγμα →</div>
+      </a>
+    </div>
+
+    <p class="mt-4 text-xs text-slate-500">
+      * Τα CyberChef, IT-Tools και Πίνακας είναι ελεύθερα προσβάσιμα και λειτουργούν χωρίς Internet μετά τη φόρτωση.
+      Το <code>/share/</code> προστατεύεται με δική του σύνδεση (χρήστης <strong>admin</strong>, κωδικός καθηγητών).
     </p>
   </section>
   <!-- ================= ΓΡΗΓΟΡΗ ΠΡΟΣΒΑΣΗ ================= -->

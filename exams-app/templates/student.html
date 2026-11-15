@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Παράδοση Εργασίας / Διαγώνισμα — Μαθητής{% endblock %}
+{% block content %}
+
+<!-- ΒΗΜΑ 1: Επιλογή τάξης & δραστηριότητας + στοιχεία μαθητή -->
+<section id="step-select" class="max-w-2xl mx-auto">
+  <div class="rounded-2xl bg-white p-6 sm:p-8 ring-1 ring-slate-200 shadow-sm">
+    <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">👨‍🎓 Υποβολή χωρίς εγγραφή</h2>
+    <p class="mt-1 text-sm text-slate-600">Διάλεξε την τάξη σου, τη δραστηριότητα και συμπλήρωσε τα στοιχεία σου.</p>
+
+    <div class="mt-6 space-y-4">
+      <div>
+        <label for="sel-class" class="block text-sm font-semibold mb-1">Τάξη</label>
+        <select id="sel-class" class="w-full rounded-lg border border-slate-300 px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">— Επίλεξε τάξη —</option>
+          {% for c in classes %}<option value="{{ c.slug }}">{{ c.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="sel-activity" class="block text-sm font-semibold mb-1">Ενεργή Δραστηριότητα / Διαγώνισμα</label>
+        <select id="sel-activity" disabled class="w-full rounded-lg border border-slate-300 px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100">
+          <option value="">— Πρώτα επίλεξε τάξη —</option>
+        </select>
+        <p id="activity-info" class="mt-1.5 text-xs text-slate-500"></p>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label for="inp-name" class="block text-sm font-semibold mb-1">Ονοματεπώνυμο</label>
+          <input id="inp-name" type="text" maxlength="120" placeholder="π.χ. Μαρία Παπαδοπούλου"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label for="inp-section" class="block text-sm font-semibold mb-1">Τμήμα</label>
+          <input id="inp-section" type="text" maxlength="20" placeholder="π.χ. Α2, Γ1"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+      </div>
+
+      <!-- Πεδία παράδοσης αρχείου -->
+      <div id="file-fields" hidden class="space-y-4 rounded-xl bg-sky-50 ring-1 ring-sky-200 p-4">
+        <div>
+          <label for="inp-file" class="block text-sm font-semibold mb-1">📎 Αρχείο εργασίας</label>
+          <input id="inp-file" type="file" accept=".py,.docx,.pdf,.zip,.txt,.sb3,.glo"
+                 class="w-full text-sm rounded-lg border border-slate-300 bg-white px-3 py-2 file:mr-3 file:rounded-md file:border-0 file:bg-blue-700 file:text-white file:px-3 file:py-1.5 file:text-sm file:font-semibold">
+          <p class="mt-1 text-xs text-slate-500">Επιτρεπτά: .py, .docx, .pdf, .zip, .txt, .sb3, .glo — έως 50 MB.</p>
+        </div>
+        <div>
+          <label for="inp-comment" class="block text-sm font-semibold mb-1">Σχόλιο (προαιρετικό)</label>
+          <textarea id="inp-comment" rows="2" maxlength="1000" placeholder="Π.χ. ολοκλήρωσα και το bonus ερώτημα…"
+                    class="w-full rounded-lg border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+      </div>
+
+      <p id="select-error" hidden class="text-sm text-red-600 font-medium"></p>
+      <button id="btn-continue" class="w-full px-4 py-3 rounded-lg bg-blue-700 text-white font-bold hover:bg-blue-800 transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+        Συνέχεια →
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ΒΗΜΑ 2α: Διαγώνισμα με χρονόμετρο -->
+<section id="step-test" hidden>
+  <div class="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 pb-3 bg-slate-100/95 backdrop-blur">
+    <div class="rounded-2xl bg-slate-900 text-white p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+      <div>
+        <h2 id="test-title" class="font-bold"></h2>
+        <p id="test-student" class="text-xs text-slate-300"></p>
+      </div>
+      <div class="text-right">
+        <div class="text-[11px] uppercase tracking-wide text-slate-400">Χρόνος που απομένει</div>
+        <div id="timer" class="text-3xl font-extrabold tabular-nums text-emerald-400">--:--</div>
+      </div>
+    </div>
+  </div>
+  <div id="questions" class="mt-4 space-y-4"></div>
+  <div class="mt-6 rounded-2xl bg-white p-5 ring-1 ring-slate-200">
+    <p class="text-sm text-slate-600">⚠️ Η υποβολή είναι <strong>οριστική</strong>. Όταν μηδενίσει ο χρόνος, το διαγώνισμα υποβάλλεται αυτόματα.</p>
+    <p id="test-error" hidden class="mt-2 text-sm text-red-600 font-medium"></p>
+    <button id="btn-submit-test" class="mt-3 w-full sm:w-auto px-6 py-3 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition">
+      ✅ Οριστική Υποβολή
+    </button>
+  </div>
+</section>
+
+<!-- ΒΗΜΑ 2β: Επιβεβαίωση παράδοσης αρχείου -->
+<section id="step-confirm-file" hidden class="max-w-2xl mx-auto">
+  <div class="rounded-2xl bg-white p-6 sm:p-8 ring-1 ring-slate-200 shadow-sm">
+    <h2 class="text-xl font-bold text-slate-900">📎 Επιβεβαίωση Παράδοσης</h2>
+    <dl class="mt-4 text-sm space-y-1.5">
+      <div class="flex gap-2"><dt class="font-semibold w-32 shrink-0">Δραστηριότητα:</dt><dd id="cf-activity"></dd></div>
+      <div class="flex gap-2"><dt class="font-semibold w-32 shrink-0">Μαθητής:</dt><dd id="cf-student"></dd></div>
+      <div class="flex gap-2"><dt class="font-semibold w-32 shrink-0">Αρχείο:</dt><dd id="cf-file" class="break-all"></dd></div>
+    </dl>
+    <p class="mt-4 text-sm text-slate-600">Πάτησε «Οριστική Υποβολή» για να παραδοθεί η εργασία σου.</p>
+    <p id="file-error" hidden class="mt-2 text-sm text-red-600 font-medium"></p>
+    <div class="mt-4 flex flex-wrap gap-2">
+      <button id="btn-back" class="px-5 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-semibold transition">← Πίσω</button>
+      <button id="btn-submit-file" class="flex-1 px-5 py-2.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition">✅ Οριστική Υποβολή</button>
+    </div>
+  </div>
+</section>
+
+<!-- ΒΗΜΑ 3: Κωδικός επιβεβαίωσης -->
+<section id="step-done" hidden class="max-w-2xl mx-auto">
+  <div class="rounded-2xl bg-white p-8 ring-1 ring-emerald-200 shadow-sm text-center">
+    <div class="text-5xl">🎉</div>
+    <h2 class="mt-3 text-2xl font-bold text-slate-900">Η υποβολή ολοκληρώθηκε!</h2>
+    <p id="done-note" class="mt-1 text-sm text-slate-600"></p>
+    <div class="mt-5 rounded-xl bg-emerald-50 ring-1 ring-emerald-300 p-5">
+      <div class="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Κωδικός Επιβεβαίωσης Παράδοσης</div>
+      <div id="done-code" class="mt-1 text-3xl sm:text-4xl font-extrabold tracking-widest text-emerald-800 select-all"></div>
+    </div>
+    <p class="mt-3 text-xs text-slate-500">📸 Κράτησε τον κωδικό (screenshot ή σημείωση) ως απόδειξη παράδοσης.</p>
+    <button id="btn-new" class="mt-5 px-6 py-2.5 rounded-lg bg-blue-700 text-white font-semibold hover:bg-blue-800 transition">Νέα Υποβολή</button>
+  </div>
+</section>
+
+{% endblock %}
+{% block scripts %}
+<script>window.EXAMS_BASE = {{ base | tojson }};</script>
+<script src="{{ url_for('static', path='student.js') }}"></script>
+{% endblock %}

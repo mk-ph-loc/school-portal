@@ -23,6 +23,8 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/docs/teachers/` | Λύσεις Καθηγητή | static + **Basic Auth** | 🔐 Καθηγητές |
 | `/pandoc/` | Visual Pandoc Studio | FastAPI @ `127.0.0.1:8002` + **Basic Auth** | 🔐 Καθηγητές |
 | `/lab/` | Διαχείριση Εργαστηρίου | *Placeholder* (μελλοντικά :8001) | Προβολή |
+| `/exams/` | Παράδοση Εργασιών & Τεστ | FastAPI + SQLite @ `127.0.0.1:8004` | Ελεύθερη (μαθητές) |
+| `/exams/teacher` | Διαχείριση Εργασιών/Διαγωνισμάτων | ίδιο service, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
 
 ### 🔐 Πρόσβαση Καθηγητών
 
@@ -64,10 +66,16 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   ├── templates/index.html
 │   ├── static/             # studio.css, studio.js
 │   └── data/templates/     # σχολικά πρότυπα .docx
+├── exams-app/              # Παράδοση Εργασιών & Ψηφιακά Διαγωνίσματα (/exams/)
+│   ├── main.py             # FastAPI + SQLite (ενσωματωμένη sqlite3)
+│   ├── exams.db            # Βάση (δημιουργείται αυτόματα, εκτός git)
+│   ├── submissions/        # Αρχεία μαθητών ανά δραστηριότητα (εκτός git)
+│   ├── templates/          # base/student/teacher.html (Jinja2)
+│   └── static/             # student.js, teacher.js (vanilla JS)
 ├── lab-app/                # ΜΕΛΛΟΝΤΙΚΟ — δείτε README.md
 ├── config/                 # Source of truth για nginx & systemd
 │   ├── nginx/school-portal
-│   └── systemd/school-{pandoc.service,mkdocs.service,mkdocs.path}
+│   └── systemd/school-{pandoc,exams,filebrowser}.service, school-mkdocs.{service,path}
 ├── scripts/build-docs.sh   # Ανακατασκευή MkDocs → /var/www/docs
 ├── install.sh              # Αυτόματη εγκατάσταση/ενημέρωση
 ├── requirements.txt        # Pinned εκδόσεις Python
@@ -94,6 +102,25 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 - **🚀 Αποστολή στο MkDocs:** δημοσιεύει το μάθημα στην τάξη, ενημερώνει αυτόματα το
   `nav` του `mkdocs.yml` και ανακατασκευάζει το site
 
+## 📤 Παράδοση Εργασιών & Ψηφιακά Διαγωνίσματα (`/exams/`)
+
+**Περιβάλλον Μαθητή** (`/exams/` — ελεύθερο, χωρίς εγγραφή):
+- Επιλογή τάξης (Α'–Γ' Γυμνασίου, Α'–Γ' Λυκείου) → dropdown με τις **ενεργές** δραστηριότητες
+- Ονοματεπώνυμο + Τμήμα (π.χ. «Α2», «Γ1»)
+- **Παράδοση αρχείου:** `.py`, `.docx`, `.pdf`, `.zip`, `.txt`, `.sb3`, `.glo` έως 50 MB + προαιρετικό σχόλιο
+- **Ηλεκτρονικό διαγώνισμα:** ερωτήσεις πολλαπλής επιλογής & ανάπτυξης/κώδικα,
+  χρονόμετρο αντίστροφης μέτρησης με **αυτόματη υποβολή** στον μηδενισμό
+  (το deadline ορίζεται στον server· οι απαντήσεις σώζονται προσωρινά στον browser)
+- Με την «Οριστική Υποβολή» εμφανίζεται **μοναδικός κωδικός επιβεβαίωσης** (π.χ. `K7M2-9QXD`)
+
+**Περιβάλλον Καθηγητή** (`/exams/teacher` — κωδικός `teacher2026`, server-side HMAC cookie):
+- Δημιουργία Εργασίας ή Διαγωνίσματος (τίτλος, τάξη, τύπος, διάρκεια, ερωτήσεις με μονάδες)
+- Διακόπτης **Ενεργό / Κλειστό** ανά δραστηριότητα (άνοιγμα μόνο την ώρα του μαθήματος)
+- Πίνακας υποβολών: **αυτόματη βαθμολογία** πολλαπλής επιλογής + πεδία βαθμολόγησης ανάπτυξης
+- **📦 Λήψη όλων των αρχείων (.ZIP)** — αυτόματη μετονομασία σε `Τμήμα_Ονοματεπώνυμο_αρχείο`
+  (Greeklish για συμβατότητα με κάθε unzip)
+- **📊 Εξαγωγή Βαθμολογίας (.CSV)** — UTF-8 με BOM, separator `;`, δεκαδικό κόμμα (έτοιμο για Excel)
+
 ## 💾 Κατανάλωση RAM
 
 | Υπηρεσία | Idle RAM | Σημείωση |
@@ -101,6 +128,7 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 | Nginx (nginx-light) | ~8 MB | 2 workers |
 | `/docs/` (static) | **0 MB** | Καμία διεργασία — απευθείας από τον Nginx |
 | Pandoc Studio | ~55 MB | uvicorn, 1 worker, `MemoryMax=320M` |
+| Exams App | ~45 MB | uvicorn, 1 worker, `MemoryMax=256M` |
 | Pyodide | **0 MB** server-side | Τρέχει στον browser του μαθητή |
 | **Σύνολο** | **~65 MB** | |
 
@@ -129,6 +157,9 @@ bash /opt/school-portal/scripts/smoke-test.sh
 # Έλεγχος διαδραστικών σε ΠΡΑΓΜΑΤΙΚΟ browser (headless Chromium + CDP)
 # Επαληθεύει: κουμπιά ▶ Εκτέλεση, εκτέλεση Pyodide, glossa, quiz, φίλτρο τάξης
 /opt/school-portal/venv/bin/python /opt/school-portal/scripts/browser-test.py
+
+# Έλεγχος πλήρους ροής /exams/ σε browser (υποβολή αρχείου, διαγώνισμα, καθηγητής)
+/opt/school-portal/venv/bin/python /opt/school-portal/scripts/exams-browser-test.py
 ```
 
 > Ο `browser-test.py` απαιτεί `chromium` (`apt install chromium`) και

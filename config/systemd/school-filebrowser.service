@@ -1,0 +1,50 @@
+[Unit]
+Description=Ψηφιακή Πύλη — FileBrowser (κοινόχρηστα αρχεία /share/)
+Documentation=file:///opt/school-portal/README.md
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/school-portal
+Environment=HOME=/opt/school-portal/data/filebrowser
+# Single static Go binary (~15 MB RAM). Η βάση βρίσκεται στο
+# /opt/school-portal/data/filebrowser/filebrowser.db και υπάρχει symlink
+# /opt/school-portal/filebrowser.db για εύκολη πρόσβαση.
+ExecStart=/usr/local/bin/filebrowser \
+    --database /opt/school-portal/data/filebrowser/filebrowser.db \
+    --address 127.0.0.1 --port 8003 \
+    --baseURL /share \
+    --root /opt/school-portal/shared-files \
+    --noauth=false
+
+Restart=on-failure
+RestartSec=5s
+
+# --- Ελάχιστη κατανάλωση πόρων ---
+MemoryMax=96M
+MemoryHigh=64M
+CPUWeight=50
+Nice=5
+TasksMax=32
+
+# --- Ασφάλεια / hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+ReadWritePaths=/opt/school-portal/shared-files
+ReadWritePaths=/opt/school-portal/data/filebrowser
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

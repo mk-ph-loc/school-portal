@@ -6,6 +6,11 @@
 #   /docs/teachers/ → Λύσεις Καθηγητή (HTTP Basic Auth)
 #   /pandoc/        → Visual Pandoc Studio (FastAPI @127.0.0.1:8002, Basic Auth)
 #   /lab/           → Διαχείριση Εργαστηρίου (placeholder· μελλοντικά :8001)
+#   /crypto/        → CyberChef (static HTML/JS — 0 MB RAM)
+#   /tools/         → IT-Tools (static SPA — 0 MB RAM)
+#   /board/         → Ψηφιακός Πίνακας Τάξης (static canvas — 0 MB RAM)
+#   /share/         → FileBrowser (Go binary @127.0.0.1:8003, ~15 MB RAM)
+#   /exams/         → Παράδοση Εργασιών & Διαγωνίσματα (FastAPI @127.0.0.1:8004)
 # ===========================================================================
 
 server {
@@ -136,7 +141,104 @@ server {
     }
 
     # -----------------------------------------------------------------
-    # 5. Διάφορα
+    # 5. Εργαλεία Εργαστηρίου — static (μηδέν RAM στον server)
+    #    Όλα εκτελούνται 100% στον browser των μαθητών/καθηγητών.
+    # -----------------------------------------------------------------
+
+    # 5α. CyberChef — κρυπτογραφία, κωδικοποιήσεις, hashes (gchq/CyberChef)
+    location ^~ /crypto/ {
+        alias /var/www/school-tools/cyberchef/;
+        index index.html;
+        try_files $uri $uri/ =404;
+
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    # 5β. IT-Tools — σουίτα εργαλείων IT (CorentinTh/it-tools, SPA base=/tools/)
+    location ^~ /tools/ {
+        alias /var/www/school-tools/it-tools/;
+        index index.html;
+        # SPA fallback: τα routes του Vue router (π.χ. /tools/uuid-generator)
+        # επιστρέφουν το index.html αντί για 404.
+        try_files $uri $uri/ /tools/index.html;
+
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+    # Ο service worker του IT-Tools δεν πρέπει να cache-άρεται επιθετικά
+    location = /tools/sw.js {
+        alias /var/www/school-tools/it-tools/sw.js;
+        add_header Cache-Control "no-cache";
+        add_header Service-Worker-Allowed "/tools/";
+    }
+
+    # 5γ. Ψηφιακός Πίνακας Τάξης — canvas whiteboard (autosave στο localStorage)
+    location ^~ /board/ {
+        alias /var/www/school-tools/board/;
+        index index.html;
+        try_files $uri $uri/ =404;
+
+        add_header Cache-Control "no-cache";
+    }
+
+    # -----------------------------------------------------------------
+    # 6. FileBrowser — κοινόχρηστα αρχεία (reverse proxy @127.0.0.1:8003)
+    #    Single Go binary (~15 MB RAM) με δική του login (admin).
+    # -----------------------------------------------------------------
+    location ^~ /share/ {
+        client_max_body_size 200M;
+
+        # Το filebrowser τρέχει με --baseURL /share, οπότε περνάμε
+        # το πλήρες URI χωρίς αφαίρεση του prefix.
+        proxy_pass http://127.0.0.1:8003;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "";
+
+        # Μεγάλα uploads/downloads σχολικών αρχείων
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+        proxy_request_buffering off;
+    }
+
+    # -----------------------------------------------------------------
+    # 6β. Παράδοση Εργασιών & Ψηφιακά Διαγωνίσματα (@127.0.0.1:8004)
+    #     FastAPI + SQLite· το /exams/ είναι ελεύθερο για μαθητές, ενώ το
+    #     περιβάλλον καθηγητή (/exams/teacher) προστατεύεται από την ίδια
+    #     την εφαρμογή με κωδικό teacher2026 (HMAC-signed cookie).
+    # -----------------------------------------------------------------
+    location = /exams {
+        return 301 /exams/;
+    }
+
+    location ^~ /exams/ {
+        client_max_body_size 50M;
+
+        proxy_pass http://127.0.0.1:8004/;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection        "";
+
+        # Ανεβάσματα εργασιών έως 50 MB σε αργό σχολικό LAN
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+        proxy_request_buffering off;
+    }
+
+    # -----------------------------------------------------------------
+    # 7. Διάφορα
     # -----------------------------------------------------------------
     location = /healthz {
         access_log off;

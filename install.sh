@@ -23,6 +23,17 @@ PYODIDE_VERSION="314.0.8"
 ALPINE_VERSION="3.14.9"
 TAILWIND_VERSION="4.1.11"
 
+# --- Εργαλεία Εργαστηρίου (static + single binary, χωρίς Docker) ---
+TOOLS_OUT="/var/www/school-tools"
+CYBERCHEF_VERSION="v11.5.0"
+CYBERCHEF_ZIP="CyberChef_8cd426dd4f40f1423912d5fad91b578a86a65112.zip"
+ITTOOLS_VERSION="v2024.10.22-7ca5933"
+ITTOOLS_ZIP="it-tools-2024.10.22-7ca5933.zip"
+FILEBROWSER_VERSION="v2.63.23"
+FB_DB="${PORTAL_DIR}/data/filebrowser/filebrowser.db"
+FB_USER="admin"
+FB_PASS="${FB_PASS:-teacher2026}"
+
 SKIP_DEPS=0
 DO_UPDATE=0
 
@@ -85,7 +96,7 @@ if [[ "${SKIP_DEPS}" == "0" ]]; then
         fonts-dejavu fonts-liberation2 fontconfig \
         libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
         libjpeg62-turbo libopenjp2-7 libffi8 shared-mime-info \
-        curl ca-certificates bzip2 tar openssl rsync
+        curl ca-certificates bzip2 tar openssl rsync unzip util-linux
     ok "Τα πακέτα συστήματος είναι έτοιμα."
 else
     warn "Παράλειψη apt (--no-deps)."
@@ -95,8 +106,8 @@ fi
 # 3. Δομή φακέλων
 # ---------------------------------------------------------------------------
 log "Δημιουργία δομής φακέλων…"
-mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},lab-app,config/{nginx,systemd},scripts,data/build}
-mkdir -p "${DOCS_OUT}"
+mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},lab-app,config/{nginx,systemd},scripts,data/build,data/filebrowser,shared-files}
+mkdir -p "${DOCS_OUT}" "${TOOLS_OUT}"/{cyberchef,it-tools,board}
 ok "Η δομή φακέλων δημιουργήθηκε."
 
 # ---------------------------------------------------------------------------
@@ -168,6 +179,124 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 6β. CyberChef — static HTML/JS στο /crypto/ (0 MB RAM στον server)
+# ---------------------------------------------------------------------------
+if [[ -s "${TOOLS_OUT}/cyberchef/index.html" ]]; then
+    ok "Το CyberChef υπάρχει ήδη (${TOOLS_OUT}/cyberchef)."
+else
+    log "Λήψη CyberChef ${CYBERCHEF_VERSION} (~83 MB zip)…"
+    TMP_CC="$(mktemp -d)"
+    if curl -fsSL --retry 3 --max-time 600 -o "${TMP_CC}/cyberchef.zip" \
+        "https://github.com/gchq/CyberChef/releases/download/${CYBERCHEF_VERSION}/${CYBERCHEF_ZIP}"; then
+        unzip -qo "${TMP_CC}/cyberchef.zip" -d "${TOOLS_OUT}/cyberchef/"
+        # Μετονομασία του κύριου CyberChef_v*.html σε index.html
+        CC_HTML="$(find "${TOOLS_OUT}/cyberchef" -maxdepth 1 -name 'CyberChef_v*.html' | head -1)"
+        [[ -n "${CC_HTML}" ]] && mv -f "${CC_HTML}" "${TOOLS_OUT}/cyberchef/index.html"
+        ok "Το CyberChef εγκαταστάθηκε στο /crypto/."
+    else
+        warn "Αποτυχία λήψης CyberChef — το /crypto/ δεν θα λειτουργεί."
+    fi
+    rm -rf "${TMP_CC}"
+fi
+
+# ---------------------------------------------------------------------------
+# 6γ. IT-Tools — static SPA στο /tools/ (0 MB RAM, χωρίς Node.js)
+#     Το επίσημο dist είναι χτισμένο με base "/"· προσαρμόζεται στο /tools/.
+# ---------------------------------------------------------------------------
+if [[ -s "${TOOLS_OUT}/it-tools/index.html" ]]; then
+    ok "Το IT-Tools υπάρχει ήδη (${TOOLS_OUT}/it-tools)."
+else
+    log "Λήψη IT-Tools ${ITTOOLS_VERSION} (~4 MB zip)…"
+    TMP_IT="$(mktemp -d)"
+    if curl -fsSL --retry 3 --max-time 300 -o "${TMP_IT}/it-tools.zip" \
+        "https://github.com/CorentinTh/it-tools/releases/download/${ITTOOLS_VERSION}/${ITTOOLS_ZIP}"; then
+        unzip -qo "${TMP_IT}/it-tools.zip" -d "${TMP_IT}/x"
+        cp -a "${TMP_IT}/x/dist/." "${TOOLS_OUT}/it-tools/"
+        # Προσαρμογή base path "/" → "/tools/" (index, router, service worker)
+        IT_INDEX_JS="$(grep -l 'loadEnv({BASE_URL:"/"' "${TOOLS_OUT}/it-tools/assets/"index-*.js | head -1)"
+        if [[ -n "${IT_INDEX_JS}" ]]; then
+            # Router base, service worker path/scope και Vite asset URL builder
+            sed -i 's|loadEnv({BASE_URL:"/"|loadEnv({BASE_URL:"/tools/"|' "${IT_INDEX_JS}"
+            sed -i 's|"/sw.js"|"/tools/sw.js"|g; s|new p("/tools/sw.js",{scope:"/"|new p("/tools/sw.js",{scope:"/tools/"|' "${IT_INDEX_JS}"
+            sed -i 's|function(e){return"/"+e}|function(e){return"/tools/"+e}|g' "${IT_INDEX_JS}"
+            sed -i 's|"/assets/|"/tools/assets/|g' "${IT_INDEX_JS}"
+        fi
+        sed -i 's|"/assets/|"/tools/assets/|g; s|href="/manifest.webmanifest"|href="/tools/manifest.webmanifest"|' \
+            "${TOOLS_OUT}/it-tools/index.html"
+        python3 - "${TOOLS_OUT}/it-tools/manifest.webmanifest" <<'PYEOF'
+import json, sys
+p = sys.argv[1]
+m = json.load(open(p))
+m["start_url"] = "/tools/?utm_source=pwa&utm_medium=pwa"
+m["scope"] = "/tools/"
+for i in m.get("icons", []):
+    if i["src"].startswith("/") and not i["src"].startswith("/tools/"):
+        i["src"] = "/tools" + i["src"]
+json.dump(m, open(p, "w"), ensure_ascii=False)
+PYEOF
+        ok "Το IT-Tools εγκαταστάθηκε στο /tools/."
+    else
+        warn "Αποτυχία λήψης IT-Tools — το /tools/ δεν θα λειτουργεί."
+    fi
+    rm -rf "${TMP_IT}"
+fi
+
+# ---------------------------------------------------------------------------
+# 6δ. Ψηφιακός Πίνακας Τάξης — static canvas whiteboard στο /board/
+# ---------------------------------------------------------------------------
+if [[ -s "${PORTAL_DIR}/config/board/index.html" ]]; then
+    install -m 644 "${PORTAL_DIR}/config/board/index.html" "${TOOLS_OUT}/board/index.html"
+    ok "Ο Ψηφιακός Πίνακας εγκαταστάθηκε στο /board/."
+elif [[ -s "${TOOLS_OUT}/board/index.html" ]]; then
+    ok "Ο Ψηφιακός Πίνακας υπάρχει ήδη."
+else
+    warn "Δεν βρέθηκε config/board/index.html — το /board/ δεν θα λειτουργεί."
+fi
+
+# ---------------------------------------------------------------------------
+# 6ε. FileBrowser — single Go binary στο /share/ (~15 MB RAM)
+# ---------------------------------------------------------------------------
+if [[ -x /usr/local/bin/filebrowser ]]; then
+    ok "Το filebrowser binary υπάρχει ήδη ($(/usr/local/bin/filebrowser version 2>/dev/null | head -1))."
+else
+    log "Λήψη FileBrowser ${FILEBROWSER_VERSION} (linux-amd64, ~16 MB)…"
+    TMP_FB="$(mktemp -d)"
+    if curl -fsSL --retry 3 --max-time 300 -o "${TMP_FB}/fb.tar.gz" \
+        "https://github.com/filebrowser/filebrowser/releases/download/${FILEBROWSER_VERSION}/linux-amd64-filebrowser.tar.gz"; then
+        tar xzf "${TMP_FB}/fb.tar.gz" -C "${TMP_FB}" filebrowser
+        install -m 755 "${TMP_FB}/filebrowser" /usr/local/bin/filebrowser
+        ok "Το FileBrowser εγκαταστάθηκε στο /usr/local/bin/filebrowser."
+    else
+        warn "Αποτυχία λήψης FileBrowser — το /share/ δεν θα λειτουργεί."
+    fi
+    rm -rf "${TMP_FB}"
+fi
+
+# Αρχικοποίηση βάσης (idempotent). Η βάση ζει στο data/filebrowser/ ώστε ο
+# root φάκελος να παραμένει root-owned (απαραίτητο για το hardening του
+# systemd)· το /opt/school-portal/filebrowser.db είναι symlink προς αυτήν.
+chown www-data:www-data "${PORTAL_DIR}/data/filebrowser" "${PORTAL_DIR}/shared-files"
+chmod 2775 "${PORTAL_DIR}/data/filebrowser" "${PORTAL_DIR}/shared-files"
+ln -sfn data/filebrowser/filebrowser.db "${PORTAL_DIR}/filebrowser.db"
+if [[ -x /usr/local/bin/filebrowser ]]; then
+    if [[ ! -s "${FB_DB}" ]]; then
+        log "Αρχικοποίηση βάσης FileBrowser (--baseURL /share)…"
+        runuser -u www-data -- /usr/local/bin/filebrowser config init \
+            --database "${FB_DB}" --address 127.0.0.1 --port 8003 \
+            --baseURL /share --root "${PORTAL_DIR}/shared-files" --locale el >/dev/null
+        # Ο κωδικός teacher2026 είναι 11 χαρακτήρες (< default όριο 12)
+        runuser -u www-data -- /usr/local/bin/filebrowser config set \
+            --database "${FB_DB}" --minimumPasswordLength 8 \
+            --branding.name "Κοινόχρηστα Αρχεία Σχολείου" >/dev/null
+        runuser -u www-data -- /usr/local/bin/filebrowser users add \
+            "${FB_USER}" "${FB_PASS}" --perm.admin --locale el --database "${FB_DB}" >/dev/null
+        ok "Η βάση δημιουργήθηκε (χρήστης: ${FB_USER})."
+    else
+        ok "Η βάση FileBrowser υπάρχει ήδη."
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # 7. Δικαιώματα (setgid ώστε root & www-data να συνεργάζονται)
 # ---------------------------------------------------------------------------
 log "Ρύθμιση δικαιωμάτων…"
@@ -177,6 +306,14 @@ find "${PORTAL_DIR}/mkdocs-site" -type f -exec chmod 664 {} +
 
 chown -R www-data:www-data "${PORTAL_DIR}/pandoc-app/data" "${PORTAL_DIR}/data" "${DOCS_OUT}"
 chmod 2775 "${PORTAL_DIR}/data" "${DOCS_OUT}"
+
+# exams-app: η SQLite βάση (exams.db) & το .cookie-secret δημιουργούνται από
+# τη διεργασία www-data μέσα στον φάκελο της εφαρμογής → setgid group-write.
+chown -R root:www-data "${PORTAL_DIR}/exams-app"
+chmod 2775 "${PORTAL_DIR}/exams-app" "${PORTAL_DIR}/exams-app/submissions"
+if [[ -f "${PORTAL_DIR}/exams-app/.cookie-secret" ]]; then
+    chmod 660 "${PORTAL_DIR}/exams-app/.cookie-secret"
+fi
 touch "${PORTAL_DIR}/data/mkdocs-build.lock"
 chown root:www-data "${PORTAL_DIR}/data/mkdocs-build.lock"
 chmod 664 "${PORTAL_DIR}/data/mkdocs-build.lock"
@@ -219,11 +356,19 @@ log "Εγκατάσταση systemd υπηρεσιών…"
 install -m 644 "${PORTAL_DIR}/config/systemd/school-pandoc.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-mkdocs.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-mkdocs.path"    /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-filebrowser.service" /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-exams.service" /etc/systemd/system/
 systemctl daemon-reload
 
 systemctl enable --now school-pandoc.service
+systemctl enable --now school-exams.service
 systemctl enable --now school-mkdocs.path
 systemctl start school-mkdocs.service
+if [[ -x /usr/local/bin/filebrowser ]]; then
+    systemctl enable --now school-filebrowser.service
+else
+    warn "Παράλειψη school-filebrowser.service (λείπει το binary)."
+fi
 ok "Οι υπηρεσίες ενεργοποιήθηκαν."
 
 # ---------------------------------------------------------------------------
@@ -263,6 +408,13 @@ check_url "/docs/gymnasio-a/"        200
 check_url "/docs/lykeio-g/"          200
 check_url "/docs/games/binary-game.html" 200
 check_url "/lab/"                    200
+check_url "/crypto/"                 200
+check_url "/tools/"                  200
+check_url "/board/"                  200
+check_url "/share/"                  200
+check_url "/exams/"                  200
+check_url "/exams/teacher"           200
+check_url "/exams/api/activities"    200
 check_url "/pandoc/"                 401
 check_url "/pandoc/"                 200 "${TEACHER_USER}:${TEACHER_PASS}"
 check_url "/docs/teachers/"          401
@@ -295,6 +447,12 @@ echo "  🎮 Παιχνίδι Δυαδικού:  http://${IP_ADDR}/docs/games/bi
 echo "  🗓️  Εργαστήριο:         http://${IP_ADDR}/lab/  (υπό κατασκευή)"
 echo "  📝 Pandoc Studio:      http://${IP_ADDR}/pandoc/"
 echo "  🗝️  Λύσεις Καθηγητή:    http://${IP_ADDR}/docs/teachers/"
+echo "  🔐 CyberChef:          http://${IP_ADDR}/crypto/   (static, 0 MB)"
+echo "  🛠️  IT-Tools:           http://${IP_ADDR}/tools/    (static, 0 MB)"
+echo "  🖍️  Πίνακας Τάξης:      http://${IP_ADDR}/board/    (static, 0 MB)"
+echo "  📁 Κοινόχρηστα Αρχεία: http://${IP_ADDR}/share/    (${FB_USER} / ${FB_PASS})"
+echo "  📤 Εργασίες & Τεστ:    http://${IP_ADDR}/exams/    (μαθητές χωρίς κωδικό)"
+echo "     Περιβάλλον καθηγητή: http://${IP_ADDR}/exams/teacher  (κωδικός ${TEACHER_PASS})"
 echo
 echo "  🔐 Πρόσβαση καθηγητών:"
 echo "     Dashboard:  κωδικός ${TEACHER_PASS}"
@@ -305,6 +463,8 @@ echo "     Το /docs/ είναι static → 0 MB σε ηρεμία."
 echo
 echo "  🛠️  Χρήσιμες εντολές:"
 echo "     systemctl status school-pandoc.service"
+echo "     systemctl status school-filebrowser.service"
+echo "     systemctl status school-exams.service"
 echo "     systemctl start school-mkdocs.service    # rebuild υλικού"
 echo "     journalctl -u school-pandoc.service -f"
 echo "     sudo ${PORTAL_DIR}/install.sh --update   # ενημέρωση"

@@ -38,12 +38,18 @@ dashboard/assets/tailwind.min.js
 dashboard/assets/alpine.min.js
 
 # --- Δεδομένα εφαρμογών / ανεβάσματα ---
+shared-files/
+data/filebrowser/
 pandoc-app/data/uploads/
 pandoc-app/data/templates/*.docx
+exams-app/submissions/
+exams-app/.cookie-secret
 lab-app/*.db
 lab-app/*.sqlite
 lab-app/*.sqlite3
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 data/build/
