@@ -25,6 +25,8 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/lab/` | Διαχείριση Εργαστηρίου | *Placeholder* (μελλοντικά :8001) | Προβολή |
 | `/exams/` | Παράδοση Εργασιών & Τεστ | FastAPI + SQLite @ `127.0.0.1:8004` | Ελεύθερη (μαθητές) |
 | `/exams/teacher` | Διαχείριση Εργασιών/Διαγωνισμάτων | ίδιο service, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
+| `/live-quiz/` | Ζωντανό Παιχνίδι Τάξης (Live Quiz) | FastAPI + WebSockets + SQLite @ `127.0.0.1:8005` | Ελεύθερη (είσοδος με PIN) |
+| `/live-quiz/teacher` | Live Quiz — Προτζέκτορας | ίδιο service, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
 | `/crypto/` | CyberChef | Στατικό HTML/JS (0 MB RAM) | Ελεύθερη |
 | `/tools/` | IT-Tools | Στατικό SPA (0 MB RAM) | Ελεύθερη |
 | `/board/` | Ψηφιακός Πίνακας Τάξης | Στατικό canvas (0 MB RAM) | Ελεύθερη |
@@ -95,10 +97,15 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   ├── submissions/        # Αρχεία μαθητών ανά δραστηριότητα (εκτός git)
 │   ├── templates/          # base/student/teacher.html (Jinja2)
 │   └── static/             # student.js, teacher.js (vanilla JS)
+├── live-quiz-app/          # Ζωντανό Παιχνίδι Τάξης — Live Quiz (/live-quiz/)
+│   ├── main.py             # FastAPI + WebSockets + SQLite (ενσωματωμένη sqlite3)
+│   ├── livequiz.db         # Βάση (δημιουργείται αυτόματα, εκτός git)
+│   ├── templates/          # base/student/teacher.html (Jinja2)
+│   └── static/             # student.js, teacher.js (vanilla JS + WebSocket)
 ├── lab-app/                # ΜΕΛΛΟΝΤΙΚΟ — δείτε README.md
 ├── config/                 # Source of truth για nginx & systemd
 │   ├── nginx/school-portal
-│   └── systemd/school-{pandoc,exams,filebrowser}.service, school-mkdocs.{service,path}
+│   └── systemd/school-{pandoc,exams,filebrowser,livequiz}.service, school-mkdocs.{service,path}
 ├── scripts/build-docs.sh   # Ανακατασκευή MkDocs → /var/www/docs
 ├── install.sh              # Αυτόματη εγκατάσταση/ενημέρωση
 ├── requirements.txt        # Pinned εκδόσεις Python
@@ -144,6 +151,23 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
   (Greeklish για συμβατότητα με κάθε unzip)
 - **📊 Εξαγωγή Βαθμολογίας (.CSV)** — UTF-8 με BOM, separator `;`, δεκαδικό κόμμα (έτοιμο για Excel)
 
+## 🎯 Ζωντανό Παιχνίδι Τάξης — Live Quiz (`/live-quiz/`)
+
+Κουίζ πραγματικού χρόνου τύπου Kahoot για το τοπικό δίκτυο της τάξης
+(FastAPI + WebSockets + SQLite, ~45 MB RAM).
+
+**Οθόνη Καθηγητή / Προτζέκτορα** (`/live-quiz/teacher` — κωδικός `teacher2026`, HMAC cookie):
+- Δημιουργία κουίζ: τίτλος + ερωτήσεις πολλαπλής επιλογής 4 απαντήσεων με χρονικό όριο ανά ερώτηση
+- **Εισαγωγή JSON/CSV** (`text,option1..4,correct(1-4),time`) ή **3 έτοιμα ελληνικά παραδείγματα**
+- Έναρξη Live Session → **4-ψήφιο PIN** στον προτζέκτορα + ζωντανή εμφάνιση ονομάτων μαθητών
+- «Επόμενη Ερώτηση» → αντίστροφη μέτρηση → **γράφημα απαντήσεων** → **Top-5 Leaderboard**
+- Αυτόματη λήξη ερώτησης όταν απαντήσουν όλοι· πρόωρος τερματισμός & **εξαγωγή αποτελεσμάτων CSV**
+
+**Οθόνη Μαθητή** (`/live-quiz/` — χωρίς κωδικό, από PC/tablet/κινητό):
+- Είσοδος με **PIN + Όνομα** (αυτόματη επανασύνδεση σε refresh/διακοπή δικτύου)
+- 4 μεγάλα χρωματιστά κουμπιά: 🔺 Κόκκινο / 🔷 Μπλε / 🟡 Κίτρινο / 🟩 Πράσινο
+- Άμεση ανατροφοδότηση: σωστό/λάθος, **πόντοι 500–1000 ανά ταχύτητα** και θέση στην κατάταξη
+
 ## 💾 Κατανάλωση RAM
 
 | Υπηρεσία | Idle RAM | Σημείωση |
@@ -152,6 +176,7 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 | `/docs/` (static) | **0 MB** | Καμία διεργασία — απευθείας από τον Nginx |
 | Pandoc Studio | ~55 MB | uvicorn, 1 worker, `MemoryMax=320M` |
 | Exams App | ~45 MB | uvicorn, 1 worker, `MemoryMax=256M` |
+| Live Quiz | ~45 MB | uvicorn + WebSockets, 1 worker, `MemoryMax=256M` |
 | Pyodide | **0 MB** server-side | Τρέχει στον browser του μαθητή |
 | **Σύνολο** | **~65 MB** | |
 
@@ -183,6 +208,9 @@ bash /opt/school-portal/scripts/smoke-test.sh
 
 # Έλεγχος πλήρους ροής /exams/ σε browser (υποβολή αρχείου, διαγώνισμα, καθηγητής)
 /opt/school-portal/venv/bin/python /opt/school-portal/scripts/exams-browser-test.py
+
+# End-to-end έλεγχος /live-quiz/ (καθηγητής + 2 μαθητές μέσω WebSockets, πόντοι, κατάταξη)
+/opt/school-portal/venv/bin/python /opt/school-portal/scripts/livequiz-test.py
 ```
 
 > Ο `browser-test.py` απαιτεί `chromium` (`apt install chromium`) και

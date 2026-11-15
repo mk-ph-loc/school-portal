@@ -44,6 +44,7 @@ pandoc-app/data/uploads/
 pandoc-app/data/templates/*.docx
 exams-app/submissions/
 exams-app/.cookie-secret
+live-quiz-app/.cookie-secret
 lab-app/*.db
 lab-app/*.sqlite
 lab-app/*.sqlite3

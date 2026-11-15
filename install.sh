@@ -117,7 +117,7 @@ fi
 # 3. Δομή φακέλων
 # ---------------------------------------------------------------------------
 log "Δημιουργία δομής φακέλων…"
-mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},lab-app,config/{nginx,systemd},scripts,data/build,data/filebrowser,shared-files}
+mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},lab-app,config/{nginx,systemd},scripts,data/build,data/filebrowser,shared-files}
 mkdir -p "${DOCS_OUT}" "${TOOLS_OUT}"/{cyberchef,it-tools,board,circuits,blockly,sql/vendor,pdf-tools/vendor/fonts}
 ok "Η δομή φακέλων δημιουργήθηκε."
 
@@ -523,6 +523,14 @@ chmod 2775 "${PORTAL_DIR}/exams-app" "${PORTAL_DIR}/exams-app/submissions"
 if [[ -f "${PORTAL_DIR}/exams-app/.cookie-secret" ]]; then
     chmod 660 "${PORTAL_DIR}/exams-app/.cookie-secret"
 fi
+
+# live-quiz-app: η SQLite βάση (livequiz.db) & το .cookie-secret δημιουργούνται
+# από τη διεργασία www-data μέσα στον φάκελο της εφαρμογής → setgid group-write.
+chown -R root:www-data "${PORTAL_DIR}/live-quiz-app"
+chmod 2775 "${PORTAL_DIR}/live-quiz-app"
+if [[ -f "${PORTAL_DIR}/live-quiz-app/.cookie-secret" ]]; then
+    chmod 660 "${PORTAL_DIR}/live-quiz-app/.cookie-secret"
+fi
 touch "${PORTAL_DIR}/data/mkdocs-build.lock"
 chown root:www-data "${PORTAL_DIR}/data/mkdocs-build.lock"
 chmod 664 "${PORTAL_DIR}/data/mkdocs-build.lock"
@@ -567,10 +575,12 @@ install -m 644 "${PORTAL_DIR}/config/systemd/school-mkdocs.service" /etc/systemd
 install -m 644 "${PORTAL_DIR}/config/systemd/school-mkdocs.path"    /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-filebrowser.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-exams.service" /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-livequiz.service" /etc/systemd/system/
 systemctl daemon-reload
 
 systemctl enable --now school-pandoc.service
 systemctl enable --now school-exams.service
+systemctl enable --now school-livequiz.service
 systemctl enable --now school-mkdocs.path
 systemctl start school-mkdocs.service
 if [[ -x /usr/local/bin/filebrowser ]]; then
@@ -632,6 +642,9 @@ check_url "/share/"                  200
 check_url "/exams/"                  200
 check_url "/exams/teacher"           200
 check_url "/exams/api/activities"    200
+check_url "/live-quiz/"              200
+check_url "/live-quiz/teacher"       200
+check_url "/live-quiz/healthz"       200
 check_url "/pandoc/"                 401
 check_url "/pandoc/"                 200 "${TEACHER_USER}:${TEACHER_PASS}"
 check_url "/docs/teachers/"          401
@@ -674,6 +687,8 @@ echo "  📄 PDF Studio:         http://${IP_ADDR}/pdf-tools/ (pdf-lib, static, 
 echo "  📁 Κοινόχρηστα Αρχεία: http://${IP_ADDR}/share/    (${FB_USER} / ${FB_PASS})"
 echo "  📤 Εργασίες & Τεστ:    http://${IP_ADDR}/exams/    (μαθητές χωρίς κωδικό)"
 echo "     Περιβάλλον καθηγητή: http://${IP_ADDR}/exams/teacher  (κωδικός ${TEACHER_PASS})"
+echo "  🎯 Live Quiz Τάξης:    http://${IP_ADDR}/live-quiz/ (είσοδος μαθητών με PIN)"
+echo "     Προτζέκτορας:       http://${IP_ADDR}/live-quiz/teacher  (κωδικός ${TEACHER_PASS})"
 echo
 echo "  🔐 Πρόσβαση καθηγητών:"
 echo "     Dashboard:  κωδικός ${TEACHER_PASS}"
@@ -686,6 +701,7 @@ echo "  🛠️  Χρήσιμες εντολές:"
 echo "     systemctl status school-pandoc.service"
 echo "     systemctl status school-filebrowser.service"
 echo "     systemctl status school-exams.service"
+echo "     systemctl status school-livequiz.service"
 echo "     systemctl start school-mkdocs.service    # rebuild υλικού"
 echo "     journalctl -u school-pandoc.service -f"
 echo "     sudo ${PORTAL_DIR}/install.sh --update   # ενημέρωση"

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="el" class="scroll-smooth">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>{% block title %}Ζωντανό Παιχνίδι Τάξης (Live Quiz){% endblock %}</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<script src="/assets/tailwind.min.js"></script>
+<style>
+  body{font-family:"DejaVu Sans","Liberation Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  [hidden]{display:none !important}
+  .timer-low{animation:pulse-red 1s infinite}
+  @keyframes pulse-red{0%,100%{opacity:1}50%{opacity:.55}}
+  /* Χρώματα/σχήματα απαντήσεων τύπου Kahoot */
+  .ans-0{background:#e21b3c}  /* Κόκκινο / Τρίγωνο */
+  .ans-1{background:#1368ce}  /* Μπλε / Ρόμβος */
+  .ans-2{background:#d89e00}  /* Κίτρινο / Κύκλος */
+  .ans-3{background:#26890c}  /* Πράσινο / Τετράγωνο */
+  .ans-btn{transition:transform .1s ease, filter .15s ease}
+  .ans-btn:active{transform:scale(.96)}
+  .ans-btn:disabled{filter:grayscale(.7) brightness(.75);cursor:not-allowed}
+  .bar-fill{transition:height .6s ease}
+  .pop-in{animation:pop .35s ease}
+  @keyframes pop{0%{transform:scale(.7);opacity:0}100%{transform:scale(1);opacity:1}}
+</style>
+{% block head %}{% endblock %}
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col">
+
+<header class="bg-gradient-to-br from-purple-900 via-fuchsia-800 to-pink-700 text-white">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-white/15 ring-1 ring-white/30 grid place-items-center text-2xl">🎯</div>
+        <div>
+          <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight">Ζωντανό Παιχνίδι Τάξης</h1>
+          <p class="text-fuchsia-100 text-xs sm:text-sm mt-0.5">Ψηφιακή Πύλη Σχολείου &amp; Εργαστηρίου · Live Quiz</p>
+        </div>
+      </div>
+      <nav class="flex items-center gap-2 text-sm">
+        <a href="/" class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">🏫 Πύλη</a>
+        <a href="{{ url_for('student_page') }}" class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">👨‍🎓 Μαθητής</a>
+        <a href="{{ url_for('teacher_page') }}" class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">🔐 Καθηγητής</a>
+      </nav>
+    </div>
+  </div>
+</header>
+
+<main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+{% block content %}{% endblock %}
+</main>
+
+<footer class="border-t border-slate-200 bg-white">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 text-xs text-slate-500 flex flex-wrap justify-between gap-2">
+    <span>© Ψηφιακή Πύλη Σχολείου &amp; Εργαστηρίου</span>
+    <span>Οι πιο γρήγορες σωστές απαντήσεις κερδίζουν περισσότερους πόντους!</span>
+  </div>
+</footer>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -15,6 +15,7 @@
 #   /pdf-tools/     → PDF Studio (static, pdf-lib — 0 MB RAM)
 #   /share/         → FileBrowser (Go binary @127.0.0.1:8003, ~15 MB RAM)
 #   /exams/         → Παράδοση Εργασιών & Διαγωνίσματα (FastAPI @127.0.0.1:8004)
+#   /live-quiz/     → Ζωντανό Παιχνίδι Τάξης (FastAPI+WebSockets @127.0.0.1:8005)
 # ===========================================================================
 
 server {
@@ -307,6 +308,37 @@ server {
         proxy_send_timeout    300s;
         proxy_read_timeout    300s;
         proxy_request_buffering off;
+    }
+
+    # -----------------------------------------------------------------
+    # 6γ. Ζωντανό Παιχνίδι Τάξης — Live Quiz (@127.0.0.1:8005, WebSockets)
+    #     FastAPI + SQLite· το /live-quiz/ είναι ελεύθερο για μαθητές
+    #     (είσοδος με 4-ψήφιο PIN), ενώ η οθόνη καθηγητή/προτζέκτορα
+    #     (/live-quiz/teacher) προστατεύεται από την εφαρμογή με κωδικό
+    #     teacher2026 (HMAC-signed cookie).
+    # -----------------------------------------------------------------
+    location = /live-quiz {
+        return 301 /live-quiz/;
+    }
+
+    location ^~ /live-quiz/ {
+        proxy_pass http://127.0.0.1:8005/;
+        proxy_http_version 1.1;
+
+        # --- Υποστήριξη WebSockets (ζωντανές ερωτήσεις/απαντήσεις) ---
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Οι συνδέσεις WS μένουν ανοιχτές καθ' όλη τη διάρκεια του μαθήματος
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    3600s;
+        proxy_read_timeout    3600s;
+        proxy_buffering off;
     }
 
     # -----------------------------------------------------------------
