@@ -70,9 +70,12 @@
   }
 
   function apply() {
-    // Μπλοκ που σημάνθηκαν ως glossa (pymdownx pygments_lang_class)
+    // Μπλοκ glossa. Καλύπτουμε όλες τις μορφές που μπορεί να παράξει
+    // το pymdownx.superfences (custom fence → div.glossa > pre > code)
+    // καθώς και τυχόν κλασικά highlighted μπλοκ.
     var blocks = document.querySelectorAll(
-      'code.language-glossa, code.lang-glossa, .highlight-glossa code, pre.glossa > code'
+      'div.glossa pre code, pre.glossa > code, code.language-glossa, ' +
+      'code.lang-glossa, .highlight-glossa code, .glossa.highlight code'
     );
     blocks.forEach(function (code) {
       if (code.getAttribute('data-glossa-done') === '1') return;

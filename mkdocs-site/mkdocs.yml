@@ -100,6 +100,13 @@ markdown_extensions:
   - pymdownx.snippets
   - pymdownx.superfences:
       custom_fences:
+        # Η ελληνική ψευδογλώσσα δεν υπάρχει στο Pygments/skylighting.
+        # Με custom fence παρακάμπτεται το Pygments (που θα την έκανε
+        # "language-text") και ο χρωματισμός γίνεται στον browser από
+        # το assets/javascripts/glossa.js.
+        - name: glossa
+          class: glossa
+          format: !!python/name:pymdownx.superfences.fence_code_format
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
