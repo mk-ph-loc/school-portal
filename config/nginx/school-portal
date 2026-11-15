@@ -204,14 +204,27 @@ server {
         access_log off;
     }
 
-    # 5ε. Blockly Games — εκμάθηση προγραμματισμού με μπλοκ (Google, offline pack)
-    location ^~ /blockly/ {
+    # 5ε. Blockly Games — εκμάθηση προγραμματισμού με μπλοκ (static, ελληνικά)
+    #     ΣΗΜΕΙΩΣΗ: ΟΧΙ ^~ εδώ — τα extensionless URLs των παιχνιδιών πρέπει
+    #     να πιάνονται από τα regex locations που ακολουθούν (προτεραιότητα).
+    location /blockly/ {
         alias /var/www/school-tools/blockly/;
         index index.html;
         try_files $uri $uri/ =404;
 
         expires 7d;
         add_header Cache-Control "public";
+    }
+    # Τα παιχνίδια είναι αρχεία .html (raw-HTML mode του Blockly Games)· τα
+    # extensionless URLs (π.χ. /blockly/maze?lang=el ή /blockly/maze/?lang=el)
+    # πρέπει να καταλήγουν στο αντίστοιχο .html, αλλιώς ο φάκελος assets
+    # επιστρέφει 403 (directory index forbidden). Το query string
+    # (?lang=el&level=N) διατηρείται αυτόματα από το rewrite.
+    location ~ ^/blockly/(puzzle|maze|bird|turtle|movie|music|pond-tutor|pond-duck)/?$ {
+        rewrite ^/blockly/([-\w]+)/?$ /blockly/$1.html permanent;
+    }
+    location = /blockly/index {
+        return 301 /blockly/index.html$is_args$args;
     }
     # Ο boot.js επιλέγει γλώσσα & φορτώνει τα bundles → όχι επιθετικό caching
     location = /blockly/common/boot.js {
