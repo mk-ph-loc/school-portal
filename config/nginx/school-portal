@@ -9,6 +9,10 @@
 #   /crypto/        → CyberChef (static HTML/JS — 0 MB RAM)
 #   /tools/         → IT-Tools (static SPA — 0 MB RAM)
 #   /board/         → Ψηφιακός Πίνακας Τάξης (static canvas — 0 MB RAM)
+#   /circuits/      → CircuitJS1 Προσομοιωτής Κυκλωμάτων (static — 0 MB RAM)
+#   /blockly/       → Blockly Games (static, ελληνικά — 0 MB RAM)
+#   /sql/           → SQL Playground (static, SQLite WASM — 0 MB RAM)
+#   /pdf-tools/     → PDF Studio (static, pdf-lib — 0 MB RAM)
 #   /share/         → FileBrowser (Go binary @127.0.0.1:8003, ~15 MB RAM)
 #   /exams/         → Παράδοση Εργασιών & Διαγωνίσματα (FastAPI @127.0.0.1:8004)
 # ===========================================================================
@@ -180,6 +184,74 @@ server {
         try_files $uri $uri/ =404;
 
         add_header Cache-Control "no-cache";
+    }
+
+    # 5δ. CircuitJS1 — προσομοιωτής ηλεκτρονικών κυκλωμάτων (pfalstad/circuitjs1)
+    location ^~ /circuits/ {
+        alias /var/www/school-tools/circuits/;
+        index index.html;
+        try_files $uri $uri/ =404;
+
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+    # Τα hashed bundles του CircuitJS αλλάζουν όνομα σε κάθε έκδοση → immutable
+    location ^~ /circuits/circuitjs116/ {
+        alias /var/www/school-tools/circuits/circuitjs116/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # 5ε. Blockly Games — εκμάθηση προγραμματισμού με μπλοκ (Google, offline pack)
+    location ^~ /blockly/ {
+        alias /var/www/school-tools/blockly/;
+        index index.html;
+        try_files $uri $uri/ =404;
+
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+    # Ο boot.js επιλέγει γλώσσα & φορτώνει τα bundles → όχι επιθετικό caching
+    location = /blockly/common/boot.js {
+        alias /var/www/school-tools/blockly/common/boot.js;
+        add_header Cache-Control "no-cache";
+    }
+
+    # 5στ. SQL Playground — εργαστήριο βάσεων δεδομένων (sql.js / SQLite WASM)
+    location ^~ /sql/ {
+        alias /var/www/school-tools/sql/;
+        index index.html;
+        try_files $uri $uri/ =404;
+
+        add_header Cache-Control "no-cache";
+    }
+    location ^~ /sql/vendor/ {
+        alias /var/www/school-tools/sql/vendor/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+
+        types {
+            application/wasm wasm;
+            application/javascript js;
+        }
+        default_type application/octet-stream;
+    }
+
+    # 5ζ. PDF Studio — συγχώνευση/split/υδατογράφημα PDF (pdf-lib, 100% τοπικά)
+    location ^~ /pdf-tools/ {
+        alias /var/www/school-tools/pdf-tools/;
+        index index.html;
+        try_files $uri $uri/ =404;
+
+        add_header Cache-Control "no-cache";
+    }
+    location ^~ /pdf-tools/vendor/ {
+        alias /var/www/school-tools/pdf-tools/vendor/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
     }
 
     # -----------------------------------------------------------------

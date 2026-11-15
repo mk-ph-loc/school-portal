@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Studio — Εργαλεία PDF στον Browser — Ψηφιακή Πύλη</title>
+<meta name="description" content="Συγχώνευση, εξαγωγή σελίδων και υδατογράφημα/αρίθμηση σε PDF — 100% τοπικά στον browser με την βιβλιοθήκη pdf-lib. Τα αρχεία δεν ανεβαίνουν ποτέ στον server.">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<script src="vendor/tailwind.min.js"></script>
+<script src="vendor/pdf-lib.min.js"></script>
+<script src="vendor/fontkit.umd.min.js"></script>
+<style>
+  body{font-family:"DejaVu Sans","Liberation Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .grid-bg{background-image:radial-gradient(circle at 1px 1px, rgba(255,255,255,.16) 1px, transparent 0);background-size:22px 22px}
+  .dropzone.drag{border-color:#3b82f6;background:#eff6ff}
+  [hidden]{display:none !important}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col">
+
+<!-- ================= HEADER ================= -->
+<header class="bg-gradient-to-br from-indigo-900 via-blue-800 to-sky-700 text-white flex-none">
+  <div class="grid-bg">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center gap-3">
+      <div class="w-11 h-11 rounded-xl bg-white/15 ring-1 ring-white/30 grid place-items-center text-2xl">📄</div>
+      <div class="mr-auto">
+        <h1 class="text-lg sm:text-xl font-extrabold tracking-tight">PDF Studio — Εργαλεία PDF στον Browser</h1>
+        <p class="text-blue-100 text-xs sm:text-sm">🔒 100% τοπική επεξεργασία (pdf-lib) — τα αρχεία σου ΔΕΝ ανεβαίνουν στον server</p>
+      </div>
+      <a href="/" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/25 transition">← Πύλη</a>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 flex-1">
+
+  <!-- ================= TABS ================= -->
+  <nav class="grid grid-cols-3 gap-2 mb-6" id="tabs">
+    <button data-tab="merge" class="tab px-3 py-3 rounded-xl font-bold text-sm ring-1 transition">🗂️ Συγχώνευση PDF</button>
+    <button data-tab="split" class="tab px-3 py-3 rounded-xl font-bold text-sm ring-1 transition">✂️ Εξαγωγή Σελίδων</button>
+    <button data-tab="mark"  class="tab px-3 py-3 rounded-xl font-bold text-sm ring-1 transition">💧 Υδατογράφημα &amp; Αρίθμηση</button>
+  </nav>
+
+  <!-- ================= MERGE ================= -->
+  <section id="panel-merge" class="space-y-4">
+    <div class="rounded-xl bg-white ring-1 ring-slate-200 p-5">
+      <h2 class="font-bold text-slate-900">Συγχώνευση πολλών PDF σε ένα</h2>
+      <p class="text-sm text-slate-600 mt-1">Πρόσθεσε 2 ή περισσότερα αρχεία PDF, όρισε τη σειρά με τα βελάκια και πάτα «Συγχώνευση».</p>
+      <label class="dropzone mt-4 block border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition">
+        <input id="mergeInput" type="file" accept="application/pdf,.pdf" multiple class="hidden">
+        <span class="text-3xl">📥</span>
+        <span class="block mt-1 font-semibold text-slate-700">Κλικ ή σύρε εδώ τα PDF αρχεία</span>
+        <span class="block text-xs text-slate-500 mt-1">Μπορείς να επιλέξεις πολλά μαζί</span>
+      </label>
+      <ul id="mergeList" class="mt-4 space-y-2"></ul>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button id="mergeBtn" class="px-5 py-2.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold transition disabled:opacity-40 disabled:cursor-not-allowed" disabled>🗂️ Συγχώνευση &amp; Λήψη</button>
+        <button id="mergeClear" class="px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm font-semibold transition">Καθαρισμός λίστας</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SPLIT ================= -->
+  <section id="panel-split" class="space-y-4" hidden>
+    <div class="rounded-xl bg-white ring-1 ring-slate-200 p-5">
+      <h2 class="font-bold text-slate-900">Εξαγωγή συγκεκριμένων σελίδων (Split)</h2>
+      <p class="text-sm text-slate-600 mt-1">Διάλεξε ένα PDF και γράψε τις σελίδες που θέλεις να κρατήσεις, π.χ. <code class="bg-slate-100 px-1 rounded">1-3, 5, 8-10</code>.</p>
+      <label class="dropzone mt-4 block border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition">
+        <input id="splitInput" type="file" accept="application/pdf,.pdf" class="hidden">
+        <span class="text-3xl">📥</span>
+        <span id="splitName" class="block mt-1 font-semibold text-slate-700">Κλικ ή σύρε εδώ το PDF αρχείο</span>
+        <span id="splitInfo" class="block text-xs text-slate-500 mt-1">Μόνο ένα αρχείο</span>
+      </label>
+      <div class="mt-4 grid sm:grid-cols-[1fr_auto] gap-3 items-end">
+        <label class="block">
+          <span class="text-sm font-semibold text-slate-700">Σελίδες προς εξαγωγή</span>
+          <input id="splitRange" type="text" placeholder="π.χ. 1-3, 5, 8-10 (κενό = όλες)"
+                 class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </label>
+        <button id="splitBtn" class="px-5 py-2.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold transition disabled:opacity-40 disabled:cursor-not-allowed" disabled>✂️ Εξαγωγή &amp; Λήψη</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= WATERMARK / NUMBERING ================= -->
+  <section id="panel-mark" class="space-y-4" hidden>
+    <div class="rounded-xl bg-white ring-1 ring-slate-200 p-5">
+      <h2 class="font-bold text-slate-900">Προσθήκη υδατογραφήματος &amp; αρίθμησης σελίδων</h2>
+      <p class="text-sm text-slate-600 mt-1">Πρόσθεσε διαγώνιο υδατογράφημα (π.χ. «ΠΡΟΧΕΙΡΟ», «ΕΜΠΙΣΤΕΥΤΙΚΟ») ή/και αρίθμηση στο κάτω μέρος κάθε σελίδας.</p>
+      <label class="dropzone mt-4 block border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition">
+        <input id="markInput" type="file" accept="application/pdf,.pdf" class="hidden">
+        <span class="text-3xl">📥</span>
+        <span id="markName" class="block mt-1 font-semibold text-slate-700">Κλικ ή σύρε εδώ το PDF αρχείο</span>
+        <span id="markInfo" class="block text-xs text-slate-500 mt-1">Μόνο ένα αρχείο</span>
+      </label>
+      <div class="mt-4 grid sm:grid-cols-2 gap-4">
+        <label class="flex items-start gap-3 rounded-lg bg-slate-50 ring-1 ring-slate-200 p-3 cursor-pointer">
+          <input id="wmEnable" type="checkbox" checked class="mt-1 w-4 h-4 accent-blue-700">
+          <span class="flex-1">
+            <span class="block text-sm font-semibold text-slate-700">Υδατογράφημα (διαγώνιο)</span>
+            <input id="wmText" type="text" value="ΠΡΟΧΕΙΡΟ" maxlength="40"
+                   class="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <span class="mt-2 flex items-center gap-2 text-xs text-slate-600">Αδιαφάνεια
+              <input id="wmOpacity" type="range" min="5" max="60" value="18" class="flex-1 accent-blue-700">
+              <span id="wmOpacityVal" class="mono w-8 text-right">18%</span>
+            </span>
+          </span>
+        </label>
+        <label class="flex items-start gap-3 rounded-lg bg-slate-50 ring-1 ring-slate-200 p-3 cursor-pointer">
+          <input id="numEnable" type="checkbox" checked class="mt-1 w-4 h-4 accent-blue-700">
+          <span class="flex-1">
+            <span class="block text-sm font-semibold text-slate-700">Αρίθμηση σελίδων (κάτω δεξιά)</span>
+            <span class="mt-2 block text-xs text-slate-600">Μορφή: «Σελίδα X από Y» — αυτόματα σε κάθε σελίδα, με μέγεθος που προσαρμόζεται στο μέγεθος της σελίδας.</span>
+          </span>
+        </label>
+      </div>
+      <div class="mt-4">
+        <button id="markBtn" class="px-5 py-2.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold transition disabled:opacity-40 disabled:cursor-not-allowed" disabled>💧 Εφαρμογή &amp; Λήψη</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ΜΗΝΥΜΑΤΑ ================= -->
+  <div id="msg" class="hidden mt-4 rounded-xl px-4 py-3 text-sm font-medium ring-1"></div>
+
+  <p class="mt-6 text-xs text-slate-500 leading-relaxed">
+    ℹ️ Η επεξεργασία γίνεται αποκλειστικά στη μνήμη του browser σου με JavaScript/WebAssembly (pdf-lib).
+    Κανένα αρχείο δεν αποστέλλεται στο σχολικό δίκτυο ή στο διαδίκτυο. Για υδατογράφημα με ελληνικούς χαρακτήρες
+    χρησιμοποιείται ενσωματωμένη γραμματοσειρά Unicode — το αποτέλεσμα κατεβαίνει απευθείας στον υπολογιστή σου.
+  </p>
+</main>
+
+<footer class="border-t border-slate-200 bg-white mt-6">
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 text-xs text-slate-500 flex flex-wrap gap-2 justify-between">
+    <span>Ψηφιακή Πύλη Σχολείου &amp; Εργαστηρίου — PDF Studio (pdf-lib)</span>
+    <span>Static εφαρμογή · 0 MB RAM στον server · 100% ιδιωτικότητα αρχείων</span>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
+

@@ -166,7 +166,7 @@
     <div class="flex items-end justify-between flex-wrap gap-3 mb-6">
       <div>
         <h2 class="text-2xl font-bold text-slate-900 flex items-center gap-2">🧰 Εργαλεία &amp; Εφαρμογές Εργαστηρίου</h2>
-        <p class="text-slate-600 mt-1">Ελαφριά, δωρεάν εργαλεία ανοικτού κώδικα — τα τρία πρώτα τρέχουν <strong>100% στον browser</strong> (μηδέν RAM στον server).</p>
+        <p class="text-slate-600 mt-1">Ελαφριά, δωρεάν εργαλεία ανοικτού κώδικα — όλα εκτός του FileBrowser τρέχουν <strong>100% στον browser</strong> (μηδέν RAM στον server).</p>
       </div>
       <span class="text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">Χωρίς κωδικό*</span>
     </div>
@@ -213,8 +213,55 @@
       </a>
     </div>
 
+    <!-- ===== Διαδραστικά Εργαστήρια & Εργαλεία (νέα static labs) ===== -->
+    <div class="mt-10 mb-6">
+      <h3 class="text-xl font-bold text-slate-900 flex items-center gap-2">🧪 Διαδραστικά Εργαστήρια &amp; Εργαλεία</h3>
+      <p class="text-slate-600 mt-1 text-sm">Προσομοιώσεις, προγραμματισμός &amp; επεξεργασία αρχείων — όλα τρέχουν <strong>100% στον browser</strong>, χωρίς εγκατάσταση και χωρίς αποστολή δεδομένων.</p>
+    </div>
+    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <a href="/circuits/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div class="w-12 h-12 rounded-xl bg-yellow-100 grid place-items-center text-2xl">⚡</div>
+          <span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">0 MB RAM</span>
+        </div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">Προσομοιωτής Κυκλωμάτων</h3>
+        <p class="mt-1 text-sm text-slate-600 leading-relaxed">CircuitJS1: σχεδίασε ηλεκτρονικά κυκλώματα με αντιστάσεις, τρανζίστορ &amp; LED και δες τάσεις/ρεύματα σε πραγματικό χρόνο. 360+ έτοιμα παραδείγματα.</p>
+        <div class="mt-4 text-sm font-semibold text-yellow-700">Άνοιγμα →</div>
+      </a>
+
+      <a href="/blockly/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div class="w-12 h-12 rounded-xl bg-green-100 grid place-items-center text-2xl">🧩</div>
+          <span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">0 MB RAM</span>
+        </div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">Blockly Games</h3>
+        <p class="mt-1 text-sm text-slate-600 leading-relaxed">Εκμάθηση προγραμματισμού με μπλοκ από την Google: Παζλ, Λαβύρινθος, Χελώνα, Μουσική &amp; άλλα 8 παιχνίδια — στα Ελληνικά.</p>
+        <div class="mt-4 text-sm font-semibold text-green-700">Άνοιγμα →</div>
+      </a>
+
+      <a href="/sql/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div class="w-12 h-12 rounded-xl bg-cyan-100 grid place-items-center text-2xl">🗄️</div>
+          <span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">0 MB RAM</span>
+        </div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">SQL Playground</h3>
+        <p class="mt-1 text-sm text-slate-600 leading-relaxed">Εργαστήριο βάσεων δεδομένων με σχολική βάση (ΜΑΘΗΤΕΣ, ΜΑΘΗΜΑΤΑ, ΒΑΘΜΟΙ): SELECT, WHERE, JOIN, GROUP BY με έτοιμα παραδείγματα 1 κλικ.</p>
+        <div class="mt-4 text-sm font-semibold text-cyan-700">Άνοιγμα →</div>
+      </a>
+
+      <a href="/pdf-tools/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div class="w-12 h-12 rounded-xl bg-orange-100 grid place-items-center text-2xl">📄</div>
+          <span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">0 MB RAM</span>
+        </div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">PDF Studio</h3>
+        <p class="mt-1 text-sm text-slate-600 leading-relaxed">Συγχώνευση PDF, εξαγωγή σελίδων &amp; υδατογράφημα/αρίθμηση — 100% τοπικά στον υπολογιστή σου, τα αρχεία δεν ανεβαίνουν πουθενά.</p>
+        <div class="mt-4 text-sm font-semibold text-orange-700">Άνοιγμα →</div>
+      </a>
+    </div>
+
     <p class="mt-4 text-xs text-slate-500">
-      * Τα CyberChef, IT-Tools και Πίνακας είναι ελεύθερα προσβάσιμα και λειτουργούν χωρίς Internet μετά τη φόρτωση.
+      * Τα CyberChef, IT-Tools, Πίνακας και τα 4 νέα εργαστήρια είναι ελεύθερα προσβάσιμα και λειτουργούν χωρίς Internet μετά τη φόρτωση.
       Το <code>/share/</code> προστατεύεται με δική του σύνδεση (χρήστης <strong>admin</strong>, κωδικός καθηγητών).
     </p>
   </section>

@@ -23,6 +23,17 @@ PYODIDE_VERSION="314.0.8"
 ALPINE_VERSION="3.14.9"
 TAILWIND_VERSION="4.1.11"
 
+# --- Διαδραστικά Εργαστήρια (static, 0 MB RAM στον server) ---
+CIRCUITJS_BASE="https://www.falstad.com/circuit"          # επίσημο στατικό build του pfalstad/circuitjs1
+CIRCUITJS_BUNDLE="circuitjs116"                            # φάκελος hashed Vite bundle (άλλαξε αν ενημερωθεί το upstream)
+CIRCUITJS_JS="circuitjs-D4ylC0oc.js"
+CIRCUITJS_CSS="circuitjs-C9R-4DXA.css"
+BLOCKLY_BASE="https://blockly-games.appspot.com"           # επίσημο static deployment των Google Blockly Games
+SQLJS_VERSION="1.13.0"
+PDFLIB_VERSION="1.17.1"
+FONTKIT_VERSION="1.1.1"
+ACE_VERSION="1.32.0"                                       # ίδιο με το ace build του Blockly Games
+
 # --- Εργαλεία Εργαστηρίου (static + single binary, χωρίς Docker) ---
 TOOLS_OUT="/var/www/school-tools"
 CYBERCHEF_VERSION="v11.5.0"
@@ -107,7 +118,7 @@ fi
 # ---------------------------------------------------------------------------
 log "Δημιουργία δομής φακέλων…"
 mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},lab-app,config/{nginx,systemd},scripts,data/build,data/filebrowser,shared-files}
-mkdir -p "${DOCS_OUT}" "${TOOLS_OUT}"/{cyberchef,it-tools,board}
+mkdir -p "${DOCS_OUT}" "${TOOLS_OUT}"/{cyberchef,it-tools,board,circuits,blockly,sql/vendor,pdf-tools/vendor/fonts}
 ok "Η δομή φακέλων δημιουργήθηκε."
 
 # ---------------------------------------------------------------------------
@@ -254,7 +265,205 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6ε. FileBrowser — single Go binary στο /share/ (~15 MB RAM)
+# 6ε. CircuitJS1 — προσομοιωτής ηλεκτρονικών κυκλωμάτων στο /circuits/
+#     Στατικό build (HTML/JS/CSS + έτοιμα κυκλώματα) από το επίσημο site
+#     του pfalstad/circuitjs1. Δεν υπάρχει release zip → mirror των αρχείων.
+# ---------------------------------------------------------------------------
+if [[ -s "${TOOLS_OUT}/circuits/${CIRCUITJS_BUNDLE}/${CIRCUITJS_JS}" ]]; then
+    ok "Το CircuitJS1 υπάρχει ήδη (${TOOLS_OUT}/circuits)."
+else
+    log "Λήψη CircuitJS1 (στατικό web build, ~2 MB + κυκλώματα)…"
+    CJ="${TOOLS_OUT}/circuits"
+    mkdir -p "${CJ}/${CIRCUITJS_BUNDLE}/font" "${CJ}/${CIRCUITJS_BUNDLE}/circuits" \
+             "${CJ}/circuitjs1/img/subcircuits" "${CJ}/font"
+    if curl -fsSL --retry 3 --max-time 120 -o "${CJ}/circuitjs.html" "${CIRCUITJS_BASE}/circuitjs.html"; then
+        # Αφαίρεση εξωτερικού Dropbox script & διόρθωση manifest path
+        sed -i '/dropbox/d; s|href="/circuit/manifest.json"|href="manifest.json"|' "${CJ}/circuitjs.html"
+        for f in "${CIRCUITJS_JS}" "${CIRCUITJS_CSS}" setuplist.txt; do
+            curl -fsSL --retry 3 --max-time 300 -o "${CJ}/${CIRCUITJS_BUNDLE}/${f}" \
+                "${CIRCUITJS_BASE}/${CIRCUITJS_BUNDLE}/${f}" || warn "Αποτυχία λήψης ${f}."
+        done
+        for f in fontello.css fontello.eot fontello.woff2 fontello.woff fontello.ttf fontello.svg; do
+            curl -fsSL --retry 2 --max-time 120 -o "${CJ}/${CIRCUITJS_BUNDLE}/font/${f}" \
+                "${CIRCUITJS_BASE}/${CIRCUITJS_BUNDLE}/font/${f}" || warn "Αποτυχία λήψης font/${f}."
+        done
+        # Βοηθητικές σελίδες (About, υποκυκλώματα, calculators) & εικονίδια PWA
+        for f in iframe.html manifest.json about.html crystal.html customfunction.html \
+                 customlogic.html customtransformer.html diodecalc.html mosfet-beta.html \
+                 opampreal.html subcircuits.html icon512.png icon1024.png; do
+            curl -fsSL --retry 2 --max-time 60 -o "${CJ}/${f}" "${CIRCUITJS_BASE}/${f}" || true
+        done
+        [[ -f "${CJ}/about.html" ]] && sed -i '/flagcounter/d' "${CJ}/about.html"
+        curl -fsSL --max-time 60 -o "${CJ}/font/webfontlicense.html" "${CIRCUITJS_BASE}/font/webfontlicense.html" || true
+        # Έτοιμα εκπαιδευτικά κυκλώματα από τη setuplist.txt (μενού Circuits)
+        awk '{for(i=1;i<=NF;i++) if($i ~ /^[a-zA-Z0-9_-]+\.txt$/) print $i}' \
+            "${CJ}/${CIRCUITJS_BUNDLE}/setuplist.txt" | sort -u | while read -r c; do
+            curl -fsSL --retry 2 --max-time 60 -o "${CJ}/${CIRCUITJS_BUNDLE}/circuits/${c}" \
+                "${CIRCUITJS_BASE}/${CIRCUITJS_BUNDLE}/circuits/${c}" || rm -f "${CJ}/${CIRCUITJS_BUNDLE}/circuits/${c}"
+        done
+        curl -fsSL --max-time 60 -o "${CJ}/${CIRCUITJS_BUNDLE}/circuits/blank.txt" \
+            "${CIRCUITJS_BASE}/${CIRCUITJS_BUNDLE}/circuits/blank.txt" || true
+        # Manifest PWA → scope /circuits/
+        python3 - "${CJ}/manifest.json" <<'PYEOF' || true
+import json, sys
+p = sys.argv[1]
+m = json.load(open(p))
+m["start_url"] = "/circuits/circuitjs.html"
+m["scope"] = "/circuits/"
+for i in m.get("icons", []):
+    i["src"] = i["src"].replace("/circuit/", "/circuits/")
+json.dump(m, open(p, "w"), indent=2)
+PYEOF
+        ok "Το CircuitJS1 εγκαταστάθηκε στο /circuits/."
+    else
+        warn "Αποτυχία λήψης CircuitJS1 — το /circuits/ δεν θα λειτουργεί."
+    fi
+fi
+# Ελληνικό wrapper με μπάρα πλοήγησης (πηγή στο config/circuits/)
+if [[ -s "${PORTAL_DIR}/config/circuits/index.html" ]]; then
+    install -m 644 "${PORTAL_DIR}/config/circuits/index.html" "${TOOLS_OUT}/circuits/index.html"
+fi
+
+# ---------------------------------------------------------------------------
+# 6στ. Blockly Games — εκμάθηση προγραμματισμού με μπλοκ στο /blockly/
+#      Επίσημο offline static πακέτο της Google (bundles + ελληνικά msg).
+# ---------------------------------------------------------------------------
+if [[ -s "${TOOLS_OUT}/blockly/maze/generated/compressed.js" ]]; then
+    ok "Το Blockly Games υπάρχει ήδη (${TOOLS_OUT}/blockly)."
+else
+    log "Λήψη Blockly Games (offline static πακέτο με ελληνικά, ~9 MB)…"
+    BG="${TOOLS_OUT}/blockly"
+    BG_GAMES="index puzzle maze bird turtle movie music pond/tutor pond/duck"
+    mkdir -p "${BG}/common" "${BG}/third-party/JS-Interpreter" \
+             "${BG}/third-party/blockly/media" "${BG}/third-party/SoundJS" \
+             "${BG}/third-party/ace/ext"
+    # HTML σελίδες παιχνιδιών (extensionless URLs του επίσημου deployment)
+    for g in ${BG_GAMES}; do
+        page="$(echo "${g}" | tr '/' '-')"
+        [[ "${g}" == "index" ]] && url="${BLOCKLY_BASE}/?lang=el" || url="${BLOCKLY_BASE}/${page}?lang=el"
+        curl -fsSL --retry 2 --max-time 60 -o "${BG}/${page}.html" "${url}" || warn "Αποτυχία λήψης ${page}.html."
+        mkdir -p "${BG}/${g}/generated/msg"
+        curl -fsSL --retry 2 --max-time 120 -o "${BG}/${g}/generated/compressed.js" \
+            "${BLOCKLY_BASE}/${g}/generated/compressed.js" || warn "Αποτυχία λήψης bundle ${g}."
+        for lang in el en; do
+            curl -fsSL --retry 2 --max-time 60 -o "${BG}/${g}/generated/msg/${lang}.js" \
+                "${BLOCKLY_BASE}/${g}/generated/msg/${lang}.js" || warn "Αποτυχία λήψης msg/${lang} (${g})."
+        done
+        curl -fsSL --retry 2 --max-time 60 -o "${BG}/${g}/style.css" "${BLOCKLY_BASE}/${g}/style.css" || true
+    done
+    curl -fsSL --max-time 60 -o "${BG}/pond/style.css" "${BLOCKLY_BASE}/pond/style.css" || true
+    # Κοινά αρχεία & βιβλιοθήκες τρίτων
+    for f in common/boot.js common/back.js common/common.css common/prettify.css common/prettify.js \
+             common/1x1.gif common/help.png common/icons.png common/loading.gif \
+             third-party/JS-Interpreter/compressed.js third-party/SoundJS/soundjs.min.js \
+             third-party/babel.min.js music/notes.png index/title.svg; do
+        curl -fsSL --retry 2 --max-time 180 -o "${BG}/${f}" "${BLOCKLY_BASE}/${f}" || warn "Αποτυχία λήψης ${f}."
+    done
+    for f in ace.js mode-javascript.js theme-chrome.js worker-javascript.js; do
+        curl -fsSL --retry 2 --max-time 90 -o "${BG}/third-party/ace/${f}" \
+            "${BLOCKLY_BASE}/third-party/ace/${f}" || warn "Αποτυχία λήψης ace/${f}."
+    done
+    curl -fsSL --retry 2 --max-time 90 -o "${BG}/third-party/ace/ext/language_tools.js" \
+        "https://cdn.jsdelivr.net/npm/ace-builds@${ACE_VERSION}/src-min-noconflict/ext-language_tools.js" || true
+    # Media Blockly (ήχοι/sprites)
+    for f in sprites.png click.mp3 click.ogg click.wav delete.mp3 delete.ogg delete.wav \
+             disconnect.mp3 disconnect.ogg disconnect.wav; do
+        curl -fsSL --retry 2 --max-time 60 -o "${BG}/third-party/blockly/media/${f}" \
+            "${BLOCKLY_BASE}/third-party/blockly/media/${f}" || true
+    done
+    # Εικόνες/ήχοι παιχνιδιών: εξαγωγή όλων των asset paths από τα bundles
+    cat "${BG}"/*/generated/compressed.js "${BG}"/pond/*/generated/compressed.js 2>/dev/null \
+        | grep -oE '"[a-zA-Z0-9_./-]+\.(mp3|ogg|wav|png|jpg|svg|gif)"' | tr -d '"' | sort -u \
+        | while read -r a; do
+            case "${a}" in */*) ;; *) continue;; esac
+            mkdir -p "${BG}/$(dirname "${a}")"
+            curl -fsSL --retry 2 --max-time 90 -o "${BG}/${a}" "${BLOCKLY_BASE}/${a}" || rm -f "${BG}/${a}"
+        done
+    # Εικονίδια παιχνιδιών στην κεντρική σελίδα
+    for g in puzzle maze bird turtle movie music pond-tutor pond-duck; do
+        curl -fsSL --retry 2 --max-time 60 -o "${BG}/index/${g}.png" "${BLOCKLY_BASE}/index/${g}.png" || true
+    done
+    # Ειδικά assets: εικόνες ζώων του Παζλ & demo πάπιες του Pond
+    for f in puzzle/bee.jpg puzzle/cat.jpg puzzle/duck.jpg puzzle/snail.jpg pond/duck/default-ducks.js; do
+        curl -fsSL --retry 2 --max-time 60 -o "${BG}/${f}" "${BLOCKLY_BASE}/${f}" || warn "Αποτυχία λήψης ${f}."
+    done
+    # Soundfonts για το παιχνίδι Μουσική (8 όργανα × 13 νότες)
+    for inst in piano trumpet violin drum flute banjo guitar choir; do
+        mkdir -p "${BG}/third-party/soundfonts/${inst}"
+        for note in C3 D3 E3 F3 G3 A3 B3 C4 D4 E4 F4 G4 A4; do
+            curl -fsSL --retry 2 --max-time 60 -o "${BG}/third-party/soundfonts/${inst}/${note}.mp3" \
+                "${BLOCKLY_BASE}/third-party/soundfonts/${inst}/${note}.mp3" || rm -f "${BG}/third-party/soundfonts/${inst}/${note}.mp3"
+        done
+    done
+    ok "Το Blockly Games εγκαταστάθηκε στο /blockly/."
+fi
+# Προεπιλογή ελληνικής γλώσσας (αλλάζει από το μενού γλωσσών του παιχνιδιού)
+python3 - "${TOOLS_OUT}/blockly" <<'PYEOF' || true
+import pathlib, sys
+root = pathlib.Path(sys.argv[1])
+for p in root.glob('*.html'):
+    s = p.read_text(encoding='utf-8')
+    if 'school-lang-default' in s:
+        continue
+    inject = ('<script>/* school-lang-default: προεπιλογή Ελληνικών */\n'
+              "if(!/[?&]lang=/.test(location.search)){location.search+=(location.search?'&':'?')+'lang=el';}</script>\n  ")
+    s = s.replace('<script src="common/boot.js"></script>', inject + '<script src="common/boot.js"></script>')
+    p.write_text(s, encoding='utf-8')
+PYEOF
+
+# ---------------------------------------------------------------------------
+# 6ζ. SQL Playground — εργαστήριο βάσεων δεδομένων στο /sql/ (sql.js WASM)
+# ---------------------------------------------------------------------------
+fetch_asset "https://cdn.jsdelivr.net/npm/sql.js@${SQLJS_VERSION}/dist/sql-wasm.js" \
+            "${TOOLS_OUT}/sql/vendor/sql-wasm.js" "sql.js (SQLite WASM loader)"
+fetch_asset "https://cdn.jsdelivr.net/npm/sql.js@${SQLJS_VERSION}/dist/sql-wasm.wasm" \
+            "${TOOLS_OUT}/sql/vendor/sql-wasm.wasm" "sql.js (SQLite WASM binary)"
+fetch_asset "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@${TAILWIND_VERSION}/dist/index.global.js" \
+            "${TOOLS_OUT}/sql/vendor/tailwind.min.js" "Tailwind CSS (SQL)"
+if [[ -s "${PORTAL_DIR}/config/sql/index.html" ]]; then
+    install -m 644 "${PORTAL_DIR}/config/sql/index.html" "${PORTAL_DIR}/config/sql/app.js" "${TOOLS_OUT}/sql/"
+    ok "Το SQL Playground εγκαταστάθηκε στο /sql/."
+else
+    warn "Δεν βρέθηκε config/sql/ — το /sql/ δεν θα λειτουργεί."
+fi
+
+# ---------------------------------------------------------------------------
+# 6η. PDF Studio — εργαλεία PDF στον browser στο /pdf-tools/ (pdf-lib)
+# ---------------------------------------------------------------------------
+fetch_asset "https://cdn.jsdelivr.net/npm/pdf-lib@${PDFLIB_VERSION}/dist/pdf-lib.min.js" \
+            "${TOOLS_OUT}/pdf-tools/vendor/pdf-lib.min.js" "pdf-lib"
+fetch_asset "https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@${FONTKIT_VERSION}/dist/fontkit.umd.min.js" \
+            "${TOOLS_OUT}/pdf-tools/vendor/fontkit.umd.min.js" "fontkit (Unicode γραμματοσειρές)"
+fetch_asset "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@${TAILWIND_VERSION}/dist/index.global.js" \
+            "${TOOLS_OUT}/pdf-tools/vendor/tailwind.min.js" "Tailwind CSS (PDF)"
+# Γραμματοσειρά για ελληνικό υδατογράφημα/αρίθμηση: subset της DejaVu Sans
+# (Greek + Latin, ~64 KB αντί ~760 KB) από τα τοπικά fonts-dejavu.
+if [[ ! -s "${TOOLS_OUT}/pdf-tools/vendor/fonts/DejaVuSans-el.ttf" ]]; then
+    PYFTSUBSET="$(command -v pyftsubset || true)"
+    [[ -z "${PYFTSUBSET}" && -x "${VENV}/bin/pyftsubset" ]] && PYFTSUBSET="${VENV}/bin/pyftsubset"
+    if [[ -s /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ]] && [[ -n "${PYFTSUBSET}" ]]; then
+        "${PYFTSUBSET}" /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+            --output-file="${TOOLS_OUT}/pdf-tools/vendor/fonts/DejaVuSans-el.ttf" \
+            --unicodes="U+0020-007E,U+00A0-00FF,U+0370-03FF,U+1F00-1FFF,U+2010-2027,U+20AC" \
+            --layout-features='*' --name-IDs='*' --notdef-outline \
+            && ok "Η ελληνική γραμματοσειρά (DejaVu subset) δημιουργήθηκε." \
+            || warn "Αποτυχία subset γραμματοσειράς — δοκιμή ολόκληρης TTF."
+    fi
+    if [[ ! -s "${TOOLS_OUT}/pdf-tools/vendor/fonts/DejaVuSans-el.ttf" ]] \
+        && [[ -s /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ]]; then
+        install -m 644 /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+            "${TOOLS_OUT}/pdf-tools/vendor/fonts/DejaVuSans-el.ttf"
+    fi
+fi
+if [[ -s "${PORTAL_DIR}/config/pdf-tools/index.html" ]]; then
+    install -m 644 "${PORTAL_DIR}/config/pdf-tools/index.html" "${PORTAL_DIR}/config/pdf-tools/app.js" "${TOOLS_OUT}/pdf-tools/"
+    ok "Το PDF Studio εγκαταστάθηκε στο /pdf-tools/."
+else
+    warn "Δεν βρέθηκε config/pdf-tools/ — το /pdf-tools/ δεν θα λειτουργεί."
+fi
+
+# ---------------------------------------------------------------------------
+# 6θ. FileBrowser — single Go binary στο /share/ (~15 MB RAM)
 # ---------------------------------------------------------------------------
 if [[ -x /usr/local/bin/filebrowser ]]; then
     ok "Το filebrowser binary υπάρχει ήδη ($(/usr/local/bin/filebrowser version 2>/dev/null | head -1))."
@@ -411,6 +620,14 @@ check_url "/lab/"                    200
 check_url "/crypto/"                 200
 check_url "/tools/"                  200
 check_url "/board/"                  200
+check_url "/circuits/"               200
+check_url "/circuits/circuitjs.html" 200
+check_url "/blockly/"                200
+check_url "/blockly/maze/generated/msg/el.js" 200
+check_url "/sql/"                    200
+check_url "/sql/vendor/sql-wasm.wasm" 200
+check_url "/pdf-tools/"              200
+check_url "/pdf-tools/vendor/pdf-lib.min.js" 200
 check_url "/share/"                  200
 check_url "/exams/"                  200
 check_url "/exams/teacher"           200
@@ -450,6 +667,10 @@ echo "  🗝️  Λύσεις Καθηγητή:    http://${IP_ADDR}/docs/teache
 echo "  🔐 CyberChef:          http://${IP_ADDR}/crypto/   (static, 0 MB)"
 echo "  🛠️  IT-Tools:           http://${IP_ADDR}/tools/    (static, 0 MB)"
 echo "  🖍️  Πίνακας Τάξης:      http://${IP_ADDR}/board/    (static, 0 MB)"
+echo "  ⚡ Κυκλώματα:          http://${IP_ADDR}/circuits/ (CircuitJS1, static, 0 MB)"
+echo "  🧩 Blockly Games:      http://${IP_ADDR}/blockly/  (ελληνικά, static, 0 MB)"
+echo "  🗄️  SQL Playground:     http://${IP_ADDR}/sql/      (SQLite WASM, static, 0 MB)"
+echo "  📄 PDF Studio:         http://${IP_ADDR}/pdf-tools/ (pdf-lib, static, 0 MB)"
 echo "  📁 Κοινόχρηστα Αρχεία: http://${IP_ADDR}/share/    (${FB_USER} / ${FB_PASS})"
 echo "  📤 Εργασίες & Τεστ:    http://${IP_ADDR}/exams/    (μαθητές χωρίς κωδικό)"
 echo "     Περιβάλλον καθηγητή: http://${IP_ADDR}/exams/teacher  (κωδικός ${TEACHER_PASS})"

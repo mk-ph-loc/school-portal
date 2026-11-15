@@ -25,6 +25,29 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/lab/` | Διαχείριση Εργαστηρίου | *Placeholder* (μελλοντικά :8001) | Προβολή |
 | `/exams/` | Παράδοση Εργασιών & Τεστ | FastAPI + SQLite @ `127.0.0.1:8004` | Ελεύθερη (μαθητές) |
 | `/exams/teacher` | Διαχείριση Εργασιών/Διαγωνισμάτων | ίδιο service, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
+| `/crypto/` | CyberChef | Στατικό HTML/JS (0 MB RAM) | Ελεύθερη |
+| `/tools/` | IT-Tools | Στατικό SPA (0 MB RAM) | Ελεύθερη |
+| `/board/` | Ψηφιακός Πίνακας Τάξης | Στατικό canvas (0 MB RAM) | Ελεύθερη |
+| `/circuits/` | CircuitJS1 — Προσομοιωτής Κυκλωμάτων | Στατικό build pfalstad/circuitjs1 (0 MB RAM) | Ελεύθερη |
+| `/blockly/` | Blockly Games (ελληνικά) | Επίσημο offline static πακέτο Google (0 MB RAM) | Ελεύθερη |
+| `/sql/` | SQL Playground | Στατικό HTML + sql.js/SQLite WASM (0 MB RAM) | Ελεύθερη |
+| `/pdf-tools/` | PDF Studio (merge/split/υδατογράφημα) | Στατικό HTML + pdf-lib, 100% τοπικά (0 MB RAM) | Ελεύθερη |
+| `/share/` | Κοινόχρηστα Αρχεία | FileBrowser Go binary @ `127.0.0.1:8003` (~15 MB) | 🔐 Login (`admin`) |
+
+### 🧪 Διαδραστικά Εργαστήρια (100% static — 0 MB RAM στον server)
+
+- **`/circuits/`** — CircuitJS1: προσομοίωση ηλεκτρονικών κυκλωμάτων σε πραγματικό χρόνο,
+  με 360+ έτοιμα εκπαιδευτικά κυκλώματα (μενού *Circuits*). Mirror του επίσημου στατικού
+  build από το `falstad.com/circuit` (repo: `pfalstad/circuitjs1`, χωρίς release zip).
+- **`/blockly/`** — Blockly Games της Google: 9 παιχνίδια προγραμματισμού με μπλοκ
+  (Παζλ, Λαβύρινθος, Πουλιά, Χελώνα, Ταινία, Μουσική, Νούφαρα). Προεπιλεγμένη γλώσσα
+  **Ελληνικά** (`lang=el`), αλλάζει από το μενού γλωσσών κάθε παιχνιδιού.
+- **`/sql/`** — SQL Playground: σχολική βάση `ΜΑΘΗΤΕΣ`/`ΜΑΘΗΜΑΤΑ`/`ΒΑΘΜΟΙ` σε SQLite WASM
+  (sql.js, τοπικά), επεξεργαστής SQL, έτοιμα παραδείγματα SELECT/WHERE/JOIN/GROUP BY
+  με 1 κλικ και κουμπί επαναφοράς της αρχικής βάσης. Πηγή: `config/sql/`.
+- **`/pdf-tools/`** — PDF Studio: συγχώνευση πολλών PDF, εξαγωγή σελίδων (π.χ. `1-3,5`)
+  και υδατογράφημα/αρίθμηση με ελληνική γραμματοσειρά (DejaVu subset + fontkit).
+  Τα αρχεία επεξεργάζονται **αποκλειστικά στον browser** — κανένα upload. Πηγή: `config/pdf-tools/`.
 
 ### 🔐 Πρόσβαση Καθηγητών
 
