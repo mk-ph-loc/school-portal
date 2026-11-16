@@ -52,7 +52,12 @@ ETHERPAD_DIR="${PORTAL_DIR}/apps/etherpad"
 ETHERPAD_PORT="8006"
 PNPM_VERSION="11.0.6"                                      # όπως δηλώνει το packageManager του Etherpad
 EXCALIDRAW_ROOM_DIR="${PORTAL_DIR}/apps/excalidraw-room"   # self-hosted collab για το /board/
-EXCALIDRAW_ROOM_PORT="8007"
+EXCALIDRAW_ROOM_PORT="8010"                                # (8007 = HedgeDoc, 8009 = MD-Bridge)
+HEDGEDOC_VERSION="1.12.0"                                  # τελευταία stable 1.x (config.json + SQLite)
+HEDGEDOC_DIR="${PORTAL_DIR}/apps/hedgedoc"                 # συνεργατικό Markdown στο /md-pad/
+HEDGEDOC_PORT="8007"
+MDBRIDGE_DIR="${PORTAL_DIR}/apps/hedgedoc-bridge"          # γέφυρα δημοσίευσης στο /md-publish/
+MDBRIDGE_PORT="8009"
 
 SKIP_DEPS=0
 DO_UPDATE=0
@@ -148,7 +153,7 @@ fi
 # 3. Δομή φακέλων
 # ---------------------------------------------------------------------------
 log "Δημιουργία δομής φακέλων…"
-mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},app-builder/{static,templates},lab-app,custom-apps/_template,apps,config/{nginx,systemd,etherpad},scripts,data/build,data/filebrowser,shared-files}
+mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},app-builder/{static,templates},apps/hedgedoc-bridge/templates,lab-app,custom-apps/_template,apps,config/{nginx,systemd,etherpad},scripts,data/build,data/filebrowser,shared-files}
 mkdir -p "${DOCS_OUT}" "${TOOLS_OUT}"/{cyberchef,it-tools,board,circuits,blockly,sql/vendor,pdf-tools/vendor/fonts}
 ok "Η δομή φακέλων δημιουργήθηκε."
 
@@ -171,7 +176,7 @@ if [[ "${SKIP_DEPS}" == "0" ]]; then
     else
         "${VENV}/bin/pip" install --quiet \
             mkdocs-material mkdocs-glightbox \
-            fastapi "uvicorn[standard]" python-multipart weasyprint jinja2
+            fastapi "uvicorn[standard]" python-multipart weasyprint jinja2 qrcode
     fi
     ok "Οι Python βιβλιοθήκες εγκαταστάθηκαν."
 else
@@ -612,7 +617,7 @@ fi
 
 # ---------------------------------------------------------------------------
 # 6ια. Excalidraw Room Server — self-hosted ζωντανή συνεργασία πίνακα (/board-ws/)
-#      Node.js + Socket.IO @127.0.0.1:8007, stateless (in-memory rooms, κανένα
+#      Node.js + Socket.IO @127.0.0.1:8010, stateless (in-memory rooms, κανένα
 #      δεδομένο στον δίσκο — αναμετάδοση end-to-end encrypted blobs μόνο).
 #      Το static build του /board/ patchάρεται από το fetch-excalidraw.sh ώστε
 #      να συνδέεται εδώ αντί για το oss-collab.excalidraw.com → 100% LAN/offline.
@@ -645,6 +650,127 @@ if command -v node >/dev/null 2>&1; then
     [[ -d "${EXCALIDRAW_ROOM_DIR}" ]] && chown -R www-data:www-data "${EXCALIDRAW_ROOM_DIR}"
 else
     warn "Δεν υπάρχει Node.js — παράλειψη excalidraw-room."
+fi
+
+# ---------------------------------------------------------------------------
+# 6ιβ. HedgeDoc — συνεργατικό Markdown τάξης στο /md-pad/ (ΧΩΡΙΣ Docker)
+#      Επίσημο release tarball (προ-χτισμένο frontend) + yarn production deps.
+#      Node.js + SQLite @127.0.0.1:8007. Ανώνυμη ελεύθερη επεξεργασία (freely),
+#      FreeURL aliases, τοπικά uploads & ελληνικό πρότυπο δυνατοτήτων.
+# ---------------------------------------------------------------------------
+if command -v node >/dev/null 2>&1; then
+    if [[ ! -f "${HEDGEDOC_DIR}/app.js" ]]; then
+        log "Λήψη HedgeDoc ${HEDGEDOC_VERSION} (επίσημο release tarball, ~64 MB)…"
+        mkdir -p "${HEDGEDOC_DIR}"
+        TARBALL="${HEDGEDOC_DIR}/hedgedoc-${HEDGEDOC_VERSION}.tar.gz"
+        if curl -fsSL --retry 3 --max-time 600 \
+            "https://github.com/hedgedoc/hedgedoc/releases/download/${HEDGEDOC_VERSION}/hedgedoc-${HEDGEDOC_VERSION}.tar.gz" \
+            -o "${TARBALL}"; then
+            # Το tarball περιέχει φάκελο hedgedoc/ → εξαγωγή απευθείας στο HEDGEDOC_DIR
+            tar xzf "${TARBALL}" -C "${HEDGEDOC_DIR}" --strip-components=1
+            ok "Το HedgeDoc ${HEDGEDOC_VERSION} κατέβηκε."
+        else
+            rm -f "${TARBALL}"
+            warn "Αποτυχία λήψης HedgeDoc — το /md-pad/ δεν θα λειτουργεί."
+        fi
+    else
+        ok "Το HedgeDoc υπάρχει ήδη (${HEDGEDOC_DIR})."
+    fi
+
+    if [[ -f "${HEDGEDOC_DIR}/package.json" ]]; then
+        # config.json: 127.0.0.1:8007, urlPath md-pad, SQLite, freely (idempotent —
+        # δημιουργείται ΜΟΝΟ αν λείπει, ώστε να μη χαλάει το sessionSecret/ρυθμίσεις)
+        if [[ ! -s "${HEDGEDOC_DIR}/config.json" ]]; then
+            log "Δημιουργία config.json για το HedgeDoc…"
+            HD_SECRET="$(openssl rand -hex 64)"
+            cat > "${HEDGEDOC_DIR}/config.json" <<HD_CFG
+{
+  "production": {
+    "domain": "$(hostname -I 2>/dev/null | awk '{print $1}' || echo localhost)",
+    "urlPath": "md-pad",
+    "protocolUseSSL": false,
+    "useCDN": false,
+    "host": "127.0.0.1",
+    "port": ${HEDGEDOC_PORT},
+    "loglevel": "warn",
+    "urlAddPort": false,
+    "db": { "dialect": "sqlite", "storage": "${HEDGEDOC_DIR}/hedgedoc.sqlite" },
+    "allowAnonymous": true,
+    "allowAnonymousEdits": true,
+    "allowFreeURL": true,
+    "defaultPermission": "freely",
+    "enableUploads": "all",
+    "imageUploadType": "filesystem",
+    "uploadsPath": "${HEDGEDOC_DIR}/public/uploads",
+    "defaultNotePath": "${HEDGEDOC_DIR}/welcome.md",
+    "docsPath": "./public/docs",
+    "sessionName": "hedgedoc.sid",
+    "sessionSecret": "${HD_SECRET}",
+    "cookiePolicy": "lax",
+    "hsts": { "enable": false },
+    "csp": { "enable": true, "addDefaults": true, "upgradeInsecureRequests": false, "allowFraming": true, "allowPDFEmbed": true },
+    "email": false,
+    "allowEmailRegister": false
+  }
+}
+HD_CFG
+            ok "Το config.json δημιουργήθηκε."
+        fi
+        # Πρότυπα: welcome (default note κάθε νέας σημείωσης) & template-demo
+        # (έτοιμο προς αντιγραφή + αυτόματο φόρτωμα στο /md-pad/template-demo).
+        # Πηγή αλήθειας: config/hedgedoc/ (git) → apps/hedgedoc/ (runtime).
+        if [[ -s "${PORTAL_DIR}/config/hedgedoc/welcome.md" ]]; then
+            cp "${PORTAL_DIR}/config/hedgedoc/welcome.md" "${HEDGEDOC_DIR}/welcome.md"
+            cp "${PORTAL_DIR}/config/hedgedoc/welcome.md" "${HEDGEDOC_DIR}/public/default.md"
+        fi
+        if [[ -s "${PORTAL_DIR}/config/hedgedoc/template-demo.md" ]]; then
+            cp "${PORTAL_DIR}/config/hedgedoc/template-demo.md" "${HEDGEDOC_DIR}/template-demo.md"
+            cp "${PORTAL_DIR}/config/hedgedoc/template-demo.md" "${HEDGEDOC_DIR}/public/docs/template-demo.md"
+        fi
+        # QR code επίδειξης (τοπικός, χωρίς εξωτερική υπηρεσία)
+        if [[ ! -s "${HEDGEDOC_DIR}/public/uploads/demo-qr.png" ]] && "${VENV}/bin/python" -c 'import qrcode' 2>/dev/null; then
+            HD_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+            [[ -z "${HD_IP}" ]] && HD_IP="localhost"
+            "${VENV}/bin/python" - "${HD_IP}" "${HEDGEDOC_DIR}/public/uploads/demo-qr.png" <<'QR_PY'
+import sys, qrcode
+qrcode.make(f'http://{sys.argv[1]}/md-pad/template-demo', box_size=8, border=2).save(sys.argv[2])
+QR_PY
+        fi
+        # Εξαρτήσεις production via yarn (corepack — όπως ορίζει το bin/setup)
+        if [[ ! -d "${HEDGEDOC_DIR}/node_modules" ]]; then
+            log "Εγκατάσταση εξαρτήσεων HedgeDoc (yarn workspaces focus --production)…"
+            corepack enable >/dev/null 2>&1 || npm install -g corepack >/dev/null 2>&1 || true
+            if (cd "${HEDGEDOC_DIR}" && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 yarn workspaces focus --production >/dev/null 2>&1); then
+                ok "Οι εξαρτήσεις του HedgeDoc εγκαταστάθηκαν."
+            else
+                warn "Αποτυχία εγκατάστασης εξαρτήσεων HedgeDoc — το /md-pad/ δεν θα λειτουργεί."
+            fi
+        fi
+        mkdir -p "${HEDGEDOC_DIR}/public/uploads"
+        chown -R www-data:www-data "${HEDGEDOC_DIR}"
+        chmod 750 "${HEDGEDOC_DIR}"
+        [[ -f "${HEDGEDOC_DIR}/config.json" ]] && chmod 640 "${HEDGEDOC_DIR}/config.json"
+        chmod 2775 "${HEDGEDOC_DIR}/public/uploads"
+    fi
+else
+    warn "Δεν υπάρχει Node.js — παράλειψη HedgeDoc (το /md-pad/ δεν θα λειτουργεί)."
+fi
+
+# ---------------------------------------------------------------------------
+# 6ιγ. Γέφυρα Δημοσίευσης HedgeDoc → MkDocs (/md-publish/, FastAPI @8009)
+#      Ο κώδικας (apps/hedgedoc-bridge/) έρχεται από το git· εδώ μόνο το
+#      .cookie-secret ownership & τα δικαιώματα (όπως στο app-builder).
+# ---------------------------------------------------------------------------
+if [[ -f "${MDBRIDGE_DIR}/app.py" ]]; then
+    chown -R root:www-data "${MDBRIDGE_DIR}"
+    chmod 2775 "${MDBRIDGE_DIR}"
+    if [[ -f "${MDBRIDGE_DIR}/.cookie-secret" ]]; then
+        chown www-data:www-data "${MDBRIDGE_DIR}/.cookie-secret"
+        chmod 600 "${MDBRIDGE_DIR}/.cookie-secret"
+    fi
+    ok "Η γέφυρα MD-Publish είναι έτοιμη."
+else
+    warn "Λείπει το apps/hedgedoc-bridge/app.py — το /md-publish/ δεν θα λειτουργεί."
 fi
 
 # ---------------------------------------------------------------------------
@@ -744,6 +870,8 @@ install -m 644 "${PORTAL_DIR}/config/systemd/school-livequiz.service" /etc/syste
 install -m 644 "${PORTAL_DIR}/config/systemd/school-appbuilder.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-etherpad.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-excalidraw-room.service" /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-hedgedoc.service" /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-mdbridge.service" /etc/systemd/system/
 systemctl daemon-reload
 
 systemctl enable --now school-pandoc.service
@@ -759,6 +887,16 @@ if [[ -s "${EXCALIDRAW_ROOM_DIR}/dist/index.js" ]]; then
     systemctl enable --now school-excalidraw-room.service
 else
     warn "Παράλειψη school-excalidraw-room.service (λείπει το build)."
+fi
+if [[ -f "${HEDGEDOC_DIR}/app.js" && -d "${HEDGEDOC_DIR}/node_modules" ]]; then
+    systemctl enable --now school-hedgedoc.service
+else
+    warn "Παράλειψη school-hedgedoc.service (λείπει το HedgeDoc ή οι εξαρτήσεις του)."
+fi
+if [[ -f "${MDBRIDGE_DIR}/app.py" ]]; then
+    systemctl enable --now school-mdbridge.service
+else
+    warn "Παράλειψη school-mdbridge.service (λείπει το apps/hedgedoc-bridge/app.py)."
 fi
 systemctl enable --now school-mkdocs.path
 systemctl start school-mkdocs.service
@@ -813,6 +951,11 @@ check_url "/board-ws/"               200
 check_url "/pad/"                    200
 check_url "/pad/admin"               401
 check_url "/pad/admin/"              200 "${TEACHER_USER}:${TEACHER_PASS}"
+check_url "/md-pad/"                 200
+check_url "/md-pad/template-demo"    200
+check_url "/md-publish/"             200
+check_url "/md-publish/healthz"      200
+check_url "/md-publish/api/notes"    401
 check_url "/circuits/"               200
 check_url "/circuits/circuitjs.html" 200
 check_url "/blockly/"                200
@@ -873,6 +1016,9 @@ echo "  🛠️  IT-Tools:           http://${IP_ADDR}/tools/    (static, 0 MB)"
 echo "  🖍️  Πίνακας Excalidraw: https://${IP_ADDR}/board/   (πλήρες build, static, 0 MB)"
 echo "     Ζωντανή συνεργασία: self-hosted excalidraw-room @127.0.0.1:${EXCALIDRAW_ROOM_PORT} (100% LAN)"
 echo "  📝 Σημειωματάριο Τάξης: http://${IP_ADDR}/pad/     (Etherpad Lite + SQLite)"
+echo "  ✍️  Συνεργατικό Markdown: http://${IP_ADDR}/md-pad/ (HedgeDoc ${HEDGEDOC_VERSION} + SQLite, freely)"
+echo "     Πρότυπο δυνατοτήτων: http://${IP_ADDR}/md-pad/template-demo"
+echo "  📤 Δημοσίευση → MkDocs: http://${IP_ADDR}/md-publish/ (κωδικός ${TEACHER_PASS})"
 echo "  ⚡ Κυκλώματα:          http://${IP_ADDR}/circuits/ (CircuitJS1, static, 0 MB)"
 echo "  🧩 Blockly Games:      http://${IP_ADDR}/blockly/  (ελληνικά, static, 0 MB)"
 echo "  🗄️  SQL Playground:     http://${IP_ADDR}/sql/      (SQLite WASM, static, 0 MB)"
@@ -902,6 +1048,8 @@ echo "     systemctl status school-livequiz.service"
 echo "     systemctl status school-appbuilder.service"
 echo "     systemctl status school-etherpad.service"
 echo "     systemctl status school-excalidraw-room.service"
+echo "     systemctl status school-hedgedoc.service"
+echo "     systemctl status school-mdbridge.service"
 echo "     systemctl start school-mkdocs.service    # rebuild υλικού"
 echo "     journalctl -u school-pandoc.service -f"
 echo "     sudo ${PORTAL_DIR}/install.sh --update   # ενημέρωση"

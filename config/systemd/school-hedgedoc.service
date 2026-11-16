@@ -1,0 +1,45 @@
+[Unit]
+Description=Ψηφιακή Πύλη — HedgeDoc (συνεργατικό Markdown, Node.js + SQLite)
+Documentation=file:///opt/school-portal/README.md
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/school-portal/apps/hedgedoc
+Environment=NODE_ENV=production
+Environment=HOME=/opt/school-portal/apps/hedgedoc
+# Ακούει ΜΟΝΟ στο 127.0.0.1:8007 (host/port ορίζονται και στο config.json)·
+# ο Nginx το εκθέτει στο /md-pad/ με WebSockets για ζωντανή συνεργασία.
+ExecStart=/usr/bin/node app.js
+Restart=on-failure
+RestartSec=5s
+
+# --- Κατανάλωση πόρων (ένα σχολικό τμήμα ≤30 ταυτόχρονοι επεξεργαστές) ---
+MemoryMax=768M
+MemoryHigh=512M
+CPUWeight=80
+Nice=2
+TasksMax=128
+
+# --- Ασφάλεια / hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+# Γράφει ΜΟΝΟ μέσα στον φάκελό του: hedgedoc.sqlite (+wal/shm), uploads/,
+# .yarn cache & locales. Ολα τα υπόλοιπα read-only.
+ReadWritePaths=/opt/school-portal/apps/hedgedoc
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

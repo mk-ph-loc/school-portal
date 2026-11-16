@@ -10,7 +10,7 @@ User=www-data
 Group=www-data
 WorkingDirectory=/opt/school-portal/apps/excalidraw-room
 Environment=NODE_ENV=production
-Environment=PORT=8007
+Environment=PORT=8010
 Environment=HOME=/opt/school-portal/apps/excalidraw-room
 # Ο server αναμεταδίδει ΜΟΝΟ end-to-end encrypted blobs μεταξύ των μελών
 # του ίδιου room — δεν αποθηκεύει τίποτα (stateless, in-memory rooms).

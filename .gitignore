@@ -69,6 +69,13 @@ tmp/
 # --- Node.js εφαρμογές (κατεβαίνουν & χτίζονται από το install.sh — όχι στο git) ---
 apps/etherpad/
 apps/excalidraw-room/
+apps/hedgedoc/
+# Τα ελληνικά πρότυπα & το config template συντηρούνται στο config/hedgedoc/
+
+# --- Γέφυρα MD-Publish: μυστικά & backups εκτός git (ο κώδικας app.py μένει) ---
+apps/hedgedoc-bridge/.cookie-secret
+apps/hedgedoc-bridge/backups/
+*.bak
 
 # --- Λειτουργικό σύστημα ---
 .DS_Store

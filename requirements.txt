@@ -6,6 +6,7 @@ mkdocs-material==9.8.1
 pydantic==2.14.3
 pymdown-extensions==13.1
 python-multipart==0.0.33
+qrcode==8.2
 selectolax==1.0.2
 starlette==1.10.0
 uvicorn==0.54.0

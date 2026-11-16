@@ -1,0 +1,54 @@
+[Unit]
+Description=Ψηφιακή Πύλη — Γέφυρα Δημοσίευσης HedgeDoc → MkDocs (FastAPI/Uvicorn)
+Documentation=file:///opt/school-portal/README.md
+After=network.target school-hedgedoc.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/school-portal/apps/hedgedoc-bridge
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=HOME=/opt/school-portal/apps/hedgedoc-bridge
+ExecStart=/opt/school-portal/venv/bin/uvicorn app:app \
+    --host 127.0.0.1 --port 8009 \
+    --root-path /md-publish --proxy-headers --forwarded-allow-ips 127.0.0.1 \
+    --workers 1 --no-access-log --log-level warning \
+    --timeout-keep-alive 5
+
+Restart=on-failure
+RestartSec=5s
+
+# --- Ελάχιστη κατανάλωση πόρων (εργαλείο καθηγητή, όχι μαζική χρήση) ---
+MemoryMax=256M
+MemoryHigh=192M
+CPUWeight=50
+Nice=5
+TasksMax=64
+
+# --- Ασφάλεια / hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+# Η εφαρμογή γράφει ΜΟΝΟ: .cookie-secret & backups/ (hedgedoc-bridge/),
+# μαθήματα + mkdocs.yml (mkdocs-site/) και trigger του build-docs.sh (data/).
+# Η βάση hedgedoc.sqlite ανοίγεται ΠΑΝΤΑ read-only (mode=ro).
+ReadWritePaths=/opt/school-portal/apps/hedgedoc-bridge
+ReadWritePaths=/opt/school-portal/mkdocs-site
+ReadWritePaths=/opt/school-portal/data
+ReadWritePaths=/var/www/docs
+ReadOnlyPaths=/opt/school-portal/apps/hedgedoc
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

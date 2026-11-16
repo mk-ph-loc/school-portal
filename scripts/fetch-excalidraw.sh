@@ -199,7 +199,7 @@ PYEOF
 # default του VITE_APP_WS_SERVER_URL. Αντικαθιστούμε ΜΟΝΟ την κλήση σύνδεσης
 # (portal.open) με runtime έκφραση που διαβάζει window.EXCALIDRAW_WS_SERVER_URL
 # (ορίζεται στο index.html παραπάνω → ίδιο origin + /board-ws). Έτσι η ζωντανή
-# συνεργασία μένει 100% μέσα στο σχολικό LAN (excalidraw-room @127.0.0.1:8007).
+# συνεργασία μένει 100% μέσα στο σχολικό LAN (excalidraw-room @127.0.0.1:8010).
 python3 - "${TMP}${MAIN_JS}" <<'PYEOF'
 import sys, pathlib
 

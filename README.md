@@ -30,9 +30,11 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/crypto/` | CyberChef | Στατικό HTML/JS (0 MB RAM) | Ελεύθερη |
 | `/tools/` | IT-Tools | Στατικό SPA (0 MB RAM) | Ελεύθερη |
 | `/board/` | Ψηφιακός Πίνακας Excalidraw | Πλήρες static build excalidraw-app, ελληνικά (0 MB RAM) | Ελεύθερη |
-| `/board-ws/` | Excalidraw Room Server (ζωντανή συνεργασία) | Node.js + Socket.IO @ `127.0.0.1:8007` (~40 MB, stateless) | Ελεύθερη (E2E encrypted) |
+| `/board-ws/` | Excalidraw Room Server (ζωντανή συνεργασία) | Node.js + Socket.IO @ `127.0.0.1:8010` (~40 MB, stateless) | Ελεύθερη (E2E encrypted) |
 | `/pad/` | Συνεργατικό Σημειωματάριο Τάξης | Etherpad Lite (Node.js 22 + SQLite) @ `127.0.0.1:8006` | Ελεύθερη (μαθητές) |
 | `/pad/admin` | Διαχείριση Etherpad | ίδιο service + **Basic Auth** | 🔐 Καθηγητές (`teacher`) |
+| `/md-pad/` | Συνεργατικό Markdown (HedgeDoc) | HedgeDoc 1.12.0 (Node.js 22 + SQLite) @ `127.0.0.1:8007` | Ελεύθερη (ανώνυμη επεξεργασία) |
+| `/md-publish/` | Δημοσίευση HedgeDoc → MkDocs | FastAPI micro-bridge @ `127.0.0.1:8009`, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
 | `/circuits/` | CircuitJS1 — Προσομοιωτής Κυκλωμάτων | Στατικό build pfalstad/circuitjs1 (0 MB RAM) | Ελεύθερη |
 | `/blockly/` | Blockly Games (ελληνικά) | Επίσημο offline static πακέτο Google (0 MB RAM) | Ελεύθερη |
 | `/sql/` | SQL Playground | Στατικό HTML + sql.js/SQLite WASM (0 MB RAM) | Ελεύθερη |
@@ -57,7 +59,7 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
   > `/etc/nginx/ssl/school-portal.crt` στις έμπιστες αρχές των σχολικών υπολογιστών.
   > ✅ **Η ζωντανή συνεργασία είναι 100% self-hosted στο σχολικό LAN** — δεν χρειάζεται Internet!
   > Τρέχει ο επίσημος **`excalidraw-room`** server (`apps/excalidraw-room/`, Node.js + Socket.IO,
-  > systemd: `school-excalidraw-room.service` @ `127.0.0.1:8007`, πίσω από το Nginx `/board-ws/`).
+  > systemd: `school-excalidraw-room.service` @ `127.0.0.1:8010`, πίσω από το Nginx `/board-ws/`).
   > Το static bundle patchάρεται αυτόματα από το `scripts/fetch-excalidraw.sh` ώστε το
   > «Start session» να συνδέεται στον τοπικό server αντί για το `oss-collab.excalidraw.com`.
   > Ο server είναι **stateless** (in-memory rooms, μηδέν εγγραφές σε δίσκο) και αναμεταδίδει
@@ -70,6 +72,25 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
   χωρίς εξωτερική βάση) στο `127.0.0.1:8006` μέσω του `school-etherpad.service`, και σερβίρεται
   από τον Nginx με WebSockets. Νέο έγγραφο: `http://<ip>/pad/p/<όνομα-ομάδας>`.
   Ρυθμίσεις: `config/etherpad/settings.json` (ελληνικό UI & προεπιλεγμένο κείμενο).
+- **`/md-pad/`** — **HedgeDoc 1.12.0**: συνεργατικό περιβάλλον συγγραφής **Markdown** σε
+  πραγματικό χρόνο (ζωντανή προεπισκόπηση, LaTeX/MathJax, διαγράμματα **Mermaid**, χρωματισμός
+  κώδικα, task lists, εικόνες με drag-n-drop, παρουσιάσεις slides, ιστορικό αναθεωρήσεων).
+  Τρέχει native (**χωρίς Docker**) από το επίσημο release tarball στο `apps/hedgedoc/` με
+  **Node.js 22 LTS + SQLite** (`apps/hedgedoc/hedgedoc.sqlite`) στο `127.0.0.1:8007` μέσω του
+  `school-hedgedoc.service`, πίσω από τον Nginx με WebSockets. Ανώνυμη πρόσβαση & επεξεργασία
+  (`freely`), FreeURL aliases: `http://<ip>/md-pad/<όνομα-ομάδας>`. Κάθε νέα σημείωση ξεκινά
+  με τον ελληνικό οδηγό `welcome.md`· το πλήρες **πρότυπο δυνατοτήτων** είναι έτοιμο στο
+  `/md-pad/template-demo` (πηγή: `config/hedgedoc/`). Uploads: `apps/hedgedoc/public/uploads/`.
+- **`/md-publish/`** — **Γέφυρα Δημοσίευσης HedgeDoc → MkDocs** (FastAPI micro-bridge,
+  `apps/hedgedoc-bridge/app.py` @ `127.0.0.1:8009`, `school-mdbridge.service`, κωδικός
+  `teacher2026`). Ο καθηγητής βλέπει όλες τις σημειώσεις από τη βάση `hedgedoc.sqlite`
+  (τίτλος/ID/τροποποίηση), κάνει προεπισκόπηση και δημοσιεύει: **Α)** append στο τέλος
+  υπάρχοντος μαθήματος ανά τάξη (κανονικό Markdown ή αναδιπλούμενο `??? info "Συνεργατική
+  Σημείωση Τάξης"`) ή **Β)** νέο μάθημα με αυτόματη προσθήκη στο `nav:` του `mkdocs.yml`.
+  Πριν από κάθε εγγραφή κρατιέται **backup `.bak`** (+ ιστορικό στο `apps/hedgedoc-bridge/backups/`)
+  και η σύνταξη HedgeDoc μετατρέπεται αυτόματα για το Material for MkDocs
+  (`:::info` → `!!! info`, YAML/[TOC] cleanup, embeds, εικόνες με μέγεθος).
+  Το rebuild του `/docs/` γίνεται αυτόματα από το `school-mkdocs.path`.
 
 ### 🧪 Διαδραστικά Εργαστήρια (100% static — 0 MB RAM στον server)
 

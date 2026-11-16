@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="el" class="scroll-smooth">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Δημοσίευση HedgeDoc → MkDocs — Ψηφιακή Πύλη Σχολείου</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<script src="/assets/tailwind.min.js"></script>
+<script defer src="/assets/alpine.min.js"></script>
+<style>
+  body{font-family:"DejaVu Sans","Liberation Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  [x-cloak]{display:none !important}
+  .mono{font-family:"DejaVu Sans Mono","Liberation Mono",ui-monospace,Menlo,Consolas,monospace}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col"
+      x-data="publisher({{ 'true' if logged_in else 'false' }})" x-init="init()">
+
+<header class="bg-gradient-to-br from-indigo-900 via-blue-800 to-sky-700 text-white">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-white/15 ring-1 ring-white/30 grid place-items-center text-2xl">📤</div>
+        <div>
+          <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight">Δημοσίευση HedgeDoc → MkDocs</h1>
+          <p class="text-blue-100 text-xs sm:text-sm mt-0.5">Ψηφιακή Πύλη Σχολείου &amp; Εργαστηρίου · Περιβάλλον Καθηγητή</p>
+        </div>
+      </div>
+      <nav class="flex items-center gap-2 text-sm">
+        <a href="{{ note_url_base }}" class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">✏️ Άνοιγμα HedgeDoc</a>
+        <a href="/" class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">← Portal</a>
+        <button x-show="loggedIn" x-cloak @click="logout()" class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">Κλείδωμα</button>
+      </nav>
+    </div>
+  </div>
+</header>
+
+<main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+
+<!-- ================= ΠΥΛΗ ΚΩΔΙΚΟΥ ================= -->
+<section x-show="!loggedIn" x-cloak class="max-w-md mx-auto">
+  <div class="rounded-2xl bg-white p-8 ring-1 ring-slate-200 shadow-sm text-center">
+    <div class="text-4xl">🔐</div>
+    <h2 class="mt-2 text-xl font-bold text-slate-900">Περιβάλλον Καθηγητή</h2>
+    <p class="mt-1 text-sm text-slate-600">Εισήγαγε τον κωδικό καθηγητή για να δημοσιεύσεις συνεργατικές σημειώσεις στα μαθήματα.</p>
+    <form @submit.prevent="login()" class="mt-5 space-y-3 text-left">
+      <input x-ref="pw" type="password" x-model="password" autocomplete="current-password" placeholder="Κωδικός καθηγητή"
+             class="w-full rounded-lg border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <p x-show="loginError" x-cloak class="text-sm text-red-600 font-medium" x-text="loginError"></p>
+      <button type="submit" class="w-full px-4 py-3 rounded-lg bg-blue-700 text-white font-bold hover:bg-blue-800 transition">Ξεκλείδωμα</button>
+    </form>
+  </div>
+</section>
+
+<div x-show="loggedIn" x-cloak class="space-y-8">
+
+  <!-- ================= ΒΗΜΑ 1: ΕΠΙΛΟΓΗ ΣΗΜΕΙΩΣΗΣ ================= -->
+  <section class="rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm space-y-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="text-lg font-bold text-slate-900">🗒️ Βήμα 1 — Επιλογή Σημείωσης HedgeDoc</h2>
+      <div class="flex gap-2">
+        <button @click="openTemplate()" class="px-3 py-2 rounded-lg bg-violet-700 text-white text-sm font-semibold hover:bg-violet-800 transition">📋 Άνοιγμα Πρότυπου Δυνατοτήτων</button>
+        <button @click="loadNotes()" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm font-semibold transition">🔄 Ανανέωση</button>
+      </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-2">
+      <input type="text" x-model="refInput" @keydown.enter.prevent="loadNote(refInput)"
+             placeholder="Επικόλληση URL ή ID σημείωσης (π.χ. http://192.168.1.58/md-pad/omada-3 ή template-demo)"
+             class="mono flex-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <button @click="loadNote(refInput)" class="px-4 py-2.5 rounded-lg bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 transition whitespace-nowrap">Φόρτωση</button>
+    </div>
+
+    <p x-show="notesError" x-cloak class="text-sm text-red-600 font-medium" x-text="notesError"></p>
+
+    <div class="overflow-x-auto rounded-xl ring-1 ring-slate-200 max-h-72 overflow-y-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-slate-600 sticky top-0">
+          <tr>
+            <th class="text-left px-4 py-2.5 font-semibold">Τίτλος</th>
+            <th class="text-left px-4 py-2.5 font-semibold hidden sm:table-cell">ID / Alias</th>
+            <th class="text-left px-4 py-2.5 font-semibold hidden md:table-cell">Τελευταία τροποποίηση</th>
+            <th class="px-4 py-2.5"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="n in notes" :key="n.id">
+            <tr class="border-t border-slate-100 hover:bg-blue-50/50 cursor-pointer"
+                :class="selected && selected.ref === n.ref ? 'bg-blue-50' : ''"
+                @click="loadNote(n.ref)">
+              <td class="px-4 py-2.5">
+                <span x-text="n.title"></span>
+                <span x-show="n.is_template" class="ml-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">ΠΡΟΤΥΠΟ</span>
+              </td>
+              <td class="px-4 py-2.5 mono text-xs text-slate-500 hidden sm:table-cell" x-text="n.ref"></td>
+              <td class="px-4 py-2.5 text-slate-500 hidden md:table-cell" x-text="n.updated"></td>
+              <td class="px-4 py-2.5 text-right">
+                <a :href="n.url" target="_blank" @click.stop class="text-blue-700 hover:underline text-xs font-semibold">Άνοιγμα ↗</a>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="!notes.length"><td colspan="4" class="px-4 py-6 text-center text-slate-500">Δεν υπάρχουν σημειώσεις ακόμη — φτιάξτε μία στο <a href="{{ note_url_base }}" class="text-blue-700 underline">HedgeDoc</a>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= ΒΗΜΑ 2: ΠΡΟΕΠΙΣΚΟΠΗΣΗ ================= -->
+  <section x-show="selected" x-cloak class="rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm space-y-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="text-lg font-bold text-slate-900">👁️ Βήμα 2 — Προεπισκόπηση: <span class="text-blue-700" x-text="selected ? selected.title : ''"></span></h2>
+      <div class="flex items-center gap-2 text-xs">
+        <span class="mono px-2 py-1 rounded bg-slate-100 text-slate-600" x-text="selected ? selected.ref : ''"></span>
+        <a :href="selected ? selected.url : '#'" target="_blank" class="text-blue-700 hover:underline font-semibold">Επεξεργασία στο HedgeDoc ↗</a>
+      </div>
+    </div>
+    <div class="flex gap-2 text-sm font-semibold">
+      <button @click="previewMode='cleaned'" :class="previewMode==='cleaned' ? 'bg-blue-700 text-white' : 'bg-slate-100 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition">✨ Καθαρισμένο (Material)</button>
+      <button @click="previewMode='raw'" :class="previewMode==='raw' ? 'bg-blue-700 text-white' : 'bg-slate-100 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition">📄 Raw Markdown</button>
+    </div>
+    <pre class="mono text-xs leading-relaxed bg-slate-900 text-slate-100 rounded-xl p-4 max-h-96 overflow-auto whitespace-pre-wrap" x-text="previewMode==='raw' ? raw : cleaned"></pre>
+    <p class="text-xs text-slate-500">ℹ️ Ο καθαρισμός μετατρέπει αυτόματα <code>:::info</code> → <code>!!! info</code>, αφαιρεί YAML/[TOC], διορθώνει εικόνες με μέγεθος &amp; embeds — ώστε να αποδίδονται άψογα στο Material for MkDocs.</p>
+  </section>
+
+  <!-- ================= ΒΗΜΑ 3: ΠΡΟΟΡΙΣΜΟΣ ================= -->
+  <section x-show="selected" x-cloak class="rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm space-y-5">
+    <h2 class="text-lg font-bold text-slate-900">🎯 Βήμα 3 — Επιλογή Προορισμού στο MkDocs</h2>
+
+    <div class="flex gap-2 text-sm font-semibold">
+      <button @click="dest='append'" :class="dest==='append' ? 'bg-blue-700 text-white' : 'bg-slate-100 hover:bg-slate-200'" class="px-4 py-2 rounded-lg transition">Α · Ενσωμάτωση σε Υπάρχον Μάθημα</button>
+      <button @click="dest='new'" :class="dest==='new' ? 'bg-blue-700 text-white' : 'bg-slate-100 hover:bg-slate-200'" class="px-4 py-2 rounded-lg transition">Β · Δημιουργία Νέου Μαθήματος</button>
+    </div>
+
+    <!-- ΕΠΙΛΟΓΗ Α -->
+    <div x-show="dest==='append'" class="space-y-4">
+      <div>
+        <label class="block text-sm font-semibold mb-1">Μάθημα προορισμού (ομαδοποιημένα ανά τάξη) <span class="text-red-500">*</span></label>
+        <select x-model="appendLesson" class="w-full rounded-lg border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          <option value="">— Επίλεξε μάθημα —</option>
+          {% for c in classes %}
+          <optgroup label="{{ c.label }}">
+            <template x-for="l in lessonsOf('{{ c.slug }}')" :key="l.path">
+              <option :value="l.path" x-text="l.label"></option>
+            </template>
+          </optgroup>
+          {% endfor %}
+        </select>
+        <p class="mt-1 text-xs text-slate-500">Το περιεχόμενο της σημείωσης θα προστεθεί <strong>στο τέλος</strong> του επιλεγμένου μαθήματος. Κρατιέται αυτόματα αντίγραφο ασφαλείας <code>.bak</code>.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold mb-1">Τρόπος εισαγωγής</label>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <label class="flex items-start gap-3 rounded-xl ring-1 p-4 cursor-pointer transition" :class="mode==='plain' ? 'ring-blue-500 bg-blue-50/50' : 'ring-slate-200 hover:bg-slate-50'">
+            <input type="radio" x-model="mode" value="plain" class="mt-1">
+            <span><span class="font-semibold block">📄 Κανονικό Markdown</span>
+            <span class="text-xs text-slate-500">Ως νέα ενότητα στο τέλος του μαθήματος (οι τίτλοι της σημείωσης κατεβαίνουν ένα επίπεδο).</span></span>
+          </label>
+          <label class="flex items-start gap-3 rounded-xl ring-1 p-4 cursor-pointer transition" :class="mode==='collapsible' ? 'ring-blue-500 bg-blue-50/50' : 'ring-slate-200 hover:bg-slate-50'">
+            <input type="radio" x-model="mode" value="collapsible" class="mt-1">
+            <span><span class="font-semibold block">📦 Αναδιπλούμενο κουτί</span>
+            <span class="text-xs text-slate-500">Μέσα σε <code>??? info "Συνεργατική Σημείωση Τάξης"</code> — κλειστό μέχρι να το ανοίξει ο μαθητής.</span></span>
+          </label>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold mb-1">Επικεφαλίδα ενότητας (προαιρετική)</label>
+        <input type="text" x-model="heading" maxlength="120" placeholder="π.χ. Σημειώσεις Ομάδας 3 — Δομές Επανάληψης"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <button @click="publishAppend()" :disabled="busy || !appendLesson"
+              class="px-5 py-3 rounded-lg bg-emerald-700 text-white font-bold hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed transition">
+        <span x-show="!busy">📥 Προσθήκη στο Μάθημα</span><span x-show="busy" x-cloak>⏳ Δημοσίευση…</span>
+      </button>
+    </div>
+
+    <!-- ΕΠΙΛΟΓΗ Β -->
+    <div x-show="dest==='new'" x-cloak class="space-y-4">
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold mb-1">Τάξη (φάκελος προορισμού) <span class="text-red-500">*</span></label>
+          <select x-model="newClass" class="w-full rounded-lg border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            <option value="">— Επίλεξε τάξη —</option>
+            {% for c in classes %}
+            <option value="{{ c.slug }}">{{ c.label }} ({{ c.slug }}/)</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Όνομα νέου αρχείου .md <span class="text-red-500">*</span></label>
+          <input type="text" x-model="newFilename" placeholder="π.χ. simeioseis-omadas-3" autocomplete="off"
+                 class="mono w-full rounded-lg border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <p class="mt-1 text-xs text-slate-500">Μόνο πεζά λατινικά, ψηφία, παύλες (greeklish) → <code class="mono" x-text="(newClass||'…') + '/' + (newFilename||'…') + '.md'"></code></p>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold mb-1">Τίτλος μαθήματος (για το nav)</label>
+        <input type="text" x-model="newTitle" maxlength="120" :placeholder="suggestedTitle || 'π.χ. Σημειώσεις Ομάδας 3'"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <p class="mt-1 text-xs text-slate-500">Αν μείνει κενό, χρησιμοποιείται ο τίτλος της σημείωσης. Το μάθημα προστίθεται <strong>αυτόματα στο nav:</strong> του <code>mkdocs.yml</code> κάτω από την τάξη.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold mb-1">Τρόπος εισαγωγής</label>
+        <select x-model="mode" class="w-full rounded-lg border border-slate-300 px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="plain">📄 Κανονικό Markdown</option>
+          <option value="collapsible">📦 Μέσα σε αναδιπλούμενο ??? info "Συνεργατική Σημείωση Τάξης"</option>
+        </select>
+      </div>
+      <button @click="publishNew()" :disabled="busy || !newClass || !newFilename"
+              class="px-5 py-3 rounded-lg bg-emerald-700 text-white font-bold hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed transition">
+        <span x-show="!busy">✨ Δημιουργία Νέου Μαθήματος</span><span x-show="busy" x-cloak>⏳ Δημοσίευση…</span>
+      </button>
+    </div>
+
+    <!-- ΑΠΟΤΕΛΕΣΜΑ -->
+    <div x-show="result" x-cloak class="rounded-xl p-4 text-sm font-medium"
+         :class="result && result.ok ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200' : 'bg-red-50 text-red-700 ring-1 ring-red-200'">
+      <template x-if="result && result.ok">
+        <div>
+          ✅ <span x-text="result.message"></span>
+          <a :href="result.url" target="_blank" class="underline font-bold ml-1">Προβολή στο /docs/ ↗</a>
+          <span x-show="result.backup" class="block mt-1 text-xs opacity-80">💾 Backup: <code x-text="result.backup"></code> (και ιστορικό στο apps/hedgedoc-bridge/backups/)</span>
+          <span x-show="result.nav_added" class="block mt-1 text-xs opacity-80">🧭 Προστέθηκε αυτόματα στο nav του mkdocs.yml — το site ανακατασκευάζεται αυτόματα.</span>
+        </div>
+      </template>
+      <template x-if="result && !result.ok"><span>❌ <span x-text="result.message"></span></span></template>
+    </div>
+  </section>
+
+</div>
+</main>
+
+<footer class="border-t border-slate-200 bg-white">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 text-xs text-slate-500 flex flex-wrap justify-between gap-2">
+    <span>Γέφυρα HedgeDoc → MkDocs · school-mdbridge.service @127.0.0.1:8009</span>
+    <span>Το rebuild γίνεται αυτόματα από το school-mkdocs.path</span>
+  </div>
+</footer>
+
+<script>
+function publisher(initialLoggedIn) {
+  return {
+    loggedIn: initialLoggedIn,
+    password: '', loginError: '',
+    notes: [], notesError: '', refInput: '',
+    selected: null, raw: '', cleaned: '', suggestedTitle: '',
+    previewMode: 'cleaned',
+    groups: [],
+    dest: 'append', mode: 'plain',
+    appendLesson: '', heading: '',
+    newClass: '', newFilename: '', newTitle: '',
+    busy: false, result: null,
+    templateAlias: '{{ template_alias }}',
+
+    init() { if (this.loggedIn) this.afterLogin(); },
+
+    async api(path, opts = {}) {
+      const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+      if (res.status === 401 && this.loggedIn) { this.loggedIn = false; throw new Error('Η συνεδρία έληξε — ξαναβάλτε κωδικό.'); }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || ('Σφάλμα ' + res.status));
+      return data;
+    },
+
+    async login() {
+      this.loginError = '';
+      try {
+        await this.api('api/login', { method: 'POST', body: JSON.stringify({ password: this.password }) });
+        this.loggedIn = true; this.password = '';
+        this.afterLogin();
+      } catch (e) { this.loginError = e.message; }
+    },
+    async logout() {
+      await this.api('api/logout', { method: 'POST' }).catch(() => {});
+      this.loggedIn = false; this.selected = null; this.notes = [];
+    },
+    afterLogin() { this.loadNotes(); this.loadLessons(); },
+
+    async loadNotes() {
+      this.notesError = '';
+      try { this.notes = (await this.api('api/notes')).notes; }
+      catch (e) { this.notesError = e.message; }
+    },
+    async loadLessons() {
+      try { this.groups = (await this.api('api/lessons')).groups; }
+      catch (e) { this.notesError = e.message; }
+    },
+    lessonsOf(slug) {
+      const g = this.groups.find(g => g.slug === slug);
+      return g ? g.lessons : [];
+    },
+
+    openTemplate() { this.refInput = this.templateAlias; this.loadNote(this.templateAlias); },
+
+    async loadNote(ref) {
+      if (!ref || !ref.trim()) { this.notesError = 'Δώστε URL ή ID σημείωσης.'; return; }
+      this.notesError = ''; this.result = null;
+      try {
+        const d = await this.api('api/note?ref=' + encodeURIComponent(ref.trim()));
+        this.selected = d.note; this.raw = d.raw; this.cleaned = d.cleaned;
+        this.suggestedTitle = d.suggested_title;
+        this.refInput = d.note.ref;
+        if (!this.newTitle) this.newTitle = '';
+      } catch (e) { this.notesError = e.message; this.selected = null; }
+    },
+
+    async publishAppend() {
+      if (!this.selected || !this.appendLesson) return;
+      if (!confirm('Προσθήκη της σημείωσης στο τέλος του «' + this.appendLesson + '»;\n(Θα κρατηθεί αυτόματα αντίγραφο .bak)')) return;
+      this.busy = true; this.result = null;
+      try {
+        const d = await this.api('api/publish-append', { method: 'POST', body: JSON.stringify({
+          ref: this.selected.ref, lesson: this.appendLesson, mode: this.mode, heading: this.heading }) });
+        this.result = { ok: true, message: 'Η σημείωση προστέθηκε στο ' + d.lesson + '.', url: d.url, backup: d.backup };
+      } catch (e) { this.result = { ok: false, message: e.message }; }
+      this.busy = false;
+    },
+
+    async publishNew() {
+      if (!this.selected || !this.newClass || !this.newFilename) return;
+      this.busy = true; this.result = null;
+      try {
+        const d = await this.api('api/publish-new', { method: 'POST', body: JSON.stringify({
+          ref: this.selected.ref, class_slug: this.newClass, filename: this.newFilename,
+          title: this.newTitle, mode: this.mode }) });
+        this.result = { ok: true, message: 'Δημιουργήθηκε το νέο μάθημα ' + d.lesson + '.', url: d.url, nav_added: d.nav_added };
+        this.loadLessons();
+      } catch (e) { this.result = { ok: false, message: e.message }; }
+      this.busy = false;
+    },
+  };
+}
+</script>
+</body>
+</html>

@@ -9,8 +9,10 @@
 #   /crypto/        → CyberChef (static HTML/JS — 0 MB RAM)
 #   /tools/         → IT-Tools (static SPA — 0 MB RAM)
 #   /board/         → Ψηφιακός Πίνακας Excalidraw (πλήρες static build — 0 MB RAM)
-#   /board-ws/      → Excalidraw Room Server (Node+Socket.IO @127.0.0.1:8007, LAN collab)
+#   /board-ws/      → Excalidraw Room Server (Node+Socket.IO @127.0.0.1:8010, LAN collab)
 #   /pad/           → Συνεργατικό Σημειωματάριο Etherpad Lite (Node @127.0.0.1:8006)
+#   /md-pad/        → Συνεργατικό Markdown HedgeDoc (Node+SQLite @127.0.0.1:8007)
+#   /md-publish/    → Δημοσίευση HedgeDoc → MkDocs (FastAPI @127.0.0.1:8009)
 #   /circuits/      → CircuitJS1 Προσομοιωτής Κυκλωμάτων (static — 0 MB RAM)
 #   /blockly/       → Blockly Games (static, ελληνικά — 0 MB RAM)
 #   /sql/           → SQL Playground (static, SQLite WASM — 0 MB RAM)
@@ -228,7 +230,7 @@ server {
         return 301 /board-ws/;
     }
     location ^~ /board-ws/ {
-        proxy_pass http://127.0.0.1:8007/;
+        proxy_pass http://127.0.0.1:8010/;
         proxy_http_version 1.1;
 
         # --- Υποστήριξη WebSockets (Socket.IO — ζωντανά strokes/cursors) ---
@@ -531,6 +533,65 @@ server {
         proxy_connect_timeout 30s;
         proxy_send_timeout    3600s;
         proxy_read_timeout    3600s;
+        proxy_buffering off;
+    }
+
+    # -----------------------------------------------------------------
+    # 6ε. Συνεργατικό Markdown — HedgeDoc (@127.0.0.1:8007)
+    #     Node.js + SQLite (systemd: school-hedgedoc.service). Το urlPath
+    #     "md-pad" στο config.json επηρεάζει ΜΟΝΟ τα παραγόμενα URLs· οι
+    #     routers ακούν στο /, άρα το trailing slash του proxy_pass κόβει
+    #     το /md-pad/ prefix (όπως στο /pad/ του Etherpad).
+    #     Οι μαθητές γράφουν ταυτόχρονα Markdown (socket.io WebSockets).
+    # -----------------------------------------------------------------
+    location = /md-pad {
+        return 301 /md-pad/;
+    }
+
+    location ^~ /md-pad/ {
+        proxy_pass http://127.0.0.1:8007/;
+        proxy_http_version 1.1;
+
+        # --- Υποστήριξη WebSockets (socket.io — ζωντανή συνεργασία τάξης) ---
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Οι συνδέσεις WS μένουν ανοιχτές καθ' όλη τη διάρκεια του μαθήματος
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    3600s;
+        proxy_read_timeout    3600s;
+        proxy_buffering off;
+    }
+
+    # -----------------------------------------------------------------
+    # 6στ. Δημοσίευση HedgeDoc → MkDocs (@127.0.0.1:8009)
+    #      FastAPI micro-bridge (systemd: school-mdbridge.service) με δική
+    #      του πύλη κωδικού καθηγητή (HMAC cookie, όπως το /app-builder/).
+    #      Επιλογή σημείωσης από τη βάση HedgeDoc → append σε υπάρχον μάθημα
+    #      ή νέο μάθημα + nav, με αυτόματο .bak backup & καθαρισμό σύνταξης.
+    # -----------------------------------------------------------------
+    location = /md-publish {
+        return 301 /md-publish/;
+    }
+
+    location ^~ /md-publish/ {
+        proxy_pass http://127.0.0.1:8009/;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /md-publish;
+
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    120s;
+        proxy_read_timeout    120s;
         proxy_buffering off;
     }
 

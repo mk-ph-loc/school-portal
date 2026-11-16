@@ -1,0 +1,40 @@
+{
+  "production": {
+    "domain": "192.168.1.58",
+    "urlPath": "md-pad",
+    "protocolUseSSL": false,
+    "useCDN": false,
+    "host": "127.0.0.1",
+    "port": 8007,
+    "loglevel": "warn",
+    "urlAddPort": false,
+    "db": {
+      "dialect": "sqlite",
+      "storage": "/opt/school-portal/apps/hedgedoc/hedgedoc.sqlite"
+    },
+    "allowAnonymous": true,
+    "allowAnonymousEdits": true,
+    "allowFreeURL": true,
+    "defaultPermission": "freely",
+    "enableUploads": "all",
+    "imageUploadType": "filesystem",
+    "uploadsPath": "/opt/school-portal/apps/hedgedoc/public/uploads",
+    "defaultNotePath": "/opt/school-portal/apps/hedgedoc/welcome.md",
+    "docsPath": "./public/docs",
+    "sessionName": "hedgedoc.sid",
+    "sessionSecret": "__GENERATED_AT_INSTALL__",
+    "cookiePolicy": "lax",
+    "hsts": {
+      "enable": false
+    },
+    "csp": {
+      "enable": true,
+      "addDefaults": true,
+      "upgradeInsecureRequests": false,
+      "allowFraming": true,
+      "allowPDFEmbed": true
+    },
+    "email": false,
+    "allowEmailRegister": false
+  }
+}
