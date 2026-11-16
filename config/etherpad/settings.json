@@ -1,0 +1,88 @@
+/*
+ * Ψηφιακή Πύλη Σχολείου — Etherpad Lite (Συνεργατικό Σημειωματάριο Τάξης)
+ *
+ * Διαχείριση: /opt/school-portal/config/etherpad/settings.json (πηγή αλήθειας)
+ * Service:    school-etherpad.service → http://127.0.0.1:8006 (Nginx /pad/)
+ * Βάση:       SQLite (rusty-store-kv μέσω ueberdb2) — χωρίς εξωτερικό DB server
+ */
+{
+  "title": "Συνεργατικό Σημειωματάριο — Ψηφιακή Πύλη",
+  "favicon": null,
+  "publicURL": null,
+  "showRecentPads": true,
+
+  "skinName": "colibris",
+  "skinVariants": "super-light-toolbar super-light-editor light-background",
+  "enableDarkMode": true,
+
+  // Μόνο τοπικά — η πρόσβαση γίνεται αποκλειστικά μέσω του Nginx (/pad/)
+  "ip": "127.0.0.1",
+  "port": 8006,
+
+  // SQLite βάση (ueberdb2 sqlite driver) — αρχείο μέσα στο var/ της εφαρμογής
+  "dbType": "sqlite",
+  "dbSettings": {
+    "filename": "/opt/school-portal/apps/etherpad/var/etherpad.db"
+  },
+
+  // Ελληνικό περιβάλλον & προεπιλεγμένο κείμενο νέου pad
+  "defaultPadText": "Καλώς ήρθατε στο συνεργατικό έγγραφο της ομάδας!\n",
+  "padOptions": {
+    "noColors": false,
+    "showControls": true,
+    "showChat": true,
+    "showLineNumbers": true,
+    "useMonospaceFont": false,
+    "userName": null,
+    "userColor": null,
+    "rtl": false,
+    "alwaysShowChat": false,
+    "chatAndUsers": false,
+    "lang": "el"
+  },
+
+  // Οι μαθητές μπαίνουν ελεύθερα και γράφουν μαζί· το /pad/admin προστατεύεται
+  // από Basic Auth στο Nginx (κωδικός καθηγητή).
+  "requireAuthentication": false,
+  "requireAuthorization": false,
+  // Ο μόνος πελάτης του Etherpad είναι ο τοπικός Nginx (127.0.0.1), οπότε
+  // trustProxy=true δεν εκθέτει τίποτα επιπλέον· τα IP-based rate limits
+  // απενεργοποιούνται παρακάτω (max: 0) γιατί όλο το σχολικό LAN φτάνει
+  // με την ίδια IP και θα μπλοκάρονταν άδικα.
+  "trustProxy": true,
+
+  "socketTransportProtocols": ["websocket", "polling"],
+  "socketIo": {
+    "maxHttpBufferSize": 1000000
+  },
+
+  "minify": true,
+  "maxAge": 21600,
+  "allowUnknownFileEnds": true,
+  "loadTest": false,
+  "dumpOnUncleanExit": false,
+  "indentationOnNewLine": false,
+
+  // Όλη η τάξη μοιράζεται την IP του Nginx → πολύ υψηλό όριο ανά IP
+  // (η προστασία DoS γίνεται από το MemoryMax του systemd & το nginx).
+  "importExportRateLimiting": {
+    "windowMs": 90000,
+    "max": 10000
+  },
+  "importMaxFileSize": 52428800,
+  "commitRateLimiting": {
+    "duration": 1,
+    "points": 1000
+  },
+
+  "authenticationMethod": "sso",
+  "privacyBanner": {
+    "enabled": false
+  },
+
+  "exposeVersion": false,
+  "loglevel": "WARN",
+  "lowerCasePadIds": false,
+  "editOnly": false,
+  "suppressErrorsInPadText": true
+}

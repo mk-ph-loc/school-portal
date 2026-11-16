@@ -1,6 +1,15 @@
 {
   "apps": [
     {
+      "id": "screen-resolution-wizard",
+      "title": "Pixel, Ανάλυση Οθόνης & PPI",
+      "description": "Διαδραστικός οδηγός 4 βημάτων: ζωγράφισε με pixels, δες πώς αλλάζει η ανάλυση και υπολόγισε την πυκνότητα PPI μιας οθόνης.",
+      "category": "Γενικά",
+      "icon": "💻",
+      "access": "all",
+      "url": "/apps/screen-resolution-wizard/"
+    },
+    {
       "id": "binary-converter",
       "title": "Μετατροπέας Δυαδικού & Βάρη Bits",
       "description": "Δεκαδικό ↔ Δυαδικό ↔ Δεκαεξαδικό με 8 διαδραστικά διακοπτάκια bits: πάτα τα bits και δες ζωντανά την τιμή και το άθροισμα των βαρών (128…1).",

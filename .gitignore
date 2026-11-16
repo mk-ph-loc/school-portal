@@ -66,6 +66,9 @@ tmp/
 *.swp
 *~
 
+# --- Etherpad Lite (κατεβαίνει & χτίζεται από το install.sh — όχι στο git) ---
+apps/etherpad/
+
 # --- Λειτουργικό σύστημα ---
 .DS_Store
 Thumbs.db

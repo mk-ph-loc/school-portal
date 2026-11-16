@@ -59,3 +59,13 @@ print("Το άθροισμα είναι:", athroisma)
 1. Ανάφερε τρία παραδείγματα **υλικού** και τρία **λογισμικού** από το εργαστήριο.
 2. Πόσα Bytes είναι τα 2 KB;
 3. Δώσε ένα παράδειγμα όπου τα ίδια δεδομένα παράγουν διαφορετική πληροφορία.
+
+## 💻 Pixel, Ανάλυση Οθόνης & PPI
+
+<div class="custom-app-embed" style="margin: 1.5rem 0; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+  <div style="background: #1e293b; color: white; padding: 0.5rem 1rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.875rem;">
+    <span>💻 Pixel, Ανάλυση Οθόνης &amp; PPI</span>
+    <a href="/apps/screen-resolution-wizard/" target="_blank" style="color: #38bdf8; text-decoration: none;">Άνοιγμα σε πλήρη οθόνη ↗</a>
+  </div>
+  <iframe src="/apps/screen-resolution-wizard/" width="100%" height="600" style="border: none; display: block;" loading="lazy"></iframe>
+</div>

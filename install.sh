@@ -45,6 +45,13 @@ FB_DB="${PORTAL_DIR}/data/filebrowser/filebrowser.db"
 FB_USER="admin"
 FB_PASS="${FB_PASS:-teacher2026}"
 
+# --- Συνεργατικά εργαλεία τάξης (Node.js LTS, χωρίς Docker) ---
+NODE_MAJOR="22"                                            # NodeSource LTS (Debian 13)
+ETHERPAD_VERSION="v2.7.3"                                  # τελευταία stable που υποστηρίζει Node 22
+ETHERPAD_DIR="${PORTAL_DIR}/apps/etherpad"
+ETHERPAD_PORT="8006"
+PNPM_VERSION="11.0.6"                                      # όπως δηλώνει το packageManager του Etherpad
+
 SKIP_DEPS=0
 DO_UPDATE=0
 
@@ -107,8 +114,30 @@ if [[ "${SKIP_DEPS}" == "0" ]]; then
         fonts-dejavu fonts-liberation2 fontconfig \
         libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
         libjpeg62-turbo libopenjp2-7 libffi8 shared-mime-info \
-        curl ca-certificates bzip2 tar openssl rsync unzip util-linux
+        curl ca-certificates bzip2 tar openssl rsync unzip util-linux \
+        git build-essential
     ok "Τα πακέτα συστήματος είναι έτοιμα."
+
+    # --- Node.js LTS (NodeSource) για το Etherpad Lite ---
+    NODE_OK=0
+    if command -v node >/dev/null 2>&1; then
+        NODE_CUR_MAJOR="$(node --version | sed 's/^v//;s/\..*//')"
+        if [[ "${NODE_CUR_MAJOR}" == "20" || "${NODE_CUR_MAJOR}" == "22" ]]; then
+            NODE_OK=1
+            ok "Το Node.js $(node --version) (LTS) υπάρχει ήδη."
+        fi
+    fi
+    if [[ "${NODE_OK}" == "0" ]]; then
+        log "Εγκατάσταση Node.js ${NODE_MAJOR} LTS από το NodeSource (Debian 13)…"
+        if curl -fsSL --retry 3 --max-time 120 "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" -o /tmp/nodesource_setup.sh \
+            && bash /tmp/nodesource_setup.sh >/dev/null 2>&1 \
+            && apt-get install -y nodejs; then
+            ok "Το Node.js $(node --version) εγκαταστάθηκε."
+        else
+            warn "Αποτυχία εγκατάστασης Node.js — το /pad/ (Etherpad) δεν θα λειτουργεί."
+        fi
+        rm -f /tmp/nodesource_setup.sh
+    fi
 else
     warn "Παράλειψη apt (--no-deps)."
 fi
@@ -117,7 +146,7 @@ fi
 # 3. Δομή φακέλων
 # ---------------------------------------------------------------------------
 log "Δημιουργία δομής φακέλων…"
-mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},app-builder/{static,templates},lab-app,custom-apps/_template,config/{nginx,systemd},scripts,data/build,data/filebrowser,shared-files}
+mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},app-builder/{static,templates},lab-app,custom-apps/_template,apps,config/{nginx,systemd,etherpad},scripts,data/build,data/filebrowser,shared-files}
 mkdir -p "${DOCS_OUT}" "${TOOLS_OUT}"/{cyberchef,it-tools,board,circuits,blockly,sql/vendor,pdf-tools/vendor/fonts}
 ok "Η δομή φακέλων δημιουργήθηκε."
 
@@ -265,15 +294,19 @@ PYEOF
 fi
 
 # ---------------------------------------------------------------------------
-# 6δ. Ψηφιακός Πίνακας Τάξης — static canvas whiteboard στο /board/
+# 6δ. Ψηφιακός Πίνακας Excalidraw — πλήρες static build στο /board/ (0 MB RAM)
+#     Κατεβαίνει το επίσημο excalidraw-app build (βιβλιοθήκες σχημάτων,
+#     εξαγωγή PNG/SVG/JSON, dark/light mode) και προσαρμόζεται για ελληνικά
+#     & τοπικά assets. FORCE_EXCALIDRAW=1 για αναβάθμιση σε νέο upstream build.
 # ---------------------------------------------------------------------------
-if [[ -s "${PORTAL_DIR}/config/board/index.html" ]]; then
-    install -m 644 "${PORTAL_DIR}/config/board/index.html" "${TOOLS_OUT}/board/index.html"
-    ok "Ο Ψηφιακός Πίνακας εγκαταστάθηκε στο /board/."
-elif [[ -s "${TOOLS_OUT}/board/index.html" ]]; then
-    ok "Ο Ψηφιακός Πίνακας υπάρχει ήδη."
+if [[ -x "${PORTAL_DIR}/scripts/fetch-excalidraw.sh" ]]; then
+    if FORCE="${FORCE_EXCALIDRAW:-0}" bash "${PORTAL_DIR}/scripts/fetch-excalidraw.sh" "${TOOLS_OUT}/board"; then
+        ok "Ο Ψηφιακός Πίνακας Excalidraw είναι έτοιμος στο /board/."
+    else
+        warn "Αποτυχία λήψης Excalidraw — το /board/ ενδέχεται να μην λειτουργεί."
+    fi
 else
-    warn "Δεν βρέθηκε config/board/index.html — το /board/ δεν θα λειτουργεί."
+    warn "Δεν βρέθηκε scripts/fetch-excalidraw.sh — το /board/ δεν θα ενημερωθεί."
 fi
 
 # ---------------------------------------------------------------------------
@@ -518,6 +551,64 @@ if [[ -x /usr/local/bin/filebrowser ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 6ι. Etherpad Lite — συνεργατικός επεξεργαστής κειμένου τάξης στο /pad/
+#     Node.js + SQLite (ueberdb2), ακούει ΜΟΝΟ στο 127.0.0.1:8006 πίσω από
+#     τον Nginx. Η πηγή αλήθειας των ρυθμίσεων είναι το config/etherpad/.
+# ---------------------------------------------------------------------------
+if command -v node >/dev/null 2>&1; then
+    if [[ ! -d "${ETHERPAD_DIR}/.git" ]]; then
+        log "Λήψη Etherpad Lite ${ETHERPAD_VERSION} (~30 MB)…"
+        mkdir -p "${PORTAL_DIR}/apps"
+        if git clone --depth 1 --branch "${ETHERPAD_VERSION}" \
+            https://github.com/ether/etherpad-lite.git "${ETHERPAD_DIR}" >/dev/null 2>&1; then
+            ok "Το Etherpad Lite ${ETHERPAD_VERSION} κατέβηκε."
+        else
+            warn "Αποτυχία λήψης Etherpad — το /pad/ δεν θα λειτουργεί."
+        fi
+    else
+        ok "Το Etherpad Lite υπάρχει ήδη (${ETHERPAD_DIR})."
+    fi
+
+    if [[ -f "${ETHERPAD_DIR}/package.json" ]]; then
+        # pnpm (το επίσημο εργαλείο build του Etherpad 2.x)
+        if ! command -v pnpm >/dev/null 2>&1; then
+            log "Εγκατάσταση pnpm ${PNPM_VERSION}…"
+            npm install -g "pnpm@${PNPM_VERSION}" >/dev/null 2>&1 \
+                && ok "Το pnpm εγκαταστάθηκε." \
+                || warn "Αποτυχία εγκατάστασης pnpm."
+        fi
+        # Ρυθμίσεις: 127.0.0.1:8006, SQLite, ελληνικά (από το config/etherpad/)
+        if [[ -s "${PORTAL_DIR}/config/etherpad/settings.json" ]]; then
+            install -m 644 "${PORTAL_DIR}/config/etherpad/settings.json" "${ETHERPAD_DIR}/settings.json"
+        fi
+        # Εξαρτήσεις (idempotent — το pnpm skip-άρει ό,τι υπάρχει). Χρειάζονται
+        # και τα dev deps του admin/ui workspace για το χτίσιμο του admin UI.
+        if command -v pnpm >/dev/null 2>&1; then
+            log "Εγκατάσταση εξαρτήσεων Etherpad (pnpm)…"
+            if (cd "${ETHERPAD_DIR}" && CI=true pnpm install --recursive --config.confirmModulesPurge=false >/dev/null 2>&1); then
+                # esbuild: τα postinstall scripts μπλοκάρονται από default στο pnpm 10+
+                (cd "${ETHERPAD_DIR}" && pnpm rebuild esbuild >/dev/null 2>&1 || true)
+                ok "Οι εξαρτήσεις του Etherpad εγκαταστάθηκαν."
+            else
+                warn "Αποτυχία εγκατάστασης εξαρτήσεων Etherpad — το /pad/ δεν θα λειτουργεί."
+            fi
+            # Admin UI (Vite build → src/templates/admin/) — μία φορά, όχι σε κάθε boot
+            if [[ ! -s "${ETHERPAD_DIR}/src/templates/admin/index.html" ]]; then
+                log "Χτίσιμο του Etherpad admin UI…"
+                if (cd "${ETHERPAD_DIR}/admin" && CI=true pnpm run build-copy >/dev/null 2>&1); then
+                    ok "Το admin UI χτίστηκε."
+                else
+                    warn "Αποτυχία χτισίματος admin UI — το /pad/admin δεν θα λειτουργεί."
+                fi
+            fi
+        fi
+        chown -R www-data:www-data "${ETHERPAD_DIR}"
+    fi
+else
+    warn "Δεν υπάρχει Node.js — παράλειψη Etherpad (το /pad/ δεν θα λειτουργεί)."
+fi
+
+# ---------------------------------------------------------------------------
 # 7. Δικαιώματα (setgid ώστε root & www-data να συνεργάζονται)
 # ---------------------------------------------------------------------------
 log "Ρύθμιση δικαιωμάτων…"
@@ -607,12 +698,18 @@ install -m 644 "${PORTAL_DIR}/config/systemd/school-filebrowser.service" /etc/sy
 install -m 644 "${PORTAL_DIR}/config/systemd/school-exams.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-livequiz.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-appbuilder.service" /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-etherpad.service" /etc/systemd/system/
 systemctl daemon-reload
 
 systemctl enable --now school-pandoc.service
 systemctl enable --now school-exams.service
 systemctl enable --now school-livequiz.service
 systemctl enable --now school-appbuilder.service
+if [[ -f "${ETHERPAD_DIR}/package.json" ]] && command -v node >/dev/null 2>&1; then
+    systemctl enable --now school-etherpad.service
+else
+    warn "Παράλειψη school-etherpad.service (λείπει το Etherpad ή η Node.js)."
+fi
 systemctl enable --now school-mkdocs.path
 systemctl start school-mkdocs.service
 if [[ -x /usr/local/bin/filebrowser ]]; then
@@ -662,6 +759,9 @@ check_url "/lab/"                    200
 check_url "/crypto/"                 200
 check_url "/tools/"                  200
 check_url "/board/"                  200
+check_url "/pad/"                    200
+check_url "/pad/admin"               401
+check_url "/pad/admin/"              200 "${TEACHER_USER}:${TEACHER_PASS}"
 check_url "/circuits/"               200
 check_url "/circuits/circuitjs.html" 200
 check_url "/blockly/"                200
@@ -716,7 +816,8 @@ echo "  📝 Pandoc Studio:      http://${IP_ADDR}/pandoc/"
 echo "  🗝️  Λύσεις Καθηγητή:    http://${IP_ADDR}/docs/teachers/"
 echo "  🔐 CyberChef:          http://${IP_ADDR}/crypto/   (static, 0 MB)"
 echo "  🛠️  IT-Tools:           http://${IP_ADDR}/tools/    (static, 0 MB)"
-echo "  🖍️  Πίνακας Τάξης:      http://${IP_ADDR}/board/    (static, 0 MB)"
+echo "  🖍️  Πίνακας Excalidraw: http://${IP_ADDR}/board/    (πλήρες build, static, 0 MB)"
+echo "  📝 Σημειωματάριο Τάξης: http://${IP_ADDR}/pad/     (Etherpad Lite + SQLite)"
 echo "  ⚡ Κυκλώματα:          http://${IP_ADDR}/circuits/ (CircuitJS1, static, 0 MB)"
 echo "  🧩 Blockly Games:      http://${IP_ADDR}/blockly/  (ελληνικά, static, 0 MB)"
 echo "  🗄️  SQL Playground:     http://${IP_ADDR}/sql/      (SQLite WASM, static, 0 MB)"
@@ -744,6 +845,7 @@ echo "     systemctl status school-filebrowser.service"
 echo "     systemctl status school-exams.service"
 echo "     systemctl status school-livequiz.service"
 echo "     systemctl status school-appbuilder.service"
+echo "     systemctl status school-etherpad.service"
 echo "     systemctl start school-mkdocs.service    # rebuild υλικού"
 echo "     journalctl -u school-pandoc.service -f"
 echo "     sudo ${PORTAL_DIR}/install.sh --update   # ενημέρωση"

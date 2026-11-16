@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Εργαστήριο Οθόνης: Pixel, Ανάλυση & Μέγεθος</title>
+<style>
+:root{--primary:#2563eb;--primary-dark:#1d4ed8;--secondary:#10b981;--bg:#f8fafc;--card:#fff;--text:#1e293b;--border:#cbd5e1}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:20px;display:flex;justify-content:center}
+.container{max-width:900px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,.08);overflow:hidden;border:1px solid var(--border)}
+.header{background:var(--primary);color:#fff;padding:20px 30px;text-align:center}
+.header h1{margin:0 0 10px;font-size:1.5rem}
+.steps-indicator{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;background:#e2e8f0;padding:15px 30px;border-bottom:1px solid var(--border)}
+.step-badge{font-weight:bold;color:#64748b;font-size:.95rem}
+.step-badge.active{color:var(--primary)}
+.step-badge.completed{color:var(--secondary)}
+.wizard-content{padding:30px;min-height:400px}
+.step-panel{display:none;animation:fadeIn .4s ease}
+.step-panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+h2{color:var(--primary-dark);margin-top:0}
+p.intro-text{font-size:1.1rem;line-height:1.6;background:#eff6ff;padding:15px;border-left:4px solid var(--primary);border-radius:4px}
+.pixel-workspace{display:flex;flex-wrap:wrap;gap:30px;align-items:center;justify-content:center;margin-top:20px}
+.grid-container{display:grid;grid-template-columns:repeat(8,35px);grid-template-rows:repeat(8,35px);gap:2px;background:#94a3b8;padding:4px;border-radius:6px}
+.pixel-cell{background:#fff;cursor:pointer}
+.pixel-cell:hover{opacity:.8}
+.palette{display:flex;flex-direction:column;gap:10px;align-items:center}
+.color-btn{width:40px;height:40px;border-radius:50%;border:3px solid transparent;cursor:pointer}
+.color-btn.selected{border-color:#0f172a;transform:scale(1.1)}
+.preview-box{text-align:center;background:#f1f5f9;padding:15px;border-radius:8px}
+.sim-controls{display:flex;flex-direction:column;gap:12px;background:#f1f5f9;padding:20px;border-radius:8px;margin:20px 0}
+.sim-controls input[type=range]{width:100%}
+.canvas-wrapper{display:flex;justify-content:center;background:#0f172a;padding:20px;border-radius:8px}
+canvas{background:#fff;image-rendering:pixelated;border:2px solid #475569}
+.screens-comparison{display:flex;flex-wrap:wrap;gap:40px;justify-content:center;align-items:flex-end;margin:30px 0;padding:20px;background:#f1f5f9;border-radius:12px}
+.device-box{display:flex;flex-direction:column;align-items:center;text-align:center;max-width:260px}
+.screen-mockup{background:#1e293b;border:6px solid #0f172a;border-radius:8px;display:grid;overflow:hidden}
+.small-screen{width:100px;height:160px;grid-template-columns:repeat(10,1fr);grid-template-rows:repeat(16,1fr)}
+.large-screen{width:220px;height:352px;grid-template-columns:repeat(10,1fr);grid-template-rows:repeat(16,1fr)}
+.mock-pixel{border:.5px solid rgba(255,255,255,.25);background:#38bdf8}
+.calc{background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:15px;margin-top:15px}
+.calc label{display:block;margin:8px 0 2px}
+.calc input,.calc select{padding:6px;font-size:1rem}
+.badge-info{display:inline-block;background:#fef08a;color:#854d0e;padding:4px 10px;border-radius:12px;font-weight:bold;margin-top:8px}
+.quiz-item{margin-bottom:20px;padding:15px;border:1px solid var(--border);border-radius:8px}
+.quiz-options{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.quiz-options button{text-align:left;padding:10px 15px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;font-size:1rem}
+.quiz-options button:hover{background:#e2e8f0}
+.quiz-options button.correct{background:#dcfce7;border-color:#16a34a;color:#14532d;font-weight:bold}
+.quiz-options button.wrong{background:#fee2e2;border-color:#dc2626;color:#7f1d1d}
+.wizard-footer{display:flex;justify-content:space-between;padding:20px 30px;background:#f1f5f9;border-top:1px solid var(--border)}
+.btn{padding:10px 24px;font-size:1rem;font-weight:bold;border:none;border-radius:8px;cursor:pointer}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-dark)}
+.btn-secondary{background:#cbd5e1;color:#334155}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.small-btn{padding:6px 12px;margin:4px;border-radius:6px;border:1px solid var(--border);background:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>🖥️ Διαδραστικός Οδηγός: Pixel, Ανάλυση & Μέγεθος Οθόνης</h1>
+    <div>Ένα εργαλείο εξερεύνησης για την τάξη</div>
+  </div>
+  <div class="steps-indicator">
+    <div class="step-badge active" id="ind-1">1. Τι είναι το Pixel;</div>
+    <div class="step-badge" id="ind-2">2. Τι είναι η Ανάλυση;</div>
+    <div class="step-badge" id="ind-3">3. Μέγεθος Οθόνης (Ίντσες)</div>
+    <div class="step-badge" id="ind-4">4. Έλεγχος Γνώσεων</div>
+  </div>
+
+  <div class="wizard-content">
+    <div class="step-panel active" id="step-1">
+      <h2>Βήμα 1: Το δομικό στοιχείο της εικόνας (Pixel)</h2>
+      <p class="intro-text">Κάθε ψηφιακή εικόνα αποτελείται από χιλιάδες ή εκατομμύρια μικροσκοπικές χρωματιστές κουκκίδες που λέγονται <strong>Pixels (Εικονοστοιχεία)</strong>. Κάνε κλικ στα τετραγωνάκια για να ζωγραφίσεις και δες πώς φαίνεται από μακριά!</p>
+      <div class="pixel-workspace">
+        <div class="palette">
+          <strong>Χρώματα:</strong>
+          <button class="color-btn selected" style="background:#ef4444" onclick="selectColor('#ef4444',this)"></button>
+          <button class="color-btn" style="background:#3b82f6" onclick="selectColor('#3b82f6',this)"></button>
+          <button class="color-btn" style="background:#eab308" onclick="selectColor('#eab308',this)"></button>
+          <button class="color-btn" style="background:#22c55e" onclick="selectColor('#22c55e',this)"></button>
+          <button class="color-btn" style="background:#0f172a" onclick="selectColor('#0f172a',this)"></button>
+          <button class="color-btn" style="background:#ffffff;border-color:#94a3b8" onclick="selectColor('#ffffff',this)" title="Γόμα"></button>
+        </div>
+        <div>
+          <div class="grid-container" id="pixel-grid"></div>
+          <p style="text-align:center"><strong>Πλέγμα 8 x 8 (Σύνολο: 64 Pixels)</strong></p>
+          <div style="text-align:center">
+            <button class="small-btn" onclick="clearGrid()">🧹 Καθαρισμός</button>
+            <button class="small-btn" onclick="drawSmiley()">😊 Παράδειγμα (Smiley)</button>
+          </div>
+        </div>
+        <div class="preview-box">
+          <strong>Πώς φαίνεται από μακριά:</strong><br><br>
+          <canvas id="mini-preview" width="64" height="64"></canvas>
+          <p style="max-width:180px">Όταν τα pixels μικραίνουν, το μάτι μας τα ενώνει σε μια ενιαία εικόνα!</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-panel" id="step-2">
+      <h2>Βήμα 2: Τι σημαίνει Ανάλυση Οθόνης;</h2>
+      <p class="intro-text">Ανάλυση είναι το πλήθος των pixels που χωράνε στο πλάτος και στο ύψος της οθόνης (π.χ. 1920 x 1080). Όσο μεγαλύτερη η ανάλυση, τόσο περισσότερα pixels έχουμε και τόσο πιο καθαρή (λεπτομερής) είναι η εικόνα!</p>
+      <div class="sim-controls">
+        <div><strong>Επίλεξε Ανάλυση: <span id="res-label"></span></strong></div>
+        <input type="range" id="res-slider" min="1" max="5" value="2" oninput="updateResolution()">
+        <div style="display:flex;justify-content:space-between;font-size:.85rem">
+          <span>Πολύ Χαμηλή (8x8)</span><span>Χαμηλή (16x16)</span><span>Μεσαία (32x32)</span><span>Καλή (64x64)</span><span>Υψηλή (128x128)</span>
+        </div>
+        <div id="res-feedback" class="badge-info"></div>
+      </div>
+      <div class="canvas-wrapper"><canvas id="res-canvas" width="256" height="256" style="width:384px;height:384px;max-width:100%"></canvas></div>
+    </div>
+
+    <div class="step-panel" id="step-3">
+      <h2>Βήμα 3: Μέγεθος Οθόνης (Ίντσες) vs Ανάλυση</h2>
+      <p class="intro-text">Προσοχή! Το φυσικό μέγεθος (μετριέται διαγώνια σε ίντσες) δεν είναι το ίδιο με την ανάλυση. Δες τι συμβαίνει αν βάλουμε την ίδια ανάλυση (10 x 16 pixels) σε ένα μικρό κινητό και σε μια μεγάλη τηλεόραση:</p>
+      <div class="screens-comparison">
+        <div class="device-box">
+          <div class="screen-mockup small-screen" id="mock-phone"></div>
+          <h3>Κινητό (6 ίντσες)</h3>
+          <div class="badge-info">Ανάλυση: 10 x 16 (160 px)</div>
+          <p>Τα pixels είναι στριμωγμένα (μικρά). Η εικόνα φαίνεται πολύ καθαρή!</p>
+        </div>
+        <div class="device-box">
+          <div class="screen-mockup large-screen" id="mock-tv"></div>
+          <h3>Τηλεόραση (55 ίντσες)</h3>
+          <div class="badge-info">Ανάλυση: 10 x 16 (160 px)</div>
+          <p>Τα ίδια 160 pixels τεντώθηκαν για να χωρέσουν! Έγιναν τεράστια και η εικόνα φαίνεται θολή.</p>
+        </div>
+      </div>
+      <p class="intro-text">💡 <strong>Συμπέρασμα:</strong> Όσο πιο μεγάλη είναι μια οθόνη σε ίντσες, τόσο μεγαλύτερη ανάλυση χρειάζεται για να μην φαίνονται τα pixels!</p>
+      <div class="calc">
+        <strong>🧮 Υπολογιστής PPI (pixels ανά ίντσα)</strong>
+        <label>Πλάτος (px): <input type="number" id="c-w" value="1920" min="1" oninput="calcPPI()"></label>
+        <label>Ύψος (px): <input type="number" id="c-h" value="1080" min="1" oninput="calcPPI()"></label>
+        <label>Διαγώνιος (ίντσες): <input type="number" id="c-d" value="15.6" min="1" step="0.1" oninput="calcPPI()"></label>
+        <div>
+          <button class="small-btn" onclick="preset(1920,1080,15.6)">Laptop 15.6"</button>
+          <button class="small-btn" onclick="preset(1080,2400,6.1)">Κινητό 6.1"</button>
+          <button class="small-btn" onclick="preset(1920,1080,65)">TV 65" Full HD</button>
+          <button class="small-btn" onclick="preset(3840,2160,65)">TV 65" 4K</button>
+        </div>
+        <div class="badge-info" id="c-out"></div>
+        <p style="margin:6px 0 0;font-size:.9rem">Τύπος: PPI = √(πλάτος² + ύψος²) ÷ διαγώνιος</p>
+      </div>
+    </div>
+
+    <div class="step-panel" id="step-4">
+      <h2>Βήμα 4: Ώρα για Εξάσκηση!</h2>
+      <p>Απάντησε στις παρακάτω ερωτήσεις για να δεις αν κατανόησες τις έννοιες:</p>
+      <div class="quiz-item">
+        <strong>1. Τι είναι το Pixel;</strong>
+        <div class="quiz-options">
+          <button onclick="checkAnswer(this,false)">Α. Το καλώδιο που συνδέει την οθόνη με τον υπολογιστή.</button>
+          <button onclick="checkAnswer(this,true)">Β. Η μικρότερη χρωματιστή κουκκίδα που συνθέτει μια ψηφιακή εικόνα.</button>
+          <button onclick="checkAnswer(this,false)">Γ. Η μονάδα μέτρησης του βάρους της οθόνης.</button>
+        </div>
+      </div>
+      <div class="quiz-item">
+        <strong>2. Αν μια οθόνη έχει ανάλυση 1920 x 1080, τι σημαίνουν αυτοί οι αριθμοί;</strong>
+        <div class="quiz-options">
+          <button onclick="checkAnswer(this,true)">Α. Έχει 1920 pixels στο πλάτος και 1080 pixels στο ύψος.</button>
+          <button onclick="checkAnswer(this,false)">Β. Το πλάτος της είναι 1920 εκατοστά.</button>
+          <button onclick="checkAnswer(this,false)">Γ. Μπορεί να δείξει μέχρι 1920 διαφορετικά χρώματα.</button>
+        </div>
+      </div>
+      <div class="quiz-item">
+        <strong>3. Έχουμε δύο οθόνες με την ΙΔΙΑ ανάλυση (Full HD). Η πρώτη είναι 15 ίντσες (laptop) και η δεύτερη 65 ίντσες (τηλεόραση). Ποια θα έχει πιο «πυκνή» και καθαρή εικόνα από κοντά;</strong>
+        <div class="quiz-options">
+          <button onclick="checkAnswer(this,true)">Α. Το laptop των 15 ιντσών, γιατί τα pixels είναι πιο μικρά και κοντά το ένα στο άλλο.</button>
+          <button onclick="checkAnswer(this,false)">Β. Η τηλεόραση των 65 ιντσών, επειδή είναι μεγαλύτερη.</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wizard-footer">
+    <button class="btn btn-secondary" id="prev-btn" onclick="changeStep(-1)" disabled>⬅️ Προηγούμενο</button>
+    <button class="btn btn-primary" id="next-btn" onclick="changeStep(1)">Επόμενο ➡️</button>
+  </div>
+</div>
+
+<script>
+let currentStep = 1;
+const totalSteps = 4;
+let selectedColor = '#ef4444';
+const gridData = Array(64).fill('#ffffff');
+
+window.onload = function () {
+  initPixelGrid();
+  drawSmiley();
+  updateResolution();
+  initMockScreens();
+  calcPPI();
+};
+
+function changeStep(direction) {
+  const next = currentStep + direction;
+  if (next < 1 || next > totalSteps) return;
+  document.getElementById('step-' + currentStep).classList.remove('active');
+  const oldInd = document.getElementById('ind-' + currentStep);
+  oldInd.classList.remove('active');
+  if (direction > 0) oldInd.classList.add('completed');
+  currentStep = next;
+  document.getElementById('step-' + currentStep).classList.add('active');
+  const newInd = document.getElementById('ind-' + currentStep);
+  newInd.classList.remove('completed');
+  newInd.classList.add('active');
+  document.getElementById('prev-btn').disabled = (currentStep === 1);
+  document.getElementById('next-btn').style.display = (currentStep === totalSteps) ? 'none' : 'inline-block';
+}
+
+function initPixelGrid() {
+  const grid = document.getElementById('pixel-grid');
+  grid.innerHTML = '';
+  for (let i = 0; i < 64; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'pixel-cell';
+    cell.id = 'cell-' + i;
+    cell.onclick = () => paintCell(i);
+    grid.appendChild(cell);
+  }
+}
+function selectColor(color, btn) {
+  selectedColor = color;
+  document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+function paintCell(i) {
+  gridData[i] = selectedColor;
+  document.getElementById('cell-' + i).style.backgroundColor = selectedColor;
+  updateMiniPreview();
+}
+function clearGrid() {
+  gridData.fill('#ffffff');
+  for (let i = 0; i < 64; i++) document.getElementById('cell-' + i).style.backgroundColor = '#ffffff';
+  updateMiniPreview();
+}
+function drawSmiley() {
+  const yellow = '#eab308', black = '#0f172a';
+  const pattern = [
+    0,0,1,1,1,1,0,0,
+    0,1,1,1,1,1,1,0,
+    1,1,2,1,1,2,1,1,
+    1,1,1,1,1,1,1,1,
+    1,2,1,1,1,1,2,1,
+    1,1,2,2,2,2,1,1,
+    0,1,1,1,1,1,1,0,
+    0,0,1,1,1,1,0,0
+  ];
+  pattern.forEach((v, i) => {
+    const col = v === 1 ? yellow : (v === 2 ? black : '#ffffff');
+    gridData[i] = col;
+    document.getElementById('cell-' + i).style.backgroundColor = col;
+  });
+  updateMiniPreview();
+}
+function updateMiniPreview() {
+  const ctx = document.getElementById('mini-preview').getContext('2d');
+  for (let i = 0; i < 64; i++) {
+    ctx.fillStyle = gridData[i];
+    ctx.fillRect((i % 8) * 8, Math.floor(i / 8) * 8, 8, 8);
+  }
+}
+
+function updateResolution() {
+  const val = parseInt(document.getElementById('res-slider').value);
+  const resolutions = [8, 16, 32, 64, 128];
+  const feedbacks = [
+    "Πολύ χαμηλή ανάλυση: Δύσκολα καταλαβαίνεις τι δείχνει η εικόνα!",
+    "Χαμηλή ανάλυση: Τα pixels φαίνονται έντονα σαν μεγάλα τετράγωνα.",
+    "Μεσαία ανάλυση: Το σχήμα αρχίζει να ξεκαθαρίζει, αλλά οι άκρες έχουν «δοντάκια».",
+    "Καλή ανάλυση: Ο κύκλος φαίνεται αρκετά ομαλός.",
+    "Υψηλή ανάλυση: Τα pixels είναι τόσο μικρά που οι γραμμές φαίνονται σχεδόν τέλειες!"
+  ];
+  const n = resolutions[val - 1];
+  document.getElementById('res-label').innerText = n + ' x ' + n + ' (' + (n * n) + ' pixels)';
+  document.getElementById('res-feedback').innerText = feedbacks[val - 1];
+  const canvas = document.getElementById('res-canvas');
+  const ctx = canvas.getContext('2d');
+  const total = 256, ps = total / n;
+  ctx.clearRect(0, 0, total, total);
+  const c = n / 2, r = n * 0.38;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const d = Math.hypot(x + 0.5 - c, y + 0.5 - c);
+      if (d <= r && d >= r * 0.65) ctx.fillStyle = '#2563eb';
+      else if (d < r * 0.35) ctx.fillStyle = '#ef4444';
+      else ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(x * ps, y * ps, ps, ps);
+      if (n <= 64) {
+        ctx.strokeStyle = 'rgba(148,163,184,0.3)';
+        ctx.strokeRect(x * ps, y * ps, ps, ps);
+      }
+    }
+  }
+}
+
+function initMockScreens() {
+  const phone = document.getElementById('mock-phone');
+  const tv = document.getElementById('mock-tv');
+  for (let i = 0; i < 160; i++) {
+    const a = document.createElement('div'); a.className = 'mock-pixel'; phone.appendChild(a);
+    const b = document.createElement('div'); b.className = 'mock-pixel'; tv.appendChild(b);
+  }
+}
+function calcPPI() {
+  const w = parseFloat(document.getElementById('c-w').value);
+  const h = parseFloat(document.getElementById('c-h').value);
+  const d = parseFloat(document.getElementById('c-d').value);
+  const out = document.getElementById('c-out');
+  if (!(w > 0 && h > 0 && d > 0)) { out.innerText = 'Συμπλήρωσε θετικούς αριθμούς'; return; }
+  const ppi = Math.sqrt(w * w + h * h) / d;
+  out.innerText = 'Πυκνότητα: ' + ppi.toFixed(0) + ' PPI (' + (w * h / 1e6).toFixed(2) + ' Megapixels)';
+}
+function preset(w, h, d) {
+  document.getElementById('c-w').value = w;
+  document.getElementById('c-h').value = h;
+  document.getElementById('c-d').value = d;
+  calcPPI();
+}
+
+function checkAnswer(btn, isCorrect) {
+  btn.parentElement.querySelectorAll('button').forEach(b => {
+    b.classList.remove('correct', 'wrong');
+    if (b.dataset.t) b.innerText = b.dataset.t;
+  });
+  btn.dataset.t = btn.innerText;
+  if (isCorrect) { btn.classList.add('correct'); btn.innerText += ' ✅ Σωστά!'; }
+  else { btn.classList.add('wrong'); btn.innerText += ' ❌ Προσπάθησε ξανά.'; }
+}
+</script>
+</body>
+</html>

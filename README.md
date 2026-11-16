@@ -29,7 +29,9 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/live-quiz/teacher` | Live Quiz — Προτζέκτορας | ίδιο service, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
 | `/crypto/` | CyberChef | Στατικό HTML/JS (0 MB RAM) | Ελεύθερη |
 | `/tools/` | IT-Tools | Στατικό SPA (0 MB RAM) | Ελεύθερη |
-| `/board/` | Ψηφιακός Πίνακας Τάξης | Στατικό canvas (0 MB RAM) | Ελεύθερη |
+| `/board/` | Ψηφιακός Πίνακας Excalidraw | Πλήρες static build excalidraw-app, ελληνικά (0 MB RAM) | Ελεύθερη |
+| `/pad/` | Συνεργατικό Σημειωματάριο Τάξης | Etherpad Lite (Node.js 22 + SQLite) @ `127.0.0.1:8006` | Ελεύθερη (μαθητές) |
+| `/pad/admin` | Διαχείριση Etherpad | ίδιο service + **Basic Auth** | 🔐 Καθηγητές (`teacher`) |
 | `/circuits/` | CircuitJS1 — Προσομοιωτής Κυκλωμάτων | Στατικό build pfalstad/circuitjs1 (0 MB RAM) | Ελεύθερη |
 | `/blockly/` | Blockly Games (ελληνικά) | Επίσημο offline static πακέτο Google (0 MB RAM) | Ελεύθερη |
 | `/sql/` | SQL Playground | Στατικό HTML + sql.js/SQLite WASM (0 MB RAM) | Ελεύθερη |
@@ -37,6 +39,20 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/apps/<όνομα>/` | 🚀 Δικές μου Εφαρμογές & Προσομοιώσεις | Στατικά HTML/CSS/JS από `custom-apps/` (0 MB RAM) | Ελεύθερη / κάρτες `teachers` μόνο για καθηγητές |
 | `/app-builder/` | 🧙 Δημιουργός Custom Εφαρμογών (App Wizard) | FastAPI @ `127.0.0.1:8008`, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
 | `/share/` | Κοινόχρηστα Αρχεία | FileBrowser Go binary @ `127.0.0.1:8003` (~15 MB) | 🔐 Login (`admin`) |
+
+### 🤝 Συνεργατικά Εργαλεία Τάξης
+
+- **`/board/`** — Πλήρες **Excalidraw**: ψηφιακός πίνακας με χειρόγραφο στυλ, βιβλιοθήκες
+  σχημάτων, εξαγωγή **PNG/SVG/JSON**, dark/light mode και προεπιλεγμένα **Ελληνικά**.
+  Είναι το επίσημο static build του `excalidraw-app` (κατεβαίνει από το
+  `scripts/fetch-excalidraw.sh` με όλα τα assets/fonts τοπικά για offline LAN,
+  χωρίς analytics & service worker). Αναβάθμιση: `FORCE_EXCALIDRAW=1 sudo ./install.sh --no-deps`.
+- **`/pad/`** — **Etherpad Lite v2.7.3**: συνεργατικός επεξεργαστής κειμένου σε πραγματικό
+  χρόνο για όλη την τάξη (χρώματα ανά μαθητή, chat, ιστορικό/timeslider, εξαγωγή txt/html).
+  Τρέχει native με **Node.js 22 LTS** (NodeSource) + **SQLite** (`apps/etherpad/var/etherpad.db`,
+  χωρίς εξωτερική βάση) στο `127.0.0.1:8006` μέσω του `school-etherpad.service`, και σερβίρεται
+  από τον Nginx με WebSockets. Νέο έγγραφο: `http://<ip>/pad/p/<όνομα-ομάδας>`.
+  Ρυθμίσεις: `config/etherpad/settings.json` (ελληνικό UI & προεπιλεγμένο κείμενο).
 
 ### 🧪 Διαδραστικά Εργαστήρια (100% static — 0 MB RAM στον server)
 
