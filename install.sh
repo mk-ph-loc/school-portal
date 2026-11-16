@@ -809,6 +809,11 @@ chmod 2775 "${PORTAL_DIR}/exams-app" "${PORTAL_DIR}/exams-app/submissions"
 if [[ -f "${PORTAL_DIR}/exams-app/.cookie-secret" ]]; then
     chmod 660 "${PORTAL_DIR}/exams-app/.cookie-secret"
 fi
+# ΠΡΟΣΟΧΗ: τα αρχεία της βάσης πρέπει να είναι group-writable (664) — αλλιώς
+# η www-data παίρνει "attempt to write a readonly database" σε κάθε INSERT.
+for ex_file in "${PORTAL_DIR}/exams-app"/exams.db*; do
+    [[ -e "${ex_file}" ]] && chown root:www-data "${ex_file}" && chmod 664 "${ex_file}"
+done
 
 # live-quiz-app: η SQLite βάση (livequiz.db) & το .cookie-secret δημιουργούνται
 # από τη διεργασία www-data μέσα στον φάκελο της εφαρμογής → setgid group-write.
@@ -817,6 +822,10 @@ chmod 2775 "${PORTAL_DIR}/live-quiz-app"
 if [[ -f "${PORTAL_DIR}/live-quiz-app/.cookie-secret" ]]; then
     chmod 660 "${PORTAL_DIR}/live-quiz-app/.cookie-secret"
 fi
+# Όπως στο exams-app: η βάση (+WAL/SHM) χρειάζεται group-write για τη www-data.
+for lq_file in "${PORTAL_DIR}/live-quiz-app"/livequiz.db*; do
+    [[ -e "${lq_file}" ]] && chown www-data:www-data "${lq_file}" && chmod 664 "${lq_file}"
+done
 
 # web-lab: η SQLite βάση (weblab.db) & το .cookie-secret δημιουργούνται από τη
 # διεργασία www-data μέσα στον φάκελο της εφαρμογής → setgid group-write.
