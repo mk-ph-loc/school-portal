@@ -35,6 +35,7 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/sql/` | SQL Playground | Στατικό HTML + sql.js/SQLite WASM (0 MB RAM) | Ελεύθερη |
 | `/pdf-tools/` | PDF Studio (merge/split/υδατογράφημα) | Στατικό HTML + pdf-lib, 100% τοπικά (0 MB RAM) | Ελεύθερη |
 | `/apps/<όνομα>/` | 🚀 Δικές μου Εφαρμογές & Προσομοιώσεις | Στατικά HTML/CSS/JS από `custom-apps/` (0 MB RAM) | Ελεύθερη / κάρτες `teachers` μόνο για καθηγητές |
+| `/app-builder/` | 🧙 Δημιουργός Custom Εφαρμογών (App Wizard) | FastAPI @ `127.0.0.1:8008`, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
 | `/share/` | Κοινόχρηστα Αρχεία | FileBrowser Go binary @ `127.0.0.1:8003` (~15 MB) | 🔐 Login (`admin`) |
 
 ### 🧪 Διαδραστικά Εργαστήρια (100% static — 0 MB RAM στον server)
@@ -61,6 +62,12 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 στο `install.sh`). Έτοιμο παράδειγμα: **`/apps/binary-converter/`** (μετατροπέας
 δυαδικού με 8 διαδραστικά διακοπτάκια bits).
 📖 **Πλήρης οδηγός: [`CUSTOM-APPS-GUIDE.md`](CUSTOM-APPS-GUIDE.md)**
+
+**🧙 App Builder Wizard (`/app-builder/`):** δημιουργία εφαρμογών μέσα από τον browser
+χωρίς τερματικό — οδηγός 3 βημάτων (μεταδεδομένα → ZIP/upload ή Quick Paste κώδικα →
+δημοσίευση), αυτόματη διόρθωση σχετικών διαδρομών, δικαιώματα & manifest, διαχείριση
+(προεπισκόπηση/διαγραφή) και **ενσωμάτωση iframe σε μαθήματα MkDocs** με αντιγραφή snippet
+ή άμεση εισαγωγή στο τέλος `.md` με 1 κλικ (auto-rebuild). Κωδικός καθηγητή `teacher2026`.
 
 ### 🔐 Πρόσβαση Καθηγητών
 
@@ -114,6 +121,10 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   ├── templates/          # base/student/teacher.html (Jinja2)
 │   └── static/             # student.js, teacher.js (vanilla JS + WebSocket)
 ├── lab-app/                # ΜΕΛΛΟΝΤΙΚΟ — δείτε README.md
+├── app-builder/            # 🧙 Δημιουργός Custom Εφαρμογών (/app-builder/)
+│   ├── main.py             # FastAPI: create/list/delete/embed API (HMAC cookie)
+│   ├── templates/wizard.html  # UI 3 βημάτων (Tailwind + Alpine, ελληνικά)
+│   └── static/wizard.js    # Λογική wizard (σχετικά fetch URLs)
 ├── custom-apps/            # 🚀 Δικές μου εφαρμογές (/apps/<όνομα>/, static, 0 MB)
 │   ├── _template/          # Boilerplate: index.html + app.json (δεν σερβίρεται)
 │   ├── binary-converter/   # Παράδειγμα: δυαδικό ↔ δεκαδικό ↔ hex με bit switches

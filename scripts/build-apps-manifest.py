@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -115,7 +116,13 @@ def main() -> int:
         print(f"✓ {len(entries)} εφαρμογές έγκυρες (--check: δεν γράφτηκε αρχείο)")
         return 0
 
-    MANIFEST.write_text(text, encoding="utf-8")
+    # Ατομική εγγραφή (temp + replace): λειτουργεί και όταν το υπάρχον αρχείο
+    # είναι root-owned 644, αρκεί ο φάκελος να είναι group-writable (2775) —
+    # π.χ. όταν το script τρέχει ως www-data από τον App Builder Wizard.
+    tmp = MANIFEST.with_name(f".apps-manifest.{os.getpid()}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.chmod(0o644)
+    os.replace(tmp, MANIFEST)
     print(f"✓ apps-manifest.json: {len(entries)} εφαρμογές → {MANIFEST}")
     for e in entries:
         badge = "καθηγητές" if e["access"] == "teachers" else "όλοι"

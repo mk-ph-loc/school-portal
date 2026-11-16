@@ -117,7 +117,7 @@ fi
 # 3. Δομή φακέλων
 # ---------------------------------------------------------------------------
 log "Δημιουργία δομής φακέλων…"
-mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},lab-app,custom-apps/_template,config/{nginx,systemd},scripts,data/build,data/filebrowser,shared-files}
+mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},app-builder/{static,templates},lab-app,custom-apps/_template,config/{nginx,systemd},scripts,data/build,data/filebrowser,shared-files}
 mkdir -p "${DOCS_OUT}" "${TOOLS_OUT}"/{cyberchef,it-tools,board,circuits,blockly,sql/vendor,pdf-tools/vendor/fonts}
 ok "Η δομή φακέλων δημιουργήθηκε."
 
@@ -551,11 +551,22 @@ chmod 755 "${PORTAL_DIR}/scripts/"*.sh 2>/dev/null || true
 chmod 755 "${PORTAL_DIR}/scripts/build-apps-manifest.py" 2>/dev/null || true
 chmod 755 "${PORTAL_DIR}/install.sh"
 
-# custom-apps: static εφαρμογές που σερβίρει ο Nginx (www-data) — μόνο ανάγνωση,
-# επεξεργασία από root/VS Code. Τα αρχεία παρακολουθούνται από το git.
+# custom-apps: static εφαρμογές που σερβίρει ο Nginx (www-data). Ο App Builder
+# Wizard δημιουργεί/διαγράφει υποφακέλους ως www-data → setgid group-write
+# στον γονικό φάκελο· τα υπάρχοντα αρχεία μένουν 755/644 (ο οδηγός & ο wizard
+# τηρούν τα ίδια modes). Τα αρχεία παρακολουθούνται από το git.
 chown -R root:www-data "${PORTAL_DIR}/custom-apps"
 find "${PORTAL_DIR}/custom-apps" -type d -exec chmod 755 {} +
 find "${PORTAL_DIR}/custom-apps" -type f -exec chmod 644 {} +
+chmod 2775 "${PORTAL_DIR}/custom-apps"
+
+# app-builder: το .cookie-secret δημιουργείται από τη διεργασία www-data μέσα
+# στον φάκελο της εφαρμογής → setgid group-write (όπως exams/live-quiz).
+chown -R root:www-data "${PORTAL_DIR}/app-builder"
+chmod 2775 "${PORTAL_DIR}/app-builder"
+if [[ -f "${PORTAL_DIR}/app-builder/.cookie-secret" ]]; then
+    chmod 660 "${PORTAL_DIR}/app-builder/.cookie-secret"
+fi
 # Προστασία μυστικών
 [[ -f "${PORTAL_DIR}/.env.keys" ]] && chmod 600 "${PORTAL_DIR}/.env.keys"
 ok "Τα δικαιώματα ρυθμίστηκαν."
@@ -595,11 +606,13 @@ install -m 644 "${PORTAL_DIR}/config/systemd/school-mkdocs.path"    /etc/systemd
 install -m 644 "${PORTAL_DIR}/config/systemd/school-filebrowser.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-exams.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-livequiz.service" /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-appbuilder.service" /etc/systemd/system/
 systemctl daemon-reload
 
 systemctl enable --now school-pandoc.service
 systemctl enable --now school-exams.service
 systemctl enable --now school-livequiz.service
+systemctl enable --now school-appbuilder.service
 systemctl enable --now school-mkdocs.path
 systemctl start school-mkdocs.service
 if [[ -x /usr/local/bin/filebrowser ]]; then
@@ -660,6 +673,8 @@ check_url "/pdf-tools/vendor/pdf-lib.min.js" 200
 check_url "/apps/apps-manifest.json" 200
 check_url "/apps/binary-converter/"  200
 check_url "/apps/_template/"         404
+check_url "/app-builder/"            200
+check_url "/app-builder/healthz"     200
 check_url "/share/"                  200
 check_url "/exams/"                  200
 check_url "/exams/teacher"           200
@@ -709,6 +724,7 @@ echo "  📄 PDF Studio:         http://${IP_ADDR}/pdf-tools/ (pdf-lib, static, 
 echo "  🚀 Δικές μου Εφαρμογές: http://${IP_ADDR}/apps/<όνομα>/ (custom-apps/, static, 0 MB)"
 echo "     Παράδειγμα:         http://${IP_ADDR}/apps/binary-converter/"
 echo "     Οδηγός προσθήκης:   ${PORTAL_DIR}/CUSTOM-APPS-GUIDE.md"
+echo "  🧙 App Builder Wizard: http://${IP_ADDR}/app-builder/ (κωδικός ${TEACHER_PASS})"
 echo "  📁 Κοινόχρηστα Αρχεία: http://${IP_ADDR}/share/    (${FB_USER} / ${FB_PASS})"
 echo "  📤 Εργασίες & Τεστ:    http://${IP_ADDR}/exams/    (μαθητές χωρίς κωδικό)"
 echo "     Περιβάλλον καθηγητή: http://${IP_ADDR}/exams/teacher  (κωδικός ${TEACHER_PASS})"
@@ -727,6 +743,7 @@ echo "     systemctl status school-pandoc.service"
 echo "     systemctl status school-filebrowser.service"
 echo "     systemctl status school-exams.service"
 echo "     systemctl status school-livequiz.service"
+echo "     systemctl status school-appbuilder.service"
 echo "     systemctl start school-mkdocs.service    # rebuild υλικού"
 echo "     journalctl -u school-pandoc.service -f"
 echo "     sudo ${PORTAL_DIR}/install.sh --update   # ενημέρωση"

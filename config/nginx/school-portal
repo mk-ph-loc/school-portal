@@ -14,6 +14,7 @@
 #   /sql/           → SQL Playground (static, SQLite WASM — 0 MB RAM)
 #   /pdf-tools/     → PDF Studio (static, pdf-lib — 0 MB RAM)
 #   /apps/          → Δικές μου εφαρμογές (custom-apps/, static — 0 MB RAM)
+#   /app-builder/   → Δημιουργός Custom Εφαρμογών (FastAPI @127.0.0.1:8008)
 #   /share/         → FileBrowser (Go binary @127.0.0.1:8003, ~15 MB RAM)
 #   /exams/         → Παράδοση Εργασιών & Διαγωνίσματα (FastAPI @127.0.0.1:8004)
 #   /live-quiz/     → Ζωντανό Παιχνίδι Τάξης (FastAPI+WebSockets @127.0.0.1:8005)
@@ -289,6 +290,35 @@ server {
     # Το πρότυπο (_template) δεν είναι εφαρμογή — δεν σερβίρεται
     location ^~ /apps/_template/ {
         return 404;
+    }
+
+    # -----------------------------------------------------------------
+    # 5θ. Δημιουργός Custom Εφαρμογών — App Builder Wizard (@127.0.0.1:8008)
+    #     FastAPI· περιβάλλον καθηγητή με κωδικό teacher2026 (HMAC cookie,
+    #     όπως στο /exams/teacher). Δημιουργεί εφαρμογές στο custom-apps/,
+    #     ενημερώνει το manifest και ενσωματώνει iframe σε μαθήματα MkDocs.
+    # -----------------------------------------------------------------
+    location = /app-builder {
+        return 301 /app-builder/;
+    }
+
+    location ^~ /app-builder/ {
+        client_max_body_size 50M;
+
+        proxy_pass http://127.0.0.1:8008/;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection        "";
+
+        # Ανεβάσματα ZIP έως 50 MB σε αργό σχολικό LAN
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+        proxy_request_buffering off;
     }
 
     # -----------------------------------------------------------------
