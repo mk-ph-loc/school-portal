@@ -666,6 +666,11 @@ ok "Τα δικαιώματα ρυθμίστηκαν."
 # 8. Nginx
 # ---------------------------------------------------------------------------
 log "Ρύθμιση Nginx…"
+# TLS πιστοποιητικό (HTTPS :443) — απαραίτητο για το Web Crypto API του
+# Excalidraw (ζωντανή συνεργασία & Export to Link απαιτούν secure context).
+if [[ -x "${PORTAL_DIR}/scripts/make-ssl-cert.sh" ]]; then
+    bash "${PORTAL_DIR}/scripts/make-ssl-cert.sh" || warn "Αποτυχία δημιουργίας TLS cert — το HTTPS δεν θα λειτουργεί."
+fi
 install -m 644 "${PORTAL_DIR}/config/nginx/school-portal" /etc/nginx/sites-available/school-portal
 ln -sf /etc/nginx/sites-available/school-portal /etc/nginx/sites-enabled/school-portal
 rm -f /etc/nginx/sites-enabled/default
@@ -808,7 +813,10 @@ echo "==========================================================="
 echo "  ${C_OK}✅ Η εγκατάσταση ολοκληρώθηκε!${C_OFF}"
 echo "==========================================================="
 echo
-echo "  🌐 Κεντρική Πύλη:      http://${IP_ADDR}/"
+echo "  🌐 Κεντρική Πύλη:      http://${IP_ADDR}/  (και https://${IP_ADDR}/)"
+echo "  🔒 ΣΗΜΑΝΤΙΚΟ: Για ζωντανή συνεργασία στο /board/ (Excalidraw) άνοιξε"
+echo "     https://${IP_ADDR}/board/ — το Web Crypto API απαιτεί HTTPS."
+echo "     (Self-signed cert: αποδέξου την προειδοποίηση του browser μία φορά)"
 echo "  📚 Εκπαιδευτικό Υλικό: http://${IP_ADDR}/docs/"
 echo "  🎮 Παιχνίδι Δυαδικού:  http://${IP_ADDR}/docs/games/binary-game.html"
 echo "  🗓️  Εργαστήριο:         http://${IP_ADDR}/lab/  (υπό κατασκευή)"

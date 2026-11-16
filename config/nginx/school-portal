@@ -24,7 +24,23 @@
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
+    # HTTPS — απαραίτητο για το Web Crypto API (secure context) που χρειάζεται
+    # η ζωντανή συνεργασία & το "Export to Link" του Excalidraw (/board/).
+    # Self-signed πιστοποιητικό 10ετίας (scripts/make-ssl-cert.sh)· οι browsers
+    # θα δείξουν μία προειδοποίηση την πρώτη φορά ("Αποδοχή κινδύνου").
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    http2 on;
+    ssl_certificate     /etc/nginx/ssl/school-portal.crt;
+    ssl_certificate_key /etc/nginx/ssl/school-portal.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL:2m;
+    ssl_session_timeout 1h;
     server_name _;
+
+    # Το dashboard είναι προσβάσιμο και με HTTP και με HTTPS· τα εργαλεία που
+    # απαιτούν secure context (Excalidraw collab) λειτουργούν πλήρως μόνο μέσω
+    # https:// — γι' αυτό ΔΕΝ κάνουμε ολικό redirect από τη θύρα 80.
 
     root /opt/school-portal/dashboard;
     index index.html;

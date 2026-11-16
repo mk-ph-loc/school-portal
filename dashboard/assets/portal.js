@@ -50,6 +50,22 @@ function portal() {
         this.unlocked = false; // π.χ. απενεργοποιημένο storage
       }
       this.loadCustomApps();
+      this.preferHttpsForSecureContextTools();
+    },
+
+    // Εργαλεία που χρειάζονται Web Crypto API (π.χ. Excalidraw live collaboration
+    // & Export to Link) λειτουργούν ΜΟΝΟ σε secure context (HTTPS/localhost).
+    // Αν το dashboard ανοίχτηκε με plain HTTP σε LAN IP, οι κάρτες με
+    // data-https-hint οδηγούν αυτόματα στην https:// έκδοση της ίδιας σελίδας.
+    preferHttpsForSecureContextTools() {
+      if (window.isSecureContext) return; // ήδη HTTPS ή localhost
+      document.querySelectorAll('a[data-https-hint]').forEach(a => {
+        try {
+          const url = new URL(a.getAttribute('href'), window.location.href);
+          url.protocol = 'https:';
+          a.setAttribute('href', url.toString());
+        } catch (e) { /* αγνόησε άκυρα href */ }
+      });
     },
 
     async loadCustomApps() {

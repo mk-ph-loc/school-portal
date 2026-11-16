@@ -47,6 +47,15 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
   Είναι το επίσημο static build του `excalidraw-app` (κατεβαίνει από το
   `scripts/fetch-excalidraw.sh` με όλα τα assets/fonts τοπικά για offline LAN,
   χωρίς analytics & service worker). Αναβάθμιση: `FORCE_EXCALIDRAW=1 sudo ./install.sh --no-deps`.
+  > 🔒 **Η ζωντανή συνεργασία («Start session») και το «Export to Link» απαιτούν HTTPS!**
+  > Το Web Crypto API (`crypto.subtle`) των browsers λειτουργεί μόνο σε *secure context*·
+  > σε plain HTTP εμφανίζεται το σφάλμα `Cannot read properties of undefined (reading 'generateKey')`.
+  > Άνοιξε **`https://<ip>/board/`** (η κάρτα του dashboard σε οδηγεί αυτόματα εκεί).
+  > Ο server έχει self-signed πιστοποιητικό 10ετίας (`scripts/make-ssl-cert.sh`, SAN με όλες
+  > τις LAN IP) — αποδέξου την προειδοποίηση του browser μία φορά, ή μοίρασε το
+  > `/etc/nginx/ssl/school-portal.crt` στις έμπιστες αρχές των σχολικών υπολογιστών.
+  > Σημείωση: το ίδιο το session φιλοξενείται στον δημόσιο server του Excalidraw
+  > (`oss-collab.excalidraw.com`, end-to-end encrypted) → χρειάζεται Internet.
 - **`/pad/`** — **Etherpad Lite v2.7.3**: συνεργατικός επεξεργαστής κειμένου σε πραγματικό
   χρόνο για όλη την τάξη (χρώματα ανά μαθητή, chat, ιστορικό/timeslider, εξαγωγή txt/html).
   Τρέχει native με **Node.js 22 LTS** (NodeSource) + **SQLite** (`apps/etherpad/var/etherpad.db`,
