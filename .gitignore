@@ -66,8 +66,9 @@ tmp/
 *.swp
 *~
 
-# --- Etherpad Lite (κατεβαίνει & χτίζεται από το install.sh — όχι στο git) ---
+# --- Node.js εφαρμογές (κατεβαίνουν & χτίζονται από το install.sh — όχι στο git) ---
 apps/etherpad/
+apps/excalidraw-room/
 
 # --- Λειτουργικό σύστημα ---
 .DS_Store

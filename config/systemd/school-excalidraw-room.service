@@ -1,0 +1,44 @@
+[Unit]
+Description=Ψηφιακή Πύλη — Excalidraw Room Server (ζωντανή συνεργασία πίνακα, Node.js + Socket.IO)
+Documentation=file:///opt/school-portal/README.md
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/school-portal/apps/excalidraw-room
+Environment=NODE_ENV=production
+Environment=PORT=8007
+Environment=HOME=/opt/school-portal/apps/excalidraw-room
+# Ο server αναμεταδίδει ΜΟΝΟ end-to-end encrypted blobs μεταξύ των μελών
+# του ίδιου room — δεν αποθηκεύει τίποτα (stateless, in-memory rooms).
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5s
+
+# --- Ελάχιστη κατανάλωση πόρων (ένα εργαστήριο ≤60 ταυτόχρονοι χρήστες) ---
+MemoryMax=192M
+MemoryHigh=128M
+CPUWeight=50
+Nice=5
+TasksMax=64
+
+# --- Ασφάλεια / hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+# Stateless server — δεν χρειάζεται καθόλου εγγραφή σε δίσκο.
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

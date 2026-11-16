@@ -109,10 +109,17 @@ for f in "${FONTS[@]}"; do
     fetch "${BASE_URL}/${f}" "${TMP}/${f}" 0 || true
 done
 
-# --- 4β. Fonts που αναφέρονται στο ίδιο το index.html (preload links) -------
+# --- 4β. Fonts που αναφέρονται στο ίδιο το index.html (preload links —
+#         μπορεί να είναι απόλυτα CDN URLs ή σχετικά /fonts/ paths) ----------
+CDN_PREFIX="https://excalidraw.nyc3.cdn.digitaloceanspaces.com/oss/"
 while read -r f; do
-    fetch "${BASE_URL}/${f}" "${TMP}/${f}" 0 || true
-done < <(grep -oE 'href="/fonts/[^"]+\.woff2"' "${TMP}/index.raw.html" | sed 's|href="/||;s|"||' | sort -u)
+    rel="${f#${CDN_PREFIX}}"          # CDN URL → σχετικό path
+    rel="${rel#/}"                    # /fonts/... → fonts/...
+    case "${rel}" in
+        fonts/Xiaolai/*) continue ;;  # CJK subsets — δεν χρειάζονται
+        fonts/*) fetch "${BASE_URL}/${rel}" "${TMP}/${rel}" 0 || true ;;
+    esac
+done < <(grep -oE 'href="[^"]+\.woff2"' "${TMP}/index.raw.html" | sed 's|href="||;s|"||' | sort -u)
 
 # --- 5. UI fonts του CSS (Assistant) + εικονίδια PWA -------------------------
 CSS_FILE="$(printf '%s\n' "${MAIN_ASSETS[@]}" | grep -E '\.css$' | head -1)"
@@ -156,6 +163,19 @@ html = re.sub(r'<link rel="preconnect"[^>]*>', '', html)
 #     το meta των mermaid-chunks που προϋποθέτει ενεργό SW controller.
 html = html.replace('<meta name="mermaid-chunks"', '<meta name="mermaid-chunks-disabled"')
 
+# 6ε2. Self-hosted collaboration: το URL του room server γίνεται runtime
+#      override (window.EXCALIDRAW_WS_SERVER_URL) ώστε να δείχνει στον τοπικό
+#      excalidraw-room (/board-ws/) αντί για το oss-collab.excalidraw.com.
+#      Το ίδιο origin → δουλεύει με όποια IP/hostname ανοίξει η πύλη, σε
+#      HTTP & HTTPS, χωρίς rebuild. Το πραγματικό patch του bundle γίνεται
+#      παρακάτω (βήμα 6β2) στα JS αρχεία.
+ws_override = (
+    '<script>'
+    'window.EXCALIDRAW_WS_SERVER_URL=\"/board-ws\";'
+    '</script>'
+)
+html = html.replace('</title>', '</title>' + ws_override, 1)
+
 # 6στ. Ελληνικά ως προεπιλογή + τίτλος πύλης + no-op serviceWorker guard.
 #      Το i18next διαβάζει πρώτα το localStorage["i18nextLng"]· αν δεν έχει
 #      οριστεί ρητά από τον χρήστη, το θέτουμε el-GR πριν φορτώσει το app.
@@ -172,6 +192,41 @@ html = html.replace('<html lang="en">', '<html lang="el">')
 
 pathlib.Path(out).write_text(html, encoding='utf-8')
 print(f'[✓] index.html προσαρμόστηκε για το {subpath} (ελληνικά, τοπικά assets, χωρίς analytics/SW)')
+PYEOF
+
+# --- 6β2. Patch του κύριου bundle: self-hosted room server ------------------
+# Το excalidraw-app έχει hardcoded το "https://oss-collab.excalidraw.com" ως
+# default του VITE_APP_WS_SERVER_URL. Αντικαθιστούμε ΜΟΝΟ την κλήση σύνδεσης
+# (portal.open) με runtime έκφραση που διαβάζει window.EXCALIDRAW_WS_SERVER_URL
+# (ορίζεται στο index.html παραπάνω → ίδιο origin + /board-ws). Έτσι η ζωντανή
+# συνεργασία μένει 100% μέσα στο σχολικό LAN (excalidraw-room @127.0.0.1:8007).
+python3 - "${TMP}${MAIN_JS}" <<'PYEOF'
+import sys, pathlib
+
+p = pathlib.Path(sys.argv[1])
+js = p.read_text(encoding="utf-8")
+
+# Ο socket.io client βγάζει το path από το URL namespace ("/socket.io"),
+# αγνοώντας το pathname του server URL — γι' αυτό περνάμε ρητά το
+# path: "/board-ws/socket.io" στο options object της connect().
+old_call = ('this.portal.open(r("https://oss-collab.excalidraw.com",'
+            '{transports:["websocket","polling"]})')
+new_call = ('this.portal.open(r(window.EXCALIDRAW_WS_SERVER_URL?window.location.origin:'
+            '"https://oss-collab.excalidraw.com",'
+            '{path:(window.EXCALIDRAW_WS_SERVER_URL||"")+"/socket.io",'
+            'transports:["websocket","polling"]})')
+n = js.count(old_call)
+if n == 1:
+    js = js.replace(old_call, new_call)
+    # Και το default του env object (χρησιμοποιείται αλλού ως fallback)
+    js = js.replace(
+        'VITE_APP_WS_SERVER_URL:"https://oss-collab.excalidraw.com"',
+        'VITE_APP_WS_SERVER_URL:window.EXCALIDRAW_WS_SERVER_URL||"https://oss-collab.excalidraw.com"')
+    p.write_text(js, encoding="utf-8")
+    print('[✓] Bundle patch: collaboration → self-hosted /board-ws/ (excalidraw-room)')
+else:
+    print(f'[!] Προσοχή: βρέθηκαν {n} σημεία σύνδεσης (αναμενόταν 1) — '
+          'το upstream άλλαξε· η συνεργασία θα χρησιμοποιεί τον δημόσιο server.')
 PYEOF
 
 # PWA manifest με σωστό scope/start_url για το /board/

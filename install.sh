@@ -51,6 +51,8 @@ ETHERPAD_VERSION="v2.7.3"                                  # τελευταία 
 ETHERPAD_DIR="${PORTAL_DIR}/apps/etherpad"
 ETHERPAD_PORT="8006"
 PNPM_VERSION="11.0.6"                                      # όπως δηλώνει το packageManager του Etherpad
+EXCALIDRAW_ROOM_DIR="${PORTAL_DIR}/apps/excalidraw-room"   # self-hosted collab για το /board/
+EXCALIDRAW_ROOM_PORT="8007"
 
 SKIP_DEPS=0
 DO_UPDATE=0
@@ -609,6 +611,43 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 6ια. Excalidraw Room Server — self-hosted ζωντανή συνεργασία πίνακα (/board-ws/)
+#      Node.js + Socket.IO @127.0.0.1:8007, stateless (in-memory rooms, κανένα
+#      δεδομένο στον δίσκο — αναμετάδοση end-to-end encrypted blobs μόνο).
+#      Το static build του /board/ patchάρεται από το fetch-excalidraw.sh ώστε
+#      να συνδέεται εδώ αντί για το oss-collab.excalidraw.com → 100% LAN/offline.
+# ---------------------------------------------------------------------------
+if command -v node >/dev/null 2>&1; then
+    if [[ ! -d "${EXCALIDRAW_ROOM_DIR}/.git" ]]; then
+        log "Λήψη excalidraw-room (collaboration server, ~2 MB)…"
+        mkdir -p "${PORTAL_DIR}/apps"
+        if git clone --depth 1 https://github.com/excalidraw/excalidraw-room.git \
+            "${EXCALIDRAW_ROOM_DIR}" >/dev/null 2>&1; then
+            ok "Το excalidraw-room κατέβηκε."
+        else
+            warn "Αποτυχία λήψης excalidraw-room — η συνεργασία του /board/ θα χρησιμοποιεί τον δημόσιο server."
+        fi
+    else
+        ok "Το excalidraw-room υπάρχει ήδη (${EXCALIDRAW_ROOM_DIR})."
+    fi
+
+    if [[ -f "${EXCALIDRAW_ROOM_DIR}/package.json" && ! -s "${EXCALIDRAW_ROOM_DIR}/dist/index.js" ]]; then
+        log "Χτίσιμο excalidraw-room (npm + tsc)…"
+        if (cd "${EXCALIDRAW_ROOM_DIR}" \
+            && npm install --omit=dev >/dev/null 2>&1 \
+            && npm install --no-save typescript@4.2.3 @types/node@14.14.31 @types/express@4.17.11 @types/debug@4.1.5 >/dev/null 2>&1 \
+            && npx tsc >/dev/null 2>&1); then
+            ok "Το excalidraw-room χτίστηκε (dist/index.js)."
+        else
+            warn "Αποτυχία χτισίματος excalidraw-room — το /board-ws/ δεν θα λειτουργεί."
+        fi
+    fi
+    [[ -d "${EXCALIDRAW_ROOM_DIR}" ]] && chown -R www-data:www-data "${EXCALIDRAW_ROOM_DIR}"
+else
+    warn "Δεν υπάρχει Node.js — παράλειψη excalidraw-room."
+fi
+
+# ---------------------------------------------------------------------------
 # 7. Δικαιώματα (setgid ώστε root & www-data να συνεργάζονται)
 # ---------------------------------------------------------------------------
 log "Ρύθμιση δικαιωμάτων…"
@@ -704,6 +743,7 @@ install -m 644 "${PORTAL_DIR}/config/systemd/school-exams.service" /etc/systemd/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-livequiz.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-appbuilder.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-etherpad.service" /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-excalidraw-room.service" /etc/systemd/system/
 systemctl daemon-reload
 
 systemctl enable --now school-pandoc.service
@@ -714,6 +754,11 @@ if [[ -f "${ETHERPAD_DIR}/package.json" ]] && command -v node >/dev/null 2>&1; t
     systemctl enable --now school-etherpad.service
 else
     warn "Παράλειψη school-etherpad.service (λείπει το Etherpad ή η Node.js)."
+fi
+if [[ -s "${EXCALIDRAW_ROOM_DIR}/dist/index.js" ]]; then
+    systemctl enable --now school-excalidraw-room.service
+else
+    warn "Παράλειψη school-excalidraw-room.service (λείπει το build)."
 fi
 systemctl enable --now school-mkdocs.path
 systemctl start school-mkdocs.service
@@ -764,6 +809,7 @@ check_url "/lab/"                    200
 check_url "/crypto/"                 200
 check_url "/tools/"                  200
 check_url "/board/"                  200
+check_url "/board-ws/"               200
 check_url "/pad/"                    200
 check_url "/pad/admin"               401
 check_url "/pad/admin/"              200 "${TEACHER_USER}:${TEACHER_PASS}"
@@ -824,7 +870,8 @@ echo "  📝 Pandoc Studio:      http://${IP_ADDR}/pandoc/"
 echo "  🗝️  Λύσεις Καθηγητή:    http://${IP_ADDR}/docs/teachers/"
 echo "  🔐 CyberChef:          http://${IP_ADDR}/crypto/   (static, 0 MB)"
 echo "  🛠️  IT-Tools:           http://${IP_ADDR}/tools/    (static, 0 MB)"
-echo "  🖍️  Πίνακας Excalidraw: http://${IP_ADDR}/board/    (πλήρες build, static, 0 MB)"
+echo "  🖍️  Πίνακας Excalidraw: https://${IP_ADDR}/board/   (πλήρες build, static, 0 MB)"
+echo "     Ζωντανή συνεργασία: self-hosted excalidraw-room @127.0.0.1:${EXCALIDRAW_ROOM_PORT} (100% LAN)"
 echo "  📝 Σημειωματάριο Τάξης: http://${IP_ADDR}/pad/     (Etherpad Lite + SQLite)"
 echo "  ⚡ Κυκλώματα:          http://${IP_ADDR}/circuits/ (CircuitJS1, static, 0 MB)"
 echo "  🧩 Blockly Games:      http://${IP_ADDR}/blockly/  (ελληνικά, static, 0 MB)"
@@ -854,6 +901,7 @@ echo "     systemctl status school-exams.service"
 echo "     systemctl status school-livequiz.service"
 echo "     systemctl status school-appbuilder.service"
 echo "     systemctl status school-etherpad.service"
+echo "     systemctl status school-excalidraw-room.service"
 echo "     systemctl start school-mkdocs.service    # rebuild υλικού"
 echo "     journalctl -u school-pandoc.service -f"
 echo "     sudo ${PORTAL_DIR}/install.sh --update   # ενημέρωση"

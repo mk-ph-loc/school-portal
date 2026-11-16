@@ -9,6 +9,7 @@
 #   /crypto/        → CyberChef (static HTML/JS — 0 MB RAM)
 #   /tools/         → IT-Tools (static SPA — 0 MB RAM)
 #   /board/         → Ψηφιακός Πίνακας Excalidraw (πλήρες static build — 0 MB RAM)
+#   /board-ws/      → Excalidraw Room Server (Node+Socket.IO @127.0.0.1:8007, LAN collab)
 #   /pad/           → Συνεργατικό Σημειωματάριο Etherpad Lite (Node @127.0.0.1:8006)
 #   /circuits/      → CircuitJS1 Προσομοιωτής Κυκλωμάτων (static — 0 MB RAM)
 #   /blockly/       → Blockly Games (static, ελληνικά — 0 MB RAM)
@@ -217,6 +218,33 @@ server {
         expires 30d;
         add_header Cache-Control "public, immutable";
         access_log off;
+    }
+
+    # Excalidraw Room Server — self-hosted ζωντανή συνεργασία πίνακα (LAN).
+    # Το frontend bundle έχει patchαριστεί (scripts/fetch-excalidraw.sh) ώστε
+    # να συνδέεται εδώ αντί για το oss-collab.excalidraw.com.
+    # Όλα τα δεδομένα είναι end-to-end encrypted (AES-GCM στον browser).
+    location = /board-ws {
+        return 301 /board-ws/;
+    }
+    location ^~ /board-ws/ {
+        proxy_pass http://127.0.0.1:8007/;
+        proxy_http_version 1.1;
+
+        # --- Υποστήριξη WebSockets (Socket.IO — ζωντανά strokes/cursors) ---
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Οι συνδέσεις WS μένουν ανοιχτές καθ' όλη τη διάρκεια του μαθήματος
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    3600s;
+        proxy_read_timeout    3600s;
+        proxy_buffering off;
     }
     location ^~ /board/fonts/ {
         alias /var/www/school-tools/board/fonts/;

@@ -30,6 +30,7 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/crypto/` | CyberChef | Στατικό HTML/JS (0 MB RAM) | Ελεύθερη |
 | `/tools/` | IT-Tools | Στατικό SPA (0 MB RAM) | Ελεύθερη |
 | `/board/` | Ψηφιακός Πίνακας Excalidraw | Πλήρες static build excalidraw-app, ελληνικά (0 MB RAM) | Ελεύθερη |
+| `/board-ws/` | Excalidraw Room Server (ζωντανή συνεργασία) | Node.js + Socket.IO @ `127.0.0.1:8007` (~40 MB, stateless) | Ελεύθερη (E2E encrypted) |
 | `/pad/` | Συνεργατικό Σημειωματάριο Τάξης | Etherpad Lite (Node.js 22 + SQLite) @ `127.0.0.1:8006` | Ελεύθερη (μαθητές) |
 | `/pad/admin` | Διαχείριση Etherpad | ίδιο service + **Basic Auth** | 🔐 Καθηγητές (`teacher`) |
 | `/circuits/` | CircuitJS1 — Προσομοιωτής Κυκλωμάτων | Στατικό build pfalstad/circuitjs1 (0 MB RAM) | Ελεύθερη |
@@ -54,8 +55,15 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
   > Ο server έχει self-signed πιστοποιητικό 10ετίας (`scripts/make-ssl-cert.sh`, SAN με όλες
   > τις LAN IP) — αποδέξου την προειδοποίηση του browser μία φορά, ή μοίρασε το
   > `/etc/nginx/ssl/school-portal.crt` στις έμπιστες αρχές των σχολικών υπολογιστών.
-  > Σημείωση: το ίδιο το session φιλοξενείται στον δημόσιο server του Excalidraw
-  > (`oss-collab.excalidraw.com`, end-to-end encrypted) → χρειάζεται Internet.
+  > ✅ **Η ζωντανή συνεργασία είναι 100% self-hosted στο σχολικό LAN** — δεν χρειάζεται Internet!
+  > Τρέχει ο επίσημος **`excalidraw-room`** server (`apps/excalidraw-room/`, Node.js + Socket.IO,
+  > systemd: `school-excalidraw-room.service` @ `127.0.0.1:8007`, πίσω από το Nginx `/board-ws/`).
+  > Το static bundle patchάρεται αυτόματα από το `scripts/fetch-excalidraw.sh` ώστε το
+  > «Start session» να συνδέεται στον τοπικό server αντί για το `oss-collab.excalidraw.com`.
+  > Ο server είναι **stateless** (in-memory rooms, μηδέν εγγραφές σε δίσκο) και αναμεταδίδει
+  > μόνο **end-to-end encrypted** blobs (AES-GCM, το κλειδί μένει στο URL fragment του browser).
+  > Μοιράσου το link που παράγει το «Start session» με τους μαθητές — όλοι πρέπει να είναι
+  > στο ίδιο LAN και να έχουν αποδεχτεί το πιστοποιητικό HTTPS.
 - **`/pad/`** — **Etherpad Lite v2.7.3**: συνεργατικός επεξεργαστής κειμένου σε πραγματικό
   χρόνο για όλη την τάξη (χρώματα ανά μαθητή, chat, ιστορικό/timeslider, εξαγωγή txt/html).
   Τρέχει native με **Node.js 22 LTS** (NodeSource) + **SQLite** (`apps/etherpad/var/etherpad.db`,
