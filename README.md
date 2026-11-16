@@ -27,6 +27,7 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/exams/teacher` | Διαχείριση Εργασιών/Διαγωνισμάτων | ίδιο service, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
 | `/live-quiz/` | Ζωντανό Παιχνίδι Τάξης (Live Quiz) | FastAPI + WebSockets + SQLite @ `127.0.0.1:8005` | Ελεύθερη (είσοδος με PIN) |
 | `/live-quiz/teacher` | Live Quiz — Προτζέκτορας | ίδιο service, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
+| `/web-lab/` | Εργαστήριο Web (HTML / CSS / JS) | FastAPI + WebSockets + SQLite @ `127.0.0.1:8011` | Ελεύθερη (Solo ή δωμάτια με PIN· δημοσίευση: `teacher2026`) |
 | `/crypto/` | CyberChef | Στατικό HTML/JS (0 MB RAM) | Ελεύθερη |
 | `/tools/` | IT-Tools | Στατικό SPA (0 MB RAM) | Ελεύθερη |
 | `/board/` | Ψηφιακός Πίνακας Excalidraw | Πλήρες static build excalidraw-app, ελληνικά (0 MB RAM) | Ελεύθερη |
@@ -174,6 +175,11 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   ├── livequiz.db         # Βάση (δημιουργείται αυτόματα, εκτός git)
 │   ├── templates/          # base/student/teacher.html (Jinja2)
 │   └── static/             # student.js, teacher.js (vanilla JS + WebSocket)
+├── web-lab/                # 🌐 Εργαστήριο Web HTML/CSS/JS (/web-lab/)
+│   ├── main.py             # FastAPI + WebSockets + SQLite (δωμάτια, broadcast, publish)
+│   ├── weblab.db           # Βάση δωματίων (δημιουργείται αυτόματα, εκτός git)
+│   ├── templates/index.html   # 3-pane editor + preview + κονσόλα (Tailwind + Alpine)
+│   └── static/             # app.js, snippets.js (ελληνικά), vendor/codemirror (offline)
 ├── lab-app/                # ΜΕΛΛΟΝΤΙΚΟ — δείτε README.md
 ├── app-builder/            # 🧙 Δημιουργός Custom Εφαρμογών (/app-builder/)
 │   ├── main.py             # FastAPI: create/list/delete/embed API (HMAC cookie)
@@ -249,6 +255,35 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 - 4 μεγάλα χρωματιστά κουμπιά: 🔺 Κόκκινο / 🔷 Μπλε / 🟡 Κίτρινο / 🟩 Πράσινο
 - Άμεση ανατροφοδότηση: σωστό/λάθος, **πόντοι 500–1000 ανά ταχύτητα** και θέση στην κατάταξη
 
+## 🌐 Εργαστήριο Web — HTML / CSS / JS (`/web-lab/`)
+
+Διαδραστικό, συνεργατικό περιβάλλον εκμάθησης ανάπτυξης ιστοσελίδων
+(FastAPI + WebSockets + SQLite @ `127.0.0.1:8011`, χωρίς Docker).
+**Σημείωση:** η θύρα 8010 ανήκει ήδη στο excalidraw-room (`/board-ws/`).
+
+**Editor (100% offline — CodeMirror τοπικά, Tailwind + Alpine από το `/assets/`):**
+- 3 πάνελ **HTML / CSS / JS** με χρωματισμό σύνταξης & αυτόματο κλείσιμο tags
+- **Ζωντανή Προεπισκόπηση** `<iframe>` (sandboxed) + **ενσωματωμένη κονσόλα**:
+  `console.log/warn/error` και σφάλματα JS εμφανίζονται χωρίς DevTools (F12)
+- «▶ Εκτέλεση / Ανανέωση» (Ctrl+Enter) + διακόπτης «⚡ Αυτόματη Ενημέρωση»
+- Σκοτεινό/φωτεινό θέμα · **17 έτοιμα ελληνικά snippets** σε 4 κατηγορίες
+  (HTML Βασικά, CSS Μορφοποίηση, JS Διαδραστικότητα, 3 Starter Projects)
+
+**Συνεργασία τάξης (WebSockets + SQLite `weblab.db`):**
+- **Solo:** αυτόματη αποθήκευση στο `localStorage` του browser
+- **Δωμάτιο Ομάδας:** «Δημιουργία Δωματίου Συνεργασίας» → **4-ψήφιο PIN**·
+  είσοδος με PIN + όνομα, λίστα συνδεδεμένων, ζωντανός συγχρονισμός κώδικα
+  (ο κώδικας επιβιώνει refresh — αποθηκεύεται στη βάση)
+- **Καθηγητής** (`teacher2026`, HMAC cookie): «📡 Αποστολή Κώδικα σε Όλους»
+  (broadcast βασικής άσκησης) & «🔒 Μόνο Ανάγνωση» (κλείδωμα για προβολή στον πίνακα)
+
+**Εξαγωγή & Δημοσίευση:**
+- «💾 Λήψη .HTML»: ενώνει HTML + `<style>` + `<script>` σε ένα αυτόνομο αρχείο
+  για παράδοση στο `/exams/`
+- «🚀 Δημοσίευση στο Portal» (κωδικός καθηγητή): γράφει `custom-apps/<id>/`
+  (`index.html` + `app.json`) και τρέχει το `build-apps-manifest.py` →
+  **ζωντανή κάρτα στο Dashboard** στη διεύθυνση `/apps/<id>/`
+
 ## 💾 Κατανάλωση RAM
 
 | Υπηρεσία | Idle RAM | Σημείωση |
@@ -258,6 +293,7 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 | Pandoc Studio | ~55 MB | uvicorn, 1 worker, `MemoryMax=320M` |
 | Exams App | ~45 MB | uvicorn, 1 worker, `MemoryMax=256M` |
 | Live Quiz | ~45 MB | uvicorn + WebSockets, 1 worker, `MemoryMax=256M` |
+| Web Lab | ~45 MB | uvicorn + WebSockets, 1 worker, `MemoryMax=256M` |
 | Pyodide | **0 MB** server-side | Τρέχει στον browser του μαθητή |
 | **Σύνολο** | **~65 MB** | |
 
@@ -292,6 +328,12 @@ bash /opt/school-portal/scripts/smoke-test.sh
 
 # End-to-end έλεγχος /live-quiz/ (καθηγητής + 2 μαθητές μέσω WebSockets, πόντοι, κατάταξη)
 /opt/school-portal/venv/bin/python /opt/school-portal/scripts/livequiz-test.py
+
+# End-to-end έλεγχος /web-lab/ (δωμάτια, sync, broadcast/κλείδωμα, δημοσίευση στο /apps/)
+/opt/school-portal/venv/bin/python /opt/school-portal/scripts/weblab-test.py
+
+# Έλεγχος /web-lab/ σε ΠΡΑΓΜΑΤΙΚΟ browser (editors, κονσόλα, snippets, Auto-Run, theme)
+/opt/school-portal/venv/bin/python /opt/school-portal/scripts/weblab-browser-test.py
 ```
 
 > Ο `browser-test.py` απαιτεί `chromium` (`apt install chromium`) και

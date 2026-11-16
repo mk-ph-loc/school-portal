@@ -59,6 +59,11 @@ HEDGEDOC_PORT="8007"
 MDBRIDGE_DIR="${PORTAL_DIR}/apps/hedgedoc-bridge"          # γέφυρα δημοσίευσης στο /md-publish/
 MDBRIDGE_PORT="8009"
 
+# --- Εργαστήριο Web HTML/CSS/JS (FastAPI + WebSockets + SQLite, χωρίς Docker) ---
+WEBLAB_DIR="${PORTAL_DIR}/web-lab"                         # συνεργατικός editor στο /web-lab/
+WEBLAB_PORT="8011"                                         # (8010 = excalidraw-room /board-ws/)
+CODEMIRROR_VERSION="5.65.16"                               # τοπικός editor — 100% offline
+
 SKIP_DEPS=0
 DO_UPDATE=0
 
@@ -153,7 +158,7 @@ fi
 # 3. Δομή φακέλων
 # ---------------------------------------------------------------------------
 log "Δημιουργία δομής φακέλων…"
-mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},app-builder/{static,templates},apps/hedgedoc-bridge/templates,lab-app,custom-apps/_template,apps,config/{nginx,systemd,etherpad},scripts,data/build,data/filebrowser,shared-files}
+mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},app-builder/{static,templates},apps/hedgedoc-bridge/templates,web-lab/{static,templates},lab-app,custom-apps/_template,apps,config/{nginx,systemd,etherpad},scripts,data/build,data/filebrowser,shared-files}
 mkdir -p "${DOCS_OUT}" "${TOOLS_OUT}"/{cyberchef,it-tools,board,circuits,blockly,sql/vendor,pdf-tools/vendor/fonts}
 ok "Η δομή φακέλων δημιουργήθηκε."
 
@@ -204,6 +209,19 @@ fetch_asset "https://cdn.jsdelivr.net/npm/alpinejs@${ALPINE_VERSION}/dist/cdn.mi
             "${PORTAL_DIR}/dashboard/assets/alpine.min.js" "Alpine.js"
 fetch_asset "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@${TAILWIND_VERSION}/dist/index.global.js" \
             "${PORTAL_DIR}/dashboard/assets/tailwind.min.js" "Tailwind CSS"
+
+# --- CodeMirror 5 για το /web-lab/ (έρχεται από το git· εδώ μόνο fallback) ---
+CM_DIR="${WEBLAB_DIR}/static/vendor/codemirror"
+CM_BASE="https://cdnjs.cloudflare.com/ajax/libs/codemirror/${CODEMIRROR_VERSION}"
+mkdir -p "${CM_DIR}"/{mode/xml,mode/css,mode/javascript,mode/htmlmixed,addon/edit,addon/fold,theme}
+for cm_file in codemirror.min.js codemirror.min.css \
+               mode/xml/xml.min.js mode/css/css.min.js mode/javascript/javascript.min.js \
+               mode/htmlmixed/htmlmixed.min.js addon/edit/closetag.min.js \
+               addon/edit/closebrackets.min.js addon/edit/matchbrackets.min.js \
+               addon/edit/matchtags.min.js addon/fold/xml-fold.min.js \
+               theme/material-darker.min.css theme/eclipse.min.css; do
+    fetch_asset "${CM_BASE}/${cm_file}" "${CM_DIR}/${cm_file}" "CodeMirror ${cm_file}"
+done
 
 # ---------------------------------------------------------------------------
 # 5β. Δικές μου εφαρμογές (custom-apps/) — manifest για το Dashboard
@@ -799,6 +817,18 @@ chmod 2775 "${PORTAL_DIR}/live-quiz-app"
 if [[ -f "${PORTAL_DIR}/live-quiz-app/.cookie-secret" ]]; then
     chmod 660 "${PORTAL_DIR}/live-quiz-app/.cookie-secret"
 fi
+
+# web-lab: η SQLite βάση (weblab.db) & το .cookie-secret δημιουργούνται από τη
+# διεργασία www-data μέσα στον φάκελο της εφαρμογής → setgid group-write.
+chown -R root:www-data "${WEBLAB_DIR}"
+chmod 2775 "${WEBLAB_DIR}"
+for wl_file in "${WEBLAB_DIR}"/weblab.db*; do
+    [[ -e "${wl_file}" ]] && chown www-data:www-data "${wl_file}" && chmod 664 "${wl_file}"
+done
+if [[ -f "${WEBLAB_DIR}/.cookie-secret" ]]; then
+    chown www-data:www-data "${WEBLAB_DIR}/.cookie-secret"
+    chmod 660 "${WEBLAB_DIR}/.cookie-secret"
+fi
 touch "${PORTAL_DIR}/data/mkdocs-build.lock"
 chown root:www-data "${PORTAL_DIR}/data/mkdocs-build.lock"
 chmod 664 "${PORTAL_DIR}/data/mkdocs-build.lock"
@@ -867,6 +897,7 @@ install -m 644 "${PORTAL_DIR}/config/systemd/school-mkdocs.path"    /etc/systemd
 install -m 644 "${PORTAL_DIR}/config/systemd/school-filebrowser.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-exams.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-livequiz.service" /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-weblab.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-appbuilder.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-etherpad.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-excalidraw-room.service" /etc/systemd/system/
@@ -877,6 +908,11 @@ systemctl daemon-reload
 systemctl enable --now school-pandoc.service
 systemctl enable --now school-exams.service
 systemctl enable --now school-livequiz.service
+if [[ -f "${WEBLAB_DIR}/main.py" ]]; then
+    systemctl enable --now school-weblab.service
+else
+    warn "Παράλειψη school-weblab.service (λείπει το web-lab/main.py)."
+fi
 systemctl enable --now school-appbuilder.service
 if [[ -f "${ETHERPAD_DIR}/package.json" ]] && command -v node >/dev/null 2>&1; then
     systemctl enable --now school-etherpad.service
@@ -976,6 +1012,8 @@ check_url "/exams/api/activities"    200
 check_url "/live-quiz/"              200
 check_url "/live-quiz/teacher"       200
 check_url "/live-quiz/healthz"       200
+check_url "/web-lab/"                200
+check_url "/web-lab/healthz"         200
 check_url "/pandoc/"                 401
 check_url "/pandoc/"                 200 "${TEACHER_USER}:${TEACHER_PASS}"
 check_url "/docs/teachers/"          401
@@ -1032,6 +1070,8 @@ echo "  📤 Εργασίες & Τεστ:    http://${IP_ADDR}/exams/    (μαθ
 echo "     Περιβάλλον καθηγητή: http://${IP_ADDR}/exams/teacher  (κωδικός ${TEACHER_PASS})"
 echo "  🎯 Live Quiz Τάξης:    http://${IP_ADDR}/live-quiz/ (είσοδος μαθητών με PIN)"
 echo "     Προτζέκτορας:       http://${IP_ADDR}/live-quiz/teacher  (κωδικός ${TEACHER_PASS})"
+echo "  🌐 Εργαστήριο Web:     http://${IP_ADDR}/web-lab/   (HTML/CSS/JS editor + δωμάτια ομάδας)"
+echo "     Δημοσίευση έργων:   κωδικός ${TEACHER_PASS} → ζωντανή κάρτα στο Dashboard (/apps/)"
 echo
 echo "  🔐 Πρόσβαση καθηγητών:"
 echo "     Dashboard:  κωδικός ${TEACHER_PASS}"
@@ -1045,6 +1085,7 @@ echo "     systemctl status school-pandoc.service"
 echo "     systemctl status school-filebrowser.service"
 echo "     systemctl status school-exams.service"
 echo "     systemctl status school-livequiz.service"
+echo "     systemctl status school-weblab.service"
 echo "     systemctl status school-appbuilder.service"
 echo "     systemctl status school-etherpad.service"
 echo "     systemctl status school-excalidraw-room.service"

@@ -46,6 +46,7 @@ exams-app/submissions/
 exams-app/.cookie-secret
 live-quiz-app/.cookie-secret
 app-builder/.cookie-secret
+web-lab/.cookie-secret
 lab-app/*.db
 lab-app/*.sqlite
 lab-app/*.sqlite3

@@ -22,6 +22,7 @@
 #   /share/         → FileBrowser (Go binary @127.0.0.1:8003, ~15 MB RAM)
 #   /exams/         → Παράδοση Εργασιών & Διαγωνίσματα (FastAPI @127.0.0.1:8004)
 #   /live-quiz/     → Ζωντανό Παιχνίδι Τάξης (FastAPI+WebSockets @127.0.0.1:8005)
+#   /web-lab/       → Εργαστήριο Web HTML/CSS/JS (FastAPI+WebSockets @127.0.0.1:8011)
 # ===========================================================================
 
 server {
@@ -458,6 +459,38 @@ server {
         proxy_http_version 1.1;
 
         # --- Υποστήριξη WebSockets (ζωντανές ερωτήσεις/απαντήσεις) ---
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Οι συνδέσεις WS μένουν ανοιχτές καθ' όλη τη διάρκεια του μαθήματος
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    3600s;
+        proxy_read_timeout    3600s;
+        proxy_buffering off;
+    }
+
+    # -----------------------------------------------------------------
+    # 6γ2. Εργαστήριο Web (HTML / CSS / JS) — @127.0.0.1:8011, WebSockets
+    #      FastAPI + SQLite (systemd: school-weblab.service). Οι μαθητές
+    #      δουλεύουν ατομικά (localStorage) ή σε δωμάτια ομάδας με 4-ψήφιο
+    #      PIN· ο καθηγητής (κωδικός teacher2026, HMAC cookie) κάνει
+    #      broadcast/κλείδωμα και δημοσιεύει στα /apps/ (custom-apps).
+    #      ΣΗΜΕΙΩΣΗ: η 8010 ανήκει ήδη στο excalidraw-room (/board-ws/).
+    # -----------------------------------------------------------------
+    location = /web-lab {
+        return 301 /web-lab/;
+    }
+
+    location ^~ /web-lab/ {
+        proxy_pass http://127.0.0.1:8011/;
+        proxy_http_version 1.1;
+
+        # --- Υποστήριξη WebSockets (ζωντανός συγχρονισμός κώδικα τάξης) ---
         proxy_set_header Upgrade    $http_upgrade;
         proxy_set_header Connection "upgrade";
 

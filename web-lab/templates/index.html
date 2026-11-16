@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Εργαστήριο Web (HTML / CSS / JS)</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<script src="/assets/tailwind.min.js"></script>
+<script>window.LOGGED_IN = {{ 'true' if logged_in else 'false' }};</script>
+<!-- CodeMirror 5 — 100% τοπικά αρχεία (λειτουργία χωρίς Internet/CDN) -->
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/codemirror/codemirror.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/codemirror/theme/material-darker.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/codemirror/theme/eclipse.min.css') }}">
+<script src="{{ url_for('static', path='vendor/codemirror/codemirror.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/mode/xml/xml.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/mode/css/css.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/mode/javascript/javascript.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/mode/htmlmixed/htmlmixed.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/edit/closetag.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/edit/closebrackets.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/edit/matchbrackets.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/edit/matchtags.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/fold/xml-fold.min.js') }}"></script>
+<style>
+  [x-cloak]{display:none !important}
+  body{font-family:"DejaVu Sans","Liberation Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .CodeMirror{height:100%;font-size:13.5px;line-height:1.45;
+    font-family:"DejaVu Sans Mono","Liberation Mono",Consolas,Menlo,monospace}
+  /* Σκούρο θέμα editor */
+  .dark-editor .CodeMirror{background:#0f172a;color:#e2e8f0}
+  .dark-editor .CodeMirror-gutters{background:#0f172a;border-right:1px solid #1e293b}
+  .dark-editor .CodeMirror-linenumber{color:#475569}
+  .dark-editor .CodeMirror-cursor{border-left:1.5px solid #e2e8f0}
+  .dark-editor .CodeMirror-selected{background:#334155 !important}
+  .dark-editor .cm-tag{color:#7dd3fc}.dark-editor .cm-attribute{color:#fbbf24}
+  .dark-editor .cm-string{color:#86efac}.dark-editor .cm-keyword{color:#c4b5fd}
+  .dark-editor .cm-number{color:#fda4af}.dark-editor .cm-comment{color:#64748b}
+  .dark-editor .cm-def{color:#93c5fd}.dark-editor .cm-property{color:#7dd3fc}
+  .dark-editor .cm-atom{color:#fda4af}.dark-editor .cm-qualifier{color:#fbbf24}
+  .dark-editor .cm-builtin{color:#67e8f9}.dark-editor .cm-variable-2{color:#93c5fd}
+  .dark-editor .CodeMirror-matchingtag{background:rgba(56,189,248,.22)}
+  .dark-editor .CodeMirror-matchingbracket{color:#fbbf24 !important;font-weight:bold}
+  /* Φωτεινό θέμα editor */
+  .light-editor .CodeMirror{background:#ffffff;color:#1e293b}
+  .light-editor .CodeMirror-gutters{background:#f8fafc;border-right:1px solid #e2e8f0}
+  .console-line{white-space:pre-wrap;word-break:break-word}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  .dark-scroll::-webkit-scrollbar-thumb{background:#334155;border-radius:6px}
+  .dark-scroll::-webkit-scrollbar-track{background:transparent}
+</style>
+<!-- ΠΡΟΣΟΧΗ: τα snippets/app πρέπει να εκτελεστούν ΠΡΙΝ το Alpine (αλλιώς το
+     x-data="weblab()" τρέχει πριν οριστεί η συνάρτηση). Χωρίς defer + στο τέλος
+     του body εγγυάται τη σειρά· το Alpine ξεκινά στο DOMContentLoaded. -->
+<script src="{{ url_for('static', path='snippets.js') }}"></script>
+<script src="{{ url_for('static', path='app.js') }}"></script>
+<script defer src="/assets/alpine.min.js"></script>
+</head>
+<body x-data="weblab()" x-init="init()" :class="dark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-800'"
+      class="antialiased h-screen flex flex-col overflow-hidden">
+
+<!-- ================= TOOLBAR ================= -->
+<header :class="dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'" class="border-b px-3 py-2 flex flex-wrap items-center gap-2 shrink-0">
+  <a href="/" class="flex items-center gap-2 mr-1" title="Επιστροφή στην Πύλη">
+    <span class="w-9 h-9 rounded-xl grid place-items-center text-xl bg-gradient-to-br from-orange-500 to-pink-600 text-white">🌐</span>
+    <span class="hidden md:block leading-tight">
+      <span class="block font-extrabold text-sm">Εργαστήριο Web</span>
+      <span class="block text-[11px]" :class="dark ? 'text-slate-400' : 'text-slate-500'">HTML / CSS / JS</span>
+    </span>
+  </a>
+
+  <button @click="run()" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition" title="Ctrl+Enter">▶ Εκτέλεση / Ανανέωση</button>
+
+  <label class="flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none px-2 py-1.5 rounded-lg"
+         :class="dark ? 'bg-slate-800' : 'bg-slate-100'">
+    <input type="checkbox" x-model="autoRun" @change="savePrefs()" class="accent-emerald-600 w-4 h-4">
+    ⚡ Αυτόματη Ενημέρωση
+  </label>
+
+  <div class="w-px h-6 mx-1" :class="dark ? 'bg-slate-700' : 'bg-slate-300'"></div>
+
+  <!-- Snippets dropdown -->
+  <div class="relative" @click.outside="snipOpen=false">
+    <button @click="snipOpen=!snipOpen" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition">
+      📚 Έτοιμα Snippets &amp; Πρότυπα ▾
+    </button>
+    <div x-show="snipOpen" x-cloak x-transition
+         :class="dark ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-200'"
+         class="absolute left-0 mt-2 w-80 max-h-[70vh] overflow-y-auto dark-scroll rounded-xl border shadow-2xl z-50 p-2">
+      <template x-for="cat in snippetCats" :key="cat.title">
+        <div class="mb-1">
+          <button @click="cat.open=!cat.open" class="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-sm font-bold"
+                  :class="dark ? 'hover:bg-slate-700' : 'hover:bg-slate-100'">
+            <span x-text="cat.icon + ' ' + cat.title"></span><span x-text="cat.open ? '▴' : '▾'"></span>
+          </button>
+          <div x-show="cat.open">
+            <template x-for="s in cat.items" :key="s.name">
+              <button @click="insertSnippet(s)" class="w-full text-left px-3 py-1.5 rounded-lg text-[13px] transition"
+                      :class="dark ? 'hover:bg-indigo-600/40 text-slate-300' : 'hover:bg-indigo-50 text-slate-600'">
+                <span x-text="s.name"></span>
+                <span x-show="s.starter" class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 font-bold">ΟΛΟΚΛΗΡΟ PROJECT</span>
+              </button>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Συνεργασία -->
+  <button x-show="!room.pin" @click="openModal('collab')" class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+          :class="dark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-200 hover:bg-slate-300'">👥 Συνεργασία</button>
+  <div x-show="room.pin" x-cloak class="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-bold"
+       :class="dark ? 'bg-cyan-900/60 text-cyan-200 ring-1 ring-cyan-700' : 'bg-cyan-100 text-cyan-800 ring-1 ring-cyan-300'">
+    <span :class="wsOk ? 'text-emerald-400' : 'text-red-400'">●</span>
+    <span>Δωμάτιο <span x-text="room.pin" class="tracking-widest"></span></span>
+    <button @click="openModal('members')" class="underline decoration-dotted" title="Συνδεδεμένοι συμμαθητές">
+      👤 <span x-text="members.length"></span>
+    </button>
+    <button @click="leaveRoom()" class="ml-1 px-1.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/40" title="Έξοδος από το δωμάτιο">✕</button>
+  </div>
+
+  <!-- Εργαλεία καθηγητή (μόνο μέσα σε δωμάτιο) -->
+  <template x-if="room.pin && isTeacher">
+    <div class="flex items-center gap-1.5">
+      <button @click="broadcastCode()" class="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold" title="Ο κώδικάς σου αντικαθιστά τον κώδικα όλων στο δωμάτιο">📡 Αποστολή Κώδικα σε Όλους</button>
+      <button @click="toggleLock()" class="px-2.5 py-1.5 rounded-lg text-xs font-bold text-white"
+              :class="room.locked ? 'bg-red-600 hover:bg-red-500' : 'bg-slate-600 hover:bg-slate-500'"
+              x-text="room.locked ? '🔓 Ξεκλείδωμα Επεξεργασίας' : '🔒 Μόνο Ανάγνωση (Προβολή στον Πίνακα)'"></button>
+    </div>
+  </template>
+  <span x-show="room.pin && room.locked && !isTeacher" x-cloak class="px-2 py-1 rounded-lg bg-red-500/20 text-red-400 text-xs font-bold">🔒 Μόνο Ανάγνωση — ο καθηγητής παρουσιάζει</span>
+
+  <div class="flex-1"></div>
+
+  <!-- Δεξιά: export/publish/theme/teacher -->
+  <button @click="downloadHtml()" class="px-3 py-1.5 rounded-lg text-sm font-semibold transition"
+          :class="dark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-200 hover:bg-slate-300'" title="Ενιαίο αυτόνομο αρχείο για παράδοση στο /exams/">💾 Λήψη .HTML</button>
+  <button @click="openPublish()" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white text-sm font-semibold transition">🚀 Δημοσίευση στο Portal</button>
+  <button @click="toggleTheme()" class="w-9 h-9 rounded-lg grid place-items-center text-lg transition"
+          :class="dark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-200 hover:bg-slate-300'"
+          x-text="dark ? '☀️' : '🌙'" :title="dark ? 'Φωτεινό θέμα' : 'Σκοτεινό θέμα'"></button>
+  <button x-show="!isTeacher" @click="openModal('teacher')" class="w-9 h-9 rounded-lg grid place-items-center text-lg transition"
+          :class="dark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-200 hover:bg-slate-300'" title="Είσοδος Καθηγητή">🔑</button>
+  <button x-show="isTeacher" x-cloak @click="teacherLogout()" class="px-2 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-500 text-xs font-bold ring-1 ring-emerald-500/40" title="Κλικ για έξοδο από τη λειτουργία καθηγητή">✓ Καθηγητής</button>
+</header>
+
+<!-- ================= ΚΥΡΙΩΣ ΧΩΡΟΣ: 3 EDITORS + PREVIEW ================= -->
+<main class="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 p-2">
+
+  <!-- Αριστερά: HTML / CSS / JS (κάθετα στοιβαγμένα, ή tabs σε μικρές οθόνες) -->
+  <section class="lg:w-1/2 min-h-0 flex flex-col gap-2">
+    <!-- Mobile tabs -->
+    <div class="lg:hidden flex gap-1">
+      <template x-for="p in ['html','css','js']" :key="p">
+        <button @click="activeTab=p; refreshEditors()" class="flex-1 py-1.5 rounded-lg text-xs font-bold uppercase"
+                :class="activeTab===p ? 'bg-indigo-600 text-white' : (dark ? 'bg-slate-800' : 'bg-white')"
+                x-text="p==='js' ? 'JavaScript' : p"></button>
+      </template>
+    </div>
+    <!-- Σταθερά πάνελ (ΟΧΙ x-for: το Alpine κλωνοποιεί templates και θα
+         διπλασιάζονταν οι CodeMirror editors κατά το init) -->
+    <div class="flex-1 min-h-0 rounded-xl overflow-hidden border flex-col"
+         :class="[dark ? 'border-slate-700' : 'border-slate-300', (activeTab==='html' ? 'flex' : 'hidden') + ' lg:flex']">
+      <div class="px-3 py-1.5 flex items-center justify-between text-xs font-bold shrink-0"
+           :class="dark ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-600'">
+        <span><span class="text-orange-400">🧱</span> HTML — Δομή</span>
+        <span class="font-normal opacity-70">τα tags κλείνουν αυτόματα</span>
+      </div>
+      <div class="flex-1 min-h-0" :class="dark ? 'dark-editor' : 'light-editor'">
+        <textarea id="code-html"></textarea>
+      </div>
+    </div>
+    <div class="flex-1 min-h-0 rounded-xl overflow-hidden border flex-col"
+         :class="[dark ? 'border-slate-700' : 'border-slate-300', (activeTab==='css' ? 'flex' : 'hidden') + ' lg:flex']">
+      <div class="px-3 py-1.5 flex items-center justify-between text-xs font-bold shrink-0"
+           :class="dark ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-600'">
+        <span><span class="text-sky-400">🎨</span> CSS — Εμφάνιση</span>
+        <span class="font-normal opacity-70">χρώματα, γραμματοσειρές, διάταξη</span>
+      </div>
+      <div class="flex-1 min-h-0" :class="dark ? 'dark-editor' : 'light-editor'">
+        <textarea id="code-css"></textarea>
+      </div>
+    </div>
+    <div class="flex-1 min-h-0 rounded-xl overflow-hidden border flex-col"
+         :class="[dark ? 'border-slate-700' : 'border-slate-300', (activeTab==='js' ? 'flex' : 'hidden') + ' lg:flex']">
+      <div class="px-3 py-1.5 flex items-center justify-between text-xs font-bold shrink-0"
+           :class="dark ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-600'">
+        <span><span class="text-yellow-400">⚡</span> JavaScript — Διαδραστικότητα</span>
+        <span class="font-normal opacity-70">console.log → κονσόλα κάτω δεξιά</span>
+      </div>
+      <div class="flex-1 min-h-0" :class="dark ? 'dark-editor' : 'light-editor'">
+        <textarea id="code-js"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <!-- Δεξιά: Ζωντανή Προεπισκόπηση + Κονσόλα -->
+  <section class="lg:w-1/2 min-h-0 flex flex-col gap-2">
+    <div class="flex-1 min-h-0 rounded-xl overflow-hidden border flex flex-col"
+         :class="dark ? 'border-slate-700' : 'border-slate-300'">
+      <div class="px-3 py-1.5 flex items-center justify-between text-xs font-bold shrink-0"
+           :class="dark ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-600'">
+        <span>🖥️ Ζωντανή Προεπισκόπηση</span>
+        <span class="font-normal opacity-70" x-text="lastRun ? ('Τελευταία εκτέλεση: ' + lastRun) : 'Πάτα ▶ Εκτέλεση'"></span>
+      </div>
+      <iframe id="preview" class="flex-1 w-full bg-white" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="Ζωντανή Προεπισκόπηση"></iframe>
+    </div>
+    <div class="h-44 shrink-0 rounded-xl overflow-hidden border flex flex-col"
+         :class="dark ? 'border-slate-700' : 'border-slate-300'">
+      <div class="px-3 py-1.5 flex items-center justify-between text-xs font-bold shrink-0"
+           :class="dark ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-600'">
+        <span>🧾 Κονσόλα JavaScript <span x-show="consoleErrors>0" x-cloak class="ml-1 px-1.5 rounded bg-red-500/20 text-red-400" x-text="consoleErrors + ' σφάλματα'"></span></span>
+        <button @click="consoleLines=[]; consoleErrors=0" class="px-2 py-0.5 rounded text-[11px]"
+                :class="dark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-300 hover:bg-slate-400'">🧹 Καθαρισμός</button>
+      </div>
+      <div id="console-box" class="flex-1 overflow-y-auto dark-scroll px-3 py-1.5 font-mono text-[12px] leading-relaxed"
+           :class="dark ? 'bg-slate-900' : 'bg-slate-50'">
+        <template x-for="(line, i) in consoleLines" :key="i">
+          <div class="console-line border-b py-0.5"
+               :class="[dark ? 'border-slate-800' : 'border-slate-200',
+                        line.kind==='error' ? 'text-red-400' : line.kind==='warn' ? 'text-amber-400' : line.kind==='info' ? 'text-sky-400' : (dark ? 'text-slate-300' : 'text-slate-700')]">
+            <span class="opacity-50 select-none" x-text="line.time + ' › '"></span><span x-text="line.text"></span>
+          </div>
+        </template>
+        <div x-show="consoleLines.length===0" class="opacity-50 italic py-1">Τα μηνύματα console.log() και τα σφάλματα JS εμφανίζονται εδώ — χωρίς DevTools (F12)!</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ================= STATUS BAR ================= -->
+<footer class="px-3 py-1 text-[11px] flex items-center gap-3 border-t shrink-0"
+        :class="dark ? 'bg-slate-900 border-slate-700 text-slate-400' : 'bg-white border-slate-200 text-slate-500'">
+  <span x-text="room.pin ? ('👥 Συνεργατικό Δωμάτιο ' + room.pin + (room.name ? ' — ' + room.name : '')) : '👤 Ατομική Λειτουργία (Solo) — αυτόματη αποθήκευση στον browser'"></span>
+  <span x-show="savedAt" x-cloak x-text="'💾 ' + savedAt"></span>
+  <div class="flex-1"></div>
+  <span class="hidden sm:inline">Ctrl+Enter = Εκτέλεση · Τα tags κλείνουν αυτόματα</span>
+</footer>
+
+<!-- ================= MODALS ================= -->
+<div x-show="modal" x-cloak class="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60" @click.self="modal=''">
+  <div :class="dark ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800'"
+       class="w-full max-w-md rounded-2xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto dark-scroll" @keydown.escape.window="modal=''">
+
+    <!-- Συνεργασία: δημιουργία / είσοδος δωματίου -->
+    <div x-show="modal==='collab'">
+      <h3 class="text-lg font-extrabold flex items-center gap-2">👥 Συνεργατικό Δωμάτιο Ομάδας</h3>
+      <p class="text-sm mt-1 opacity-70">Γράψτε HTML/CSS/JS ταυτόχρονα με τους συμμαθητές σας. Ο κώδικας συγχρονίζεται ζωντανά και αποθηκεύεται στον server.</p>
+      <label class="block mt-4 text-xs font-bold">Το όνομά σου</label>
+      <input x-model="myName" maxlength="40" placeholder="π.χ. Μαρία" class="mt-1 w-full px-3 py-2 rounded-lg border text-sm"
+             :class="dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-300'">
+      <button @click="createRoom()" class="mt-4 w-full py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm transition">➕ Δημιουργία Δωματίου Συνεργασίας</button>
+      <div class="my-4 flex items-center gap-2 text-xs opacity-50"><div class="flex-1 h-px bg-current"></div>ή μπες σε υπάρχον δωμάτιο<div class="flex-1 h-px bg-current"></div></div>
+      <label class="block text-xs font-bold">4-ψήφιος κωδικός δωματίου (PIN)</label>
+      <input x-model="joinPin" maxlength="4" inputmode="numeric" placeholder="π.χ. 7342" class="mt-1 w-full px-3 py-2 rounded-lg border text-center text-xl tracking-[0.5em] font-bold"
+             :class="dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-300'" @keydown.enter="joinRoom()">
+      <button @click="joinRoom()" class="mt-3 w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition">🚪 Είσοδος στο Δωμάτιο</button>
+      <p x-show="modalError" x-cloak class="mt-3 text-sm text-red-400 font-semibold" x-text="modalError"></p>
+    </div>
+
+    <!-- Συνδεδεμένοι συμμαθητές -->
+    <div x-show="modal==='members'">
+      <h3 class="text-lg font-extrabold">👤 Συνδεδεμένοι στο Δωμάτιο <span x-text="room.pin" class="tracking-widest"></span></h3>
+      <p class="text-sm mt-1 opacity-70" x-text="room.name ? ('Όνομα δωματίου: ' + room.name) : ''"></p>
+      <ul class="mt-4 space-y-1.5">
+        <template x-for="(m, i) in members" :key="i">
+          <li class="px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2"
+              :class="dark ? 'bg-slate-700' : 'bg-slate-100'">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span x-text="m.name"></span>
+            <span x-show="m.teacher" class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 font-bold">ΚΑΘΗΓΗΤΗΣ</span>
+          </li>
+        </template>
+      </ul>
+      <button @click="modal=''" class="mt-4 w-full py-2 rounded-lg text-sm font-bold"
+              :class="dark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-200 hover:bg-slate-300'">Κλείσιμο</button>
+    </div>
+
+    <!-- Είσοδος καθηγητή -->
+    <div x-show="modal==='teacher'">
+      <h3 class="text-lg font-extrabold">🔑 Είσοδος Καθηγητή</h3>
+      <p class="text-sm mt-1 opacity-70">Με τον κωδικό καθηγητή ξεκλειδώνουν: «Αποστολή Κώδικα σε Όλους», «Μόνο Ανάγνωση» και η «Δημοσίευση στο Portal».</p>
+      <input type="password" x-model="teacherPass" placeholder="Κωδικός καθηγητή" class="mt-4 w-full px-3 py-2 rounded-lg border text-sm"
+             :class="dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-300'" @keydown.enter="teacherLogin()">
+      <button @click="teacherLogin()" class="mt-3 w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition">Ξεκλείδωμα</button>
+      <p x-show="modalError" x-cloak class="mt-3 text-sm text-red-400 font-semibold" x-text="modalError"></p>
+    </div>
+
+    <!-- Δημοσίευση στο Portal -->
+    <div x-show="modal==='publish'">
+      <h3 class="text-lg font-extrabold">🚀 Δημοσίευση στα Custom Apps του Portal</h3>
+      <p class="text-sm mt-1 opacity-70">Το project γίνεται αυτόνομη σελίδα στο <code>/apps/&lt;id&gt;/</code> και εμφανίζεται αμέσως ως κάρτα στο κεντρικό Dashboard!</p>
+      <div x-show="!isTeacher">
+        <label class="block mt-4 text-xs font-bold">Κωδικός καθηγητή</label>
+        <input type="password" x-model="teacherPass" placeholder="Απαιτείται για δημοσίευση" class="mt-1 w-full px-3 py-2 rounded-lg border text-sm"
+               :class="dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-300'">
+      </div>
+      <label class="block mt-3 text-xs font-bold">Αναγνωριστικό (id) — πεζά λατινικά/ψηφία/παύλες</label>
+      <input x-model="pub.id" placeholder="π.χ. istorseilida-taxis-b2" class="mt-1 w-full px-3 py-2 rounded-lg border text-sm font-mono"
+             :class="dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-300'">
+      <label class="block mt-3 text-xs font-bold">Τίτλος (εμφανίζεται στην κάρτα)</label>
+      <input x-model="pub.title" maxlength="200" placeholder="π.χ. Η Ιστοσελίδα του Β2" class="mt-1 w-full px-3 py-2 rounded-lg border text-sm"
+             :class="dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-300'">
+      <label class="block mt-3 text-xs font-bold">Περιγραφή</label>
+      <input x-model="pub.description" maxlength="300" placeholder="Σύντομη περιγραφή της δημιουργίας" class="mt-1 w-full px-3 py-2 rounded-lg border text-sm"
+             :class="dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-300'">
+      <div class="mt-3 flex gap-3">
+        <div class="w-24">
+          <label class="block text-xs font-bold">Εικονίδιο</label>
+          <input x-model="pub.icon" maxlength="4" class="mt-1 w-full px-3 py-2 rounded-lg border text-sm text-center"
+                 :class="dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-300'">
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs font-bold">Πρόσβαση</label>
+          <select x-model="pub.access" class="mt-1 w-full px-3 py-2 rounded-lg border text-sm"
+                  :class="dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-300'">
+            <option value="all">Όλοι (μαθητές &amp; καθηγητές)</option>
+            <option value="teachers">Μόνο καθηγητές</option>
+          </select>
+        </div>
+      </div>
+      <label class="mt-3 flex items-center gap-2 text-xs font-medium cursor-pointer">
+        <input type="checkbox" x-model="pub.replace" class="accent-fuchsia-600 w-4 h-4"> Αντικατάσταση υπάρχουσας εφαρμογής με ίδιο id
+      </label>
+      <button @click="publish()" :disabled="publishing" class="mt-4 w-full py-2.5 rounded-lg bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-sm transition disabled:opacity-50">
+        <span x-show="!publishing">🚀 Δημοσίευση τώρα</span><span x-show="publishing" x-cloak>⏳ Δημοσίευση…</span>
+      </button>
+      <p x-show="modalError" x-cloak class="mt-3 text-sm text-red-400 font-semibold" x-text="modalError"></p>
+      <p x-show="pubUrl" x-cloak class="mt-3 text-sm text-emerald-400 font-semibold">✅ Δημοσιεύτηκε! <a :href="pubUrl" target="_blank" class="underline" x-text="pubUrl"></a></p>
+    </div>
+  </div>
+</div>
+
+<!-- Toast ειδοποιήσεων -->
+<div class="fixed bottom-4 right-4 z-50 space-y-2">
+  <template x-for="t in toasts" :key="t.id">
+    <div x-transition class="px-4 py-2.5 rounded-xl shadow-2xl text-sm font-semibold text-white max-w-sm"
+         :class="t.kind==='error' ? 'bg-red-600' : t.kind==='warn' ? 'bg-amber-600' : 'bg-emerald-600'" x-text="t.text"></div>
+  </template>
+</div>
+
+</body>
+</html>
