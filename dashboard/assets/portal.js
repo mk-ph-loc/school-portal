@@ -16,6 +16,12 @@ function portal() {
     unlocked: false,
     year: new Date().getFullYear(),
 
+    // Δικές μου εφαρμογές (custom-apps/) — φορτώνονται από το apps-manifest.json
+    // που παράγει το scripts/build-apps-manifest.py από τα app.json των υποφακέλων.
+    customApps: [],
+    customAppsLoaded: false,
+    customAppsError: false,
+
     classes: [
       { slug: 'gymnasio-a', title: "Α' Γυμνασίου", level: 'Γυμνάσιο', icon: '🅰️',
         desc: 'Πρώτα βήματα στην Πληροφορική, αλγόριθμοι και εισαγωγή στην ψευδογλώσσα.',
@@ -43,6 +49,27 @@ function portal() {
       } catch (e) {
         this.unlocked = false; // π.χ. απενεργοποιημένο storage
       }
+      this.loadCustomApps();
+    },
+
+    async loadCustomApps() {
+      try {
+        const res = await fetch('/apps/apps-manifest.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        this.customApps = Array.isArray(data.apps) ? data.apps : [];
+      } catch (e) {
+        this.customApps = [];
+        this.customAppsError = true; // π.χ. δεν έχει παραχθεί ακόμη το manifest
+      } finally {
+        this.customAppsLoaded = true;
+      }
+    },
+
+    // Κάρτες ορατές στον τρέχοντα χρήστη: access "all" → όλοι,
+    // "teachers" → μόνο σε ξεκλείδωτη Λειτουργία Καθηγητή (UX gate, βλ. σημείωση ασφαλείας).
+    visibleCustomApps() {
+      return this.customApps.filter(a => a.access !== 'teachers' || this.unlocked);
     },
 
     openModal() {

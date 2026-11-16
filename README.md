@@ -34,6 +34,7 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/blockly/` | Blockly Games (ελληνικά) | Επίσημο offline static πακέτο Google (0 MB RAM) | Ελεύθερη |
 | `/sql/` | SQL Playground | Στατικό HTML + sql.js/SQLite WASM (0 MB RAM) | Ελεύθερη |
 | `/pdf-tools/` | PDF Studio (merge/split/υδατογράφημα) | Στατικό HTML + pdf-lib, 100% τοπικά (0 MB RAM) | Ελεύθερη |
+| `/apps/<όνομα>/` | 🚀 Δικές μου Εφαρμογές & Προσομοιώσεις | Στατικά HTML/CSS/JS από `custom-apps/` (0 MB RAM) | Ελεύθερη / κάρτες `teachers` μόνο για καθηγητές |
 | `/share/` | Κοινόχρηστα Αρχεία | FileBrowser Go binary @ `127.0.0.1:8003` (~15 MB) | 🔐 Login (`admin`) |
 
 ### 🧪 Διαδραστικά Εργαστήρια (100% static — 0 MB RAM στον server)
@@ -50,6 +51,16 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 - **`/pdf-tools/`** — PDF Studio: συγχώνευση πολλών PDF, εξαγωγή σελίδων (π.χ. `1-3,5`)
   και υδατογράφημα/αρίθμηση με ελληνική γραμματοσειρά (DejaVu subset + fontkit).
   Τα αρχεία επεξεργάζονται **αποκλειστικά στον browser** — κανένα upload. Πηγή: `config/pdf-tools/`.
+
+### 🚀 Δικές μου Εφαρμογές (`/apps/` — custom-apps framework)
+
+Πρότυπο μηχανισμός για **τις δικές σου standalone εφαρμογές**: κάθε υποφάκελος του
+`custom-apps/` με `index.html` + `app.json` σερβίρεται αυτόματα στο `/apps/<όνομα>/`
+από τον Nginx (χωρίς reload) και εμφανίζεται ως κάρτα στο Dashboard μέσω του
+`apps-manifest.json` που παράγει το `scripts/build-apps-manifest.py` (ενσωματωμένο
+στο `install.sh`). Έτοιμο παράδειγμα: **`/apps/binary-converter/`** (μετατροπέας
+δυαδικού με 8 διαδραστικά διακοπτάκια bits).
+📖 **Πλήρης οδηγός: [`CUSTOM-APPS-GUIDE.md`](CUSTOM-APPS-GUIDE.md)**
 
 ### 🔐 Πρόσβαση Καθηγητών
 
@@ -103,6 +114,11 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   ├── templates/          # base/student/teacher.html (Jinja2)
 │   └── static/             # student.js, teacher.js (vanilla JS + WebSocket)
 ├── lab-app/                # ΜΕΛΛΟΝΤΙΚΟ — δείτε README.md
+├── custom-apps/            # 🚀 Δικές μου εφαρμογές (/apps/<όνομα>/, static, 0 MB)
+│   ├── _template/          # Boilerplate: index.html + app.json (δεν σερβίρεται)
+│   ├── binary-converter/   # Παράδειγμα: δυαδικό ↔ δεκαδικό ↔ hex με bit switches
+│   └── apps-manifest.json  # Παράγεται από scripts/build-apps-manifest.py
+├── CUSTOM-APPS-GUIDE.md    # Οδηγός προσθήκης δικών σου εφαρμογών
 ├── config/                 # Source of truth για nginx & systemd
 │   ├── nginx/school-portal
 │   └── systemd/school-{pandoc,exams,filebrowser,livequiz}.service, school-mkdocs.{service,path}

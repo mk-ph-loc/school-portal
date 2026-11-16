@@ -285,6 +285,57 @@
       Το <code>/share/</code> προστατεύεται με δική του σύνδεση (χρήστης <strong>admin</strong>, κωδικός καθηγητών).
     </p>
   </section>
+
+  <!-- ================= ΔΙΚΕΣ ΜΟΥ ΕΦΑΡΜΟΓΕΣ & ΠΡΟΣΟΜΟΙΩΣΕΙΣ ================= -->
+  <section id="custom-apps">
+    <div class="flex items-end justify-between flex-wrap gap-3 mb-6">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-900 flex items-center gap-2">🚀 Δικές μου Εφαρμογές &amp; Προσομοιώσεις</h2>
+        <p class="text-slate-600 mt-1">Standalone εφαρμογές HTML/CSS/JS από το <code>custom-apps/</code> — σερβίρονται απευθείας από τον Nginx (<strong>0 MB RAM</strong>) και εμφανίζονται εδώ αυτόματα.</p>
+      </div>
+      <span class="text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">Χωρίς κωδικό*</span>
+    </div>
+
+    <div x-show="customAppsLoaded && visibleCustomApps().length" x-cloak class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <template x-for="app in visibleCustomApps()" :key="app.id">
+        <a :href="app.url" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+          <div class="flex items-start justify-between">
+            <div class="w-12 h-12 rounded-xl bg-violet-100 grid place-items-center text-2xl" x-text="app.icon"></div>
+            <span x-show="app.access === 'teachers'"
+                  class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200">🔐 Καθηγητές</span>
+            <span x-show="app.access !== 'teachers'"
+                  class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">0 MB RAM</span>
+          </div>
+          <h3 class="mt-4 text-lg font-bold text-slate-900" x-text="app.title"></h3>
+          <p class="mt-1 text-sm text-slate-600 leading-relaxed" x-text="app.description"></p>
+          <div class="mt-4 flex items-center justify-between gap-2">
+            <span class="text-sm font-semibold text-violet-700">Άνοιγμα →</span>
+            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600" x-text="app.category"></span>
+          </div>
+        </a>
+      </template>
+    </div>
+
+    <!-- Κενή κατάσταση / οδηγίες προσθήκης πρώτης εφαρμογής -->
+    <div x-show="customAppsLoaded && !visibleCustomApps().length && !customAppsError" x-cloak
+         class="rounded-2xl border-2 border-dashed border-slate-300 bg-white/60 p-8 text-center">
+      <div class="text-3xl">📦</div>
+      <p class="mt-2 font-semibold text-slate-700">Δεν υπάρχουν ακόμη δικές σου εφαρμογές.</p>
+      <p class="mt-1 text-sm text-slate-500">Αντέγραψε το <code>custom-apps/_template/</code> σε νέο υποφάκελο, συμπλήρωσε το <code>app.json</code> και τρέξε<br>
+        <code class="inline-block mt-1 px-2 py-1 rounded bg-slate-100">python3 scripts/build-apps-manifest.py</code> — η κάρτα θα εμφανιστεί εδώ αυτόματα.</p>
+    </div>
+
+    <!-- Σφάλμα φόρτωσης manifest -->
+    <div x-show="customAppsError" x-cloak class="rounded-2xl bg-amber-50 ring-1 ring-amber-200 p-5 text-sm text-amber-800">
+      ⚠️ Δεν ήταν δυνατή η φόρτωση της λίστας εφαρμογών (<code>/apps/apps-manifest.json</code>).
+      Τρέξε <code>python3 /opt/school-portal/scripts/build-apps-manifest.py</code> στον server.
+    </div>
+
+    <p class="mt-4 text-xs text-slate-500">
+      * Οι εφαρμογές με <code>access: "teachers"</code> εμφανίζονται μόνο στη Λειτουργία Καθηγητή.
+      Οδηγός προσθήκης νέας εφαρμογής: <code>CUSTOM-APPS-GUIDE.md</code> στη ρίζα του project.
+    </p>
+  </section>
   <!-- ================= ΓΡΗΓΟΡΗ ΠΡΟΣΒΑΣΗ ================= -->
   <section>
     <h2 class="text-2xl font-bold text-slate-900 mb-6">⚡ Γρήγορη Πρόσβαση</h2>

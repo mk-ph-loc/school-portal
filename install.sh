@@ -117,7 +117,7 @@ fi
 # 3. Δομή φακέλων
 # ---------------------------------------------------------------------------
 log "Δημιουργία δομής φακέλων…"
-mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},lab-app,config/{nginx,systemd},scripts,data/build,data/filebrowser,shared-files}
+mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},lab-app,custom-apps/_template,config/{nginx,systemd},scripts,data/build,data/filebrowser,shared-files}
 mkdir -p "${DOCS_OUT}" "${TOOLS_OUT}"/{cyberchef,it-tools,board,circuits,blockly,sql/vendor,pdf-tools/vendor/fonts}
 ok "Η δομή φακέλων δημιουργήθηκε."
 
@@ -168,6 +168,18 @@ fetch_asset "https://cdn.jsdelivr.net/npm/alpinejs@${ALPINE_VERSION}/dist/cdn.mi
             "${PORTAL_DIR}/dashboard/assets/alpine.min.js" "Alpine.js"
 fetch_asset "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@${TAILWIND_VERSION}/dist/index.global.js" \
             "${PORTAL_DIR}/dashboard/assets/tailwind.min.js" "Tailwind CSS"
+
+# ---------------------------------------------------------------------------
+# 5β. Δικές μου εφαρμογές (custom-apps/) — manifest για το Dashboard
+#     Σαρώνει τα app.json των υποφακέλων (αγνοεί το _template) και παράγει
+#     το custom-apps/apps-manifest.json. Οδηγός: CUSTOM-APPS-GUIDE.md
+# ---------------------------------------------------------------------------
+log "Ενημέρωση manifest δικών μου εφαρμογών (custom-apps/)…"
+if python3 "${PORTAL_DIR}/scripts/build-apps-manifest.py"; then
+    ok "Το apps-manifest.json ενημερώθηκε."
+else
+    warn "Μη έγκυρα app.json στο custom-apps/ — διόρθωσέ τα και τρέξε: python3 scripts/build-apps-manifest.py"
+fi
 
 # ---------------------------------------------------------------------------
 # 6. Pyodide (εκτέλεση Python στον browser, τοπικά)
@@ -536,7 +548,14 @@ chown root:www-data "${PORTAL_DIR}/data/mkdocs-build.lock"
 chmod 664 "${PORTAL_DIR}/data/mkdocs-build.lock"
 
 chmod 755 "${PORTAL_DIR}/scripts/"*.sh 2>/dev/null || true
+chmod 755 "${PORTAL_DIR}/scripts/build-apps-manifest.py" 2>/dev/null || true
 chmod 755 "${PORTAL_DIR}/install.sh"
+
+# custom-apps: static εφαρμογές που σερβίρει ο Nginx (www-data) — μόνο ανάγνωση,
+# επεξεργασία από root/VS Code. Τα αρχεία παρακολουθούνται από το git.
+chown -R root:www-data "${PORTAL_DIR}/custom-apps"
+find "${PORTAL_DIR}/custom-apps" -type d -exec chmod 755 {} +
+find "${PORTAL_DIR}/custom-apps" -type f -exec chmod 644 {} +
 # Προστασία μυστικών
 [[ -f "${PORTAL_DIR}/.env.keys" ]] && chmod 600 "${PORTAL_DIR}/.env.keys"
 ok "Τα δικαιώματα ρυθμίστηκαν."
@@ -638,6 +657,9 @@ check_url "/sql/"                    200
 check_url "/sql/vendor/sql-wasm.wasm" 200
 check_url "/pdf-tools/"              200
 check_url "/pdf-tools/vendor/pdf-lib.min.js" 200
+check_url "/apps/apps-manifest.json" 200
+check_url "/apps/binary-converter/"  200
+check_url "/apps/_template/"         404
 check_url "/share/"                  200
 check_url "/exams/"                  200
 check_url "/exams/teacher"           200
@@ -684,6 +706,9 @@ echo "  ⚡ Κυκλώματα:          http://${IP_ADDR}/circuits/ (CircuitJS1
 echo "  🧩 Blockly Games:      http://${IP_ADDR}/blockly/  (ελληνικά, static, 0 MB)"
 echo "  🗄️  SQL Playground:     http://${IP_ADDR}/sql/      (SQLite WASM, static, 0 MB)"
 echo "  📄 PDF Studio:         http://${IP_ADDR}/pdf-tools/ (pdf-lib, static, 0 MB)"
+echo "  🚀 Δικές μου Εφαρμογές: http://${IP_ADDR}/apps/<όνομα>/ (custom-apps/, static, 0 MB)"
+echo "     Παράδειγμα:         http://${IP_ADDR}/apps/binary-converter/"
+echo "     Οδηγός προσθήκης:   ${PORTAL_DIR}/CUSTOM-APPS-GUIDE.md"
 echo "  📁 Κοινόχρηστα Αρχεία: http://${IP_ADDR}/share/    (${FB_USER} / ${FB_PASS})"
 echo "  📤 Εργασίες & Τεστ:    http://${IP_ADDR}/exams/    (μαθητές χωρίς κωδικό)"
 echo "     Περιβάλλον καθηγητή: http://${IP_ADDR}/exams/teacher  (κωδικός ${TEACHER_PASS})"

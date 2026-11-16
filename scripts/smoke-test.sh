@@ -53,6 +53,14 @@ check "/crypto/assets/main.js"         200
 check "/tools/"                        200
 check "/tools/uuid-generator"          200
 check "/board/"                        200
+
+echo
+echo "${B}=== 2γ. Δικές μου Εφαρμογές (custom-apps) ===${N}"
+check "/apps/apps-manifest.json"       200
+check "/apps/binary-converter/"        200
+check "/apps/binary-converter/app.js"  200
+check "/apps/_template/"               404
+
 check "/share/"                        200
 fb_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 -X POST \
     -d '{"username":"admin","password":"'"$TEACHER_PASS"'"}' "${BASE}/share/api/login")

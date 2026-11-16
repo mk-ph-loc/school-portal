@@ -13,6 +13,7 @@
 #   /blockly/       → Blockly Games (static, ελληνικά — 0 MB RAM)
 #   /sql/           → SQL Playground (static, SQLite WASM — 0 MB RAM)
 #   /pdf-tools/     → PDF Studio (static, pdf-lib — 0 MB RAM)
+#   /apps/          → Δικές μου εφαρμογές (custom-apps/, static — 0 MB RAM)
 #   /share/         → FileBrowser (Go binary @127.0.0.1:8003, ~15 MB RAM)
 #   /exams/         → Παράδοση Εργασιών & Διαγωνίσματα (FastAPI @127.0.0.1:8004)
 #   /live-quiz/     → Ζωντανό Παιχνίδι Τάξης (FastAPI+WebSockets @127.0.0.1:8005)
@@ -266,6 +267,28 @@ server {
         expires 30d;
         add_header Cache-Control "public, immutable";
         access_log off;
+    }
+
+    # 5η. Δικές μου Εφαρμογές & Προσομοιώσεις — custom-apps/ (static, 0 MB RAM)
+    #     ΓΕΝΙΚΟ location: κάθε νέος υποφάκελος του custom-apps/ (π.χ. my-app/)
+    #     σερβίρεται ΑΜΕΣΑ στο /apps/my-app/ χωρίς καμία αλλαγή/reload εδώ.
+    #     Η λίστα καρτών του Dashboard παράγεται από το app.json κάθε εφαρμογής
+    #     με το scripts/build-apps-manifest.py → apps-manifest.json.
+    #     Οδηγός: CUSTOM-APPS-GUIDE.md
+    location = /apps {
+        return 301 /apps/;
+    }
+    location /apps/ {
+        alias /opt/school-portal/custom-apps/;
+        index index.html;
+        try_files $uri $uri/ =404;
+
+        # Όχι επιθετικό caching: οι εκπαιδευτικές εφαρμογές αλλάζουν συχνά
+        add_header Cache-Control "no-cache";
+    }
+    # Το πρότυπο (_template) δεν είναι εφαρμογή — δεν σερβίρεται
+    location ^~ /apps/_template/ {
+        return 404;
     }
 
     # -----------------------------------------------------------------
