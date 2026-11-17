@@ -40,7 +40,7 @@
         <a href="#mathites" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">👨‍🎓 Ζώνη Μαθητών</a>
         <a href="#kathigites" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">🔐 Ζώνη Καθηγητών</a>
         <a href="/docs/" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">📚 Όλο το Υλικό</a>
-        <a href="/docs/games/binary-game.html" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">🎮 Παιχνίδι Δυαδικού</a>
+        <a href="/docs/_paradeigma/games/binary-game.html" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">🎮 Παιχνίδι Δυαδικού</a>
         <a href="#ergaleia" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/20 transition">🧰 Εργαλεία</a>
       </nav>
     </div>
@@ -60,7 +60,7 @@
 
     <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
       <template x-for="c in classes" :key="c.slug">
-        <a :href="'/docs/' + c.slug + '/'"
+        <a :href="'/docs/_paradeigma/' + c.slug + '/'"
            class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
           <div class="flex items-start justify-between">
             <div class="w-12 h-12 rounded-xl grid place-items-center text-2xl" :class="c.bg" x-text="c.icon"></div>
@@ -183,7 +183,7 @@
         <p class="mt-1 text-sm text-slate-600">Μετατροπή Markdown σε DOCX/PDF, σχολικά πρότυπα και αποστολή στο υλικό.</p>
         <div class="mt-4 text-sm font-semibold text-violet-700">Άνοιγμα →</div>
       </a>
-      <a href="/docs/teachers/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+      <a href="/docs/_paradeigma/teachers/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
         <div class="w-12 h-12 rounded-xl bg-amber-100 grid place-items-center text-2xl">🗝️</div>
         <h3 class="mt-4 text-lg font-bold text-slate-900">Λύσεις Καθηγητή</h3>
         <p class="mt-1 text-sm text-slate-600">Απαντήσεις ασκήσεων, φύλλα εργασίας και παιδαγωγικές σημειώσεις.</p>
@@ -207,6 +207,12 @@
         <p class="mt-1 text-sm text-slate-600">Πρόσθεσε τις δικές σου HTML/JS εφαρμογές μέσα από τον browser (ZIP ή επικόλληση κώδικα) και ενσωμάτωσέ τες στα μαθήματα με 1 κλικ.</p>
         <div class="mt-4 text-sm font-semibold text-emerald-700">Άνοιγμα →</div>
       </a>
+      <a href="/lesson-wizard/" class="card-hover block rounded-2xl bg-white p-6 ring-2 ring-indigo-300 shadow-sm">
+        <div class="w-12 h-12 rounded-xl bg-indigo-100 grid place-items-center text-2xl">🧙</div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">Lesson Wizard — Ημερήσια Μαθήματα</h3>
+        <p class="mt-1 text-sm text-slate-600">Οπτικός επεξεργαστής σχεδίων μαθήματος: drag &amp; drop διδακτικών φάσεων (αφόρμηση, συζήτηση, παρουσίαση, δραστηριότητα, αξιολόγηση), σημειώσεις καθηγητή, υλικό φακέλου, ωράριο από Excel &amp; ενεργό μάθημα ανά τμήμα.</p>
+        <div class="mt-4 text-sm font-semibold text-indigo-700">Άνοιγμα →</div>
+      </a>
       <a href="/md-publish/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
         <div class="w-12 h-12 rounded-xl bg-cyan-100 grid place-items-center text-2xl">📤</div>
         <h3 class="mt-4 text-lg font-bold text-slate-900">Δημοσίευση HedgeDoc → MkDocs</h3>
@@ -222,7 +228,7 @@
     </div>
 
     <p x-show="unlocked" x-cloak class="mt-4 text-xs text-slate-500">
-      ℹ️ Οι περιοχές <code>/pandoc/</code> και <code>/docs/teachers/</code> προστατεύονται επιπλέον από τον διακομιστή (HTTP Basic Auth).
+      ℹ️ Οι περιοχές <code>/pandoc/</code> και <code>/docs/_paradeigma/teachers/</code> προστατεύονται επιπλέον από τον διακομιστή (HTTP Basic Auth).
       Χρησιμοποίησε όνομα χρήστη <strong>teacher</strong> και τον ίδιο κωδικό.
     </p>
   </section>
@@ -397,15 +403,15 @@
   <section>
     <h2 class="text-2xl font-bold text-slate-900 mb-6">⚡ Γρήγορη Πρόσβαση</h2>
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <a href="/docs/games/binary-game.html" class="card-hover rounded-xl bg-white p-5 ring-1 ring-slate-200 block">
+      <a href="/docs/_paradeigma/games/binary-game.html" class="card-hover rounded-xl bg-white p-5 ring-1 ring-slate-200 block">
         <div class="text-2xl">🎮</div><h3 class="mt-2 font-bold">Παιχνίδι Δυαδικού</h3>
         <p class="text-sm text-slate-600 mt-1">Μετατροπές δυαδικού ↔ δεκαδικού.</p>
       </a>
-      <a href="/docs/gymnasio-a/python/" class="card-hover rounded-xl bg-white p-5 ring-1 ring-slate-200 block">
+      <a href="/docs/_paradeigma/gymnasio-a/python/" class="card-hover rounded-xl bg-white p-5 ring-1 ring-slate-200 block">
         <div class="text-2xl">🐍</div><h3 class="mt-2 font-bold">Python στον Browser</h3>
         <p class="text-sm text-slate-600 mt-1">Εκτέλεση κώδικα χωρίς εγκατάσταση.</p>
       </a>
-      <a href="/docs/lykeio-a/quiz/" class="card-hover rounded-xl bg-white p-5 ring-1 ring-slate-200 block">
+      <a href="/docs/_paradeigma/lykeio-a/quiz/" class="card-hover rounded-xl bg-white p-5 ring-1 ring-slate-200 block">
         <div class="text-2xl">❓</div><h3 class="mt-2 font-bold">Διαδραστικά Κουίζ</h3>
         <p class="text-sm text-slate-600 mt-1">Αυτοαξιολόγηση με άμεση ανατροφοδότηση.</p>
       </a>

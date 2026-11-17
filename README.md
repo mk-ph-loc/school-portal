@@ -37,6 +37,7 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/pad/admin` | Διαχείριση Etherpad | ίδιο service + **Basic Auth** | 🔐 Καθηγητές (`teacher`) |
 | `/md-pad/` | Συνεργατικό Markdown (HedgeDoc) | HedgeDoc 1.12.0 (Node.js 22 + SQLite) @ `127.0.0.1:8007` | Ελεύθερη (ανώνυμη επεξεργασία) |
 | `/md-publish/` | Δημοσίευση HedgeDoc → MkDocs | FastAPI micro-bridge @ `127.0.0.1:8009`, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
+| `/lesson-wizard/` | 🧙 Lesson Wizard — Ημερήσια Μαθήματα & Ωράριο | FastAPI + openpyxl @ `127.0.0.1:8013`, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
 | `/circuits/` | CircuitJS1 — Προσομοιωτής Κυκλωμάτων | Στατικό build pfalstad/circuitjs1 (0 MB RAM) | Ελεύθερη |
 | `/blockly/` | Blockly Games (ελληνικά) | Επίσημο offline static πακέτο Google (0 MB RAM) | Ελεύθερη |
 | `/sql/` | SQL Playground | Στατικό HTML + sql.js/SQLite WASM (0 MB RAM) | Ελεύθερη |
@@ -147,19 +148,24 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   ├── lab/index.html      # Placeholder «Υπό Κατασκευή» (/lab/)
 │   └── assets/             # Tailwind, Alpine, portal.js (ΤΟΠΙΚΑ)
 ├── mkdocs-site/            # Εκπαιδευτικό υλικό (/docs/)
-│   ├── mkdocs.yml          # language: el, 6 τάξεις, plugins
+│   ├── mkdocs.yml          # language: el, auto-nav Μαθημάτων (Lesson Wizard)
+│   ├── hooks/lesson_phases.py   # φάσεις μαθήματος + απόκρυψη σημειώσεων καθηγητή
 │   ├── docs/
-│   │   ├── gymnasio-{a,b,g}/    # Α', Β', Γ' Γυμνασίου
-│   │   ├── lykeio-{a,b,g}/      # Α', Β', Γ' Λυκείου
-│   │   ├── teachers/            # 🔐 Λύσεις Καθηγητή
-│   │   ├── games/               # binary-game.html + .js
-│   │   ├── media/               # Οδηγίες πολυμέσων
+│   │   ├── mathimata/<τάξη>/<μάθημα>/<ημερήσιο>/  # ΝΕΑ ΔΟΜΗ: 1 φάκελος = 1 μάθημα
+│   │   │   └── index.md + aformisi.png + slides.pdf + διαδραστικά.html + …
+│   │   ├── _paradeigma/         # 📦 παλιό υλικό (gymnasio-*, lykeio-*, games, teachers)
 │   │   ├── videos/ audio/ pdfs/ slides/
 │   │   └── assets/
-│   │       ├── javascripts/     # class-filter, glossa, python-run, quiz
+│   │       ├── javascripts/     # class-filter, glossa, python-run, quiz,
+│   │       │                    # lesson-phases (fullscreen), schedule (ωράριο)
 │   │       ├── stylesheets/     # extra.css
 │   │       └── pyodide/         # Pyodide 314.0.8 (offline)
 │   └── overrides/
+├── apps/lesson-wizard/     # 🧙 Lesson Wizard (/lesson-wizard/, FastAPI @8013)
+│   ├── app.py              # φάσεις CRUD, upload υλικού, ωράριο Excel, /api/check
+│   ├── templates/ static/  # Alpine UI με drag & drop φάσεων
+│   ├── data/               # schedule.json, active-overrides.json, πρότυπο xlsx
+│   └── backups/            # .bak πριν από κάθε εγγραφή
 ├── pandoc-app/             # Visual Pandoc Studio (/pandoc/)
 │   ├── main.py             # FastAPI + pandoc + WeasyPrint
 │   ├── templates/index.html
@@ -404,14 +410,59 @@ bash /opt/school-portal/scripts/smoke-test.sh
 > `websocket-client` στο venv. Δεν χρειάζεται για τη λειτουργία της πύλης —
 > είναι μόνο εργαλείο επαλήθευσης.
 
-### Προσθήκη νέου μαθήματος
+### 📚 Ημερήσια Μαθήματα (νέα δομή) & Lesson Wizard
 
-**Μέσω Studio (προτείνεται):** `/pandoc/` → καρτέλα «🚀 Αποστολή στο MkDocs»
+Κάθε ημερήσιο μάθημα = **ένας φάκελος** στο `docs/mathimata/<τάξη>/<μάθημα>/<ημερήσιο>/`
+με το `index.md` (σχέδιο μαθήματος) **και όλο το υλικό του** (εικόνες αφόρμησης,
+slides.pdf, διαδραστικά .html, φύλλα εργασίας, αποσπάσματα βιβλίου).
 
-**Χειροκίνητα:**
+Το markdown δομείται σε **διδακτικές φάσεις** με markers:
+
+```markdown
+<!-- phase: aformisi | title: Αφόρμηση | duration: 5 -->
+## 🎯 … (εικόνα + λίγες περιεκτικές προτάσεις)
+<!-- /phase -->
+<!-- phase: syzitisi | … --> … <!-- /phase -->
+<!-- phase: parousiasi | … --> … <!-- /phase -->
+<!-- phase: drastiriotita | … --> … <!-- /phase -->
+<!-- phase: aksiologisi | … --> … <!-- /phase -->
+<!-- phase: kleisimo | … --> … <!-- /phase -->
+
+<!-- teacher-notes -->
+Σημειώσεις ΜΟΝΟ για τον καθηγητή (στόχοι, λύσεις, χρόνοι, διαφοροποίηση).
+<!-- /teacher-notes -->
+```
+
+- **Μαθητής:** βλέπει το μάθημα καθαρό + κουμπί **🖥️ Παρουσίαση** (fullscreen,
+  φάση-φάση με βελάκια). Οι σημειώσεις καθηγητή **δεν υπάρχουν καν στο HTML** —
+  εξάγονται σε `index.teacher.html` που ο Nginx σερβίρει μόνο με έγκυρο cookie
+  καθηγητή (`auth_request` → `/lesson-wizard/api/check`).
+- **Καθηγητής:** μετά την είσοδο στο `/lesson-wizard/` βλέπει στην ίδια σελίδα
+  badges φάσεων/χρόνων, μπάρα σχεδίου μαθήματος και τις σημειώσεις inline.
+- **🧙 Lesson Wizard (`/lesson-wizard/`):** drag & drop αναδιάταξη φάσεων,
+  προσθήκη από παλέτα τύπων, επεξεργασία περιεχομένου, upload υλικού στον
+  φάκελο του μαθήματος, δημιουργία νέου μαθήματος από template, αυτόματο
+  `nav` + rebuild, `.bak` backup πριν από κάθε εγγραφή.
+- **🗓️ Ωράριο:** κατέβασε το πρότυπο Excel από το wizard (φύλλα *Τμήματα /
+  Ωρες / Ωραριο*), συμπλήρωσέ το και ανέβασέ το. Ο μαθητής δηλώνει το τμήμα
+  του («Το τμήμα μου» στο header) → βλέπει μόνο τα μαθήματα της τάξης του +
+  widget **«Τώρα στο σχολείο»** με το ενεργό μάθημα της ώρας. Ο καθηγητής
+  μπορεί ανά πάσα στιγμή να ορίσει χειροκίνητα «Ενεργό μάθημα τώρα» ανά τμήμα.
+
+**Πιλότος:** Γ' Γυμνασίου → Πληροφορική → Ε1 Αλγοριθμική (Αναδρομή), 3 ημερήσια
+μαθήματα βασισμένα στο βιβλίο ΙΕΠ (σελ. 7–10) και τις οδηγίες διδασκαλίας 2026-27.
+Το παλιό υλικό διατηρείται άθικτο στο [`/docs/_paradeigma/`](http://localhost/docs/_paradeigma/).
+
+**Έλεγχος πιλότου σε πραγματικό browser:**
 ```bash
-nano /opt/school-portal/mkdocs-site/docs/gymnasio-a/neo-mathima.md
-# πρόσθεσε τη σελίδα στο nav του mkdocs.yml
+/opt/school-portal/venv/bin/python /opt/school-portal/scripts/lessonwizard-test.py
+```
+
+**Χειροκίνητη προσθήκη (χωρίς wizard):**
+```bash
+mkdir -p /opt/school-portal/mkdocs-site/docs/mathimata/gymnasio-g/pliroforiki/m04-titlos
+nano .../m04-titlos/index.md   # με τα phase markers παραπάνω
+# το nav ενημερώνεται αυτόματα από το wizard (ή πρόσθεσέ το μεταξύ των δεικτών AUTO-NAV)
 sudo systemctl start school-mkdocs.service
 ```
 

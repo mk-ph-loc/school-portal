@@ -58,6 +58,8 @@ HEDGEDOC_DIR="${PORTAL_DIR}/apps/hedgedoc"                 # συνεργατι�
 HEDGEDOC_PORT="8007"
 MDBRIDGE_DIR="${PORTAL_DIR}/apps/hedgedoc-bridge"          # γέφυρα δημοσίευσης στο /md-publish/
 MDBRIDGE_PORT="8009"
+LESSONWIZARD_DIR="${PORTAL_DIR}/apps/lesson-wizard"        # ημερήσια μαθήματα στο /lesson-wizard/
+LESSONWIZARD_PORT="8013"
 
 # --- Εργαστήριο Web HTML/CSS/JS (FastAPI + WebSockets + SQLite, χωρίς Docker) ---
 WEBLAB_DIR="${PORTAL_DIR}/web-lab"                         # συνεργατικός editor στο /web-lab/
@@ -796,6 +798,28 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 6ιδ. Lesson Wizard — Ημερήσια Μαθήματα (/lesson-wizard/, FastAPI @8013)
+#      Ο κώδικας (apps/lesson-wizard/) έρχεται από το git· εδώ μόνο τα
+#      δικαιώματα φακέλων data/backups & .cookie-secret (όπως στο md-bridge).
+# ---------------------------------------------------------------------------
+if [[ -f "${LESSONWIZARD_DIR}/app.py" ]]; then
+    chown -R root:www-data "${LESSONWIZARD_DIR}"
+    chmod 2775 "${LESSONWIZARD_DIR}"
+    for sub in data backups; do
+        mkdir -p "${LESSONWIZARD_DIR}/${sub}"
+        chown www-data:www-data "${LESSONWIZARD_DIR}/${sub}"
+        chmod 2775 "${LESSONWIZARD_DIR}/${sub}"
+    done
+    if [[ -f "${LESSONWIZARD_DIR}/.cookie-secret" ]]; then
+        chown www-data:www-data "${LESSONWIZARD_DIR}/.cookie-secret"
+        chmod 600 "${LESSONWIZARD_DIR}/.cookie-secret"
+    fi
+    ok "Το Lesson Wizard είναι έτοιμο."
+else
+    warn "Λείπει το apps/lesson-wizard/app.py — το /lesson-wizard/ δεν θα λειτουργεί."
+fi
+
+# ---------------------------------------------------------------------------
 # 7. Δικαιώματα (setgid ώστε root & www-data να συνεργάζονται)
 # ---------------------------------------------------------------------------
 log "Ρύθμιση δικαιωμάτων…"
@@ -934,6 +958,7 @@ install -m 644 "${PORTAL_DIR}/config/systemd/school-etherpad.service" /etc/syste
 install -m 644 "${PORTAL_DIR}/config/systemd/school-excalidraw-room.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-hedgedoc.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-mdbridge.service" /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-lessonwizard.service" /etc/systemd/system/
 systemctl daemon-reload
 
 systemctl enable --now school-pandoc.service
@@ -969,6 +994,11 @@ if [[ -f "${MDBRIDGE_DIR}/app.py" ]]; then
     systemctl enable --now school-mdbridge.service
 else
     warn "Παράλειψη school-mdbridge.service (λείπει το apps/hedgedoc-bridge/app.py)."
+fi
+if [[ -f "${LESSONWIZARD_DIR}/app.py" ]]; then
+    systemctl enable --now school-lessonwizard.service
+else
+    warn "Παράλειψη school-lessonwizard.service (λείπει το apps/lesson-wizard/app.py)."
 fi
 systemctl enable --now school-mkdocs.path
 systemctl start school-mkdocs.service
@@ -1028,6 +1058,11 @@ check_url "/md-pad/template-demo"    200
 check_url "/md-publish/"             200
 check_url "/md-publish/healthz"      200
 check_url "/md-publish/api/notes"    401
+check_url "/lesson-wizard/"          200
+check_url "/lesson-wizard/healthz"   200
+check_url "/lesson-wizard/api/lessons" 401
+check_url "/lesson-wizard/api/check" 401
+check_url "/lesson-wizard/api/schedule/public" 200
 check_url "/circuits/"               200
 check_url "/circuits/circuitjs.html" 200
 check_url "/blockly/"                200
@@ -1095,6 +1130,7 @@ echo "  📝 Σημειωματάριο Τάξης: http://${IP_ADDR}/pad/     (
 echo "  ✍️  Συνεργατικό Markdown: http://${IP_ADDR}/md-pad/ (HedgeDoc ${HEDGEDOC_VERSION} + SQLite, freely)"
 echo "     Πρότυπο δυνατοτήτων: http://${IP_ADDR}/md-pad/template-demo"
 echo "  📤 Δημοσίευση → MkDocs: http://${IP_ADDR}/md-publish/ (κωδικός ${TEACHER_PASS})"
+echo "  🧙 Lesson Wizard:       http://${IP_ADDR}/lesson-wizard/ (κωδικός ${TEACHER_PASS})"
 echo "  ⚡ Κυκλώματα:          http://${IP_ADDR}/circuits/ (CircuitJS1, static, 0 MB)"
 echo "  🧩 Blockly Games:      http://${IP_ADDR}/blockly/  (ελληνικά, static, 0 MB)"
 echo "  🗄️  SQL Playground:     http://${IP_ADDR}/sql/      (SQLite WASM, static, 0 MB)"
@@ -1132,6 +1168,7 @@ echo "     systemctl status school-etherpad.service"
 echo "     systemctl status school-excalidraw-room.service"
 echo "     systemctl status school-hedgedoc.service"
 echo "     systemctl status school-mdbridge.service"
+echo "     systemctl status school-lessonwizard.service"
 echo "     systemctl start school-mkdocs.service    # rebuild υλικού"
 echo "     journalctl -u school-pandoc.service -f"
 echo "     sudo ${PORTAL_DIR}/install.sh --update   # ενημέρωση"

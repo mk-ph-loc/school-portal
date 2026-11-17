@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Τρίγωνο Sierpinski — Βάθος Αναδρομής</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, 'Segoe UI', sans-serif; margin:0; background:#eceff1; color:#263238; }
+  .wrap { max-width: 900px; margin:0 auto; padding:12px; }
+  h1 { font-size:1.1rem; margin:4px 0 8px; }
+  .controls { display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-bottom:10px; font-size:.9rem; }
+  input[type=range] { width: 220px; }
+  canvas { background:#fff; border:1px solid #b0bec5; border-radius:8px; width:100%; height:auto; display:block; }
+  .info { display:flex; gap:18px; flex-wrap:wrap; font-size:.85rem; margin-top:8px; padding:8px 10px;
+          background:#cfd8dc; border-radius:6px; }
+  .info strong { color:#00695c; }
+  button { border:1px solid #37474f; background:#fff; color:#263238; border-radius:6px;
+           padding:6px 12px; font-size:.85rem; cursor:pointer; }
+  button.primary { background:#00838f; border-color:#00838f; color:#fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔺 Τρίγωνο Sierpinski — σύρε το βάθος της αναδρομής!</h1>
+  <div class="controls">
+    <label>Βάθος αναδρομής: <strong id="dlbl">3</strong>
+      <input type="range" id="depth" min="0" max="7" value="3">
+    </label>
+    <button id="anim" class="primary">▶ Ζωντάνεψε το βήμα-βήμα</button>
+    <button id="reset">↻ Επαναφορά</button>
+  </div>
+  <canvas id="cv" width="880" height="500"></canvas>
+  <div class="info">
+    <span>Χρωματισμένα τρίγωνα: <strong id="count">27</strong> (= 3<sup>βάθος</sup>)</span>
+    <span>Αναδρομικές κλήσεις: <strong id="calls">40</strong></span>
+    <span>Βήμα διακοπής: <strong>βάθος = 0 → γέμισε το τρίγωνο</strong></span>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  var depthInp = document.getElementById('depth'), dlbl = document.getElementById('dlbl');
+  var countEl = document.getElementById('count'), callsEl = document.getElementById('calls');
+  var animBtn = document.getElementById('anim'), resetBtn = document.getElementById('reset');
+  var timer = null, callCount = 0;
+
+  function tri(ax, ay, bx, by, cx, cy, depth) {
+    callCount++;
+    if (depth === 0) {
+      ctx.beginPath();
+      ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(cx, cy); ctx.closePath();
+      ctx.fill();
+      return;
+    }
+    var abx = (ax + bx) / 2, aby = (ay + by) / 2;
+    var bcx = (bx + cx) / 2, bcy = (by + cy) / 2;
+    var cax = (cx + ax) / 2, cay = (cy + ay) / 2;
+    tri(ax, ay, abx, aby, cax, cay, depth - 1);
+    tri(abx, aby, bx, by, bcx, bcy, depth - 1);
+    tri(cax, cay, bcx, bcy, cx, cy, depth - 1);
+  }
+
+  function draw(d) {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = '#00838f';
+    callCount = 0;
+    tri(cv.width / 2, 20, 30, cv.height - 20, cv.width - 30, cv.height - 20, d);
+    dlbl.textContent = d;
+    countEl.textContent = Math.pow(3, d);
+    callsEl.textContent = callCount;
+  }
+
+  depthInp.addEventListener('input', function () {
+    clearTimeout(timer);
+    draw(parseInt(depthInp.value, 10));
+  });
+
+  animBtn.addEventListener('click', function () {
+    clearTimeout(timer);
+    var d = 0;
+    depthInp.value = 0;
+    (function next() {
+      draw(d);
+      depthInp.value = d;
+      if (d < 7) { d++; timer = setTimeout(next, 900); }
+    })();
+  });
+
+  resetBtn.addEventListener('click', function () {
+    clearTimeout(timer);
+    depthInp.value = 3;
+    draw(3);
+  });
+
+  draw(3);
+})();
+</script>
+</body>
+</html>

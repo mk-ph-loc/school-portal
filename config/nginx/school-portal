@@ -3,7 +3,9 @@
 #
 #   /               → Dashboard (στατικό HTML/Tailwind/Alpine)
 #   /docs/          → Εκπαιδευτικό υλικό (static MkDocs στο /var/www/docs)
-#   /docs/teachers/ → Λύσεις Καθηγητή (HTTP Basic Auth)
+#   /docs/_paradeigma/teachers/ → Λύσεις Καθηγητή παλιού υλικού (HTTP Basic Auth)
+#   /docs/mathimata/**/*.teacher.html → Σημειώσεις καθηγητή (auth_request → :8013)
+#   /lesson-wizard/ → Lesson Wizard ημερήσιων μαθημάτων (FastAPI @127.0.0.1:8013)
 #   /pandoc/        → Visual Pandoc Studio (FastAPI @127.0.0.1:8002, Basic Auth)
 #   /lab/           → Διαχείριση Εργαστηρίου (placeholder· μελλοντικά :8001)
 #   /crypto/        → CyberChef (static HTML/JS — 0 MB RAM)
@@ -89,15 +91,46 @@ server {
     # 2. Εκπαιδευτικό Υλικό — static MkDocs (μηδέν RAM)
     # -----------------------------------------------------------------
 
-    # 2α. Περιοχή Καθηγητών — HTTP Basic Auth (προηγείται του /docs/)
-    location ^~ /docs/teachers/ {
-        alias /var/www/docs/teachers/;
+    # 2α. Περιοχή Καθηγητών (παλιό υλικό) — HTTP Basic Auth (προηγείται του /docs/)
+    location ^~ /docs/_paradeigma/teachers/ {
+        alias /var/www/docs/_paradeigma/teachers/;
         index index.html;
 
         auth_basic "Περιοχή Καθηγητών — Ψηφιακή Πύλη";
         auth_basic_user_file /etc/nginx/.school-htpasswd;
 
         try_files $uri $uri/ =404;
+    }
+
+    # 2α-2. Σημειώσεις Καθηγητή ημερήσιων μαθημάτων — προστασία με auth_request
+    #        προς το Lesson Wizard (έγκυρο HMAC cookie καθηγητή). Το περιεχόμενο
+    #        ΔΕΝ υπάρχει στο HTML των μαθητών· σερβίρεται μόνο εδώ, κατόπιν ελέγχου.
+    #        ΠΡΟΣΟΧΗ: πρέπει να είναι ^~ ώστε να υπερισχύει του γενικού ^~ /docs/
+    #        (αλλιώς τα regex locations δεν εξετάζονται καν για αυτά τα URIs).
+    location ^~ /docs/mathimata/ {
+        alias /var/www/docs/mathimata/;
+        index index.html;
+
+        # Μόνο τα *.teacher.html περνούν από έλεγχο καθηγητή· τα υπόλοιπα αρχεία
+        # (μαθήματα, εικόνες, pdf, διαδραστικά) μένουν ελεύθερα στους μαθητές.
+        # Nested regex: χρησιμοποιούμε root (ΟΧΙ alias — δεν επιτρέπεται μαζί με
+        # root)· το URI /docs/mathimata/... αντιστοιχεί στο /var/www/docs/mathimata/...
+        location ~ \.teacher\.html$ {
+            auth_request /_lessonwizard_check;
+            root /var/www;
+            try_files $uri =404;
+        }
+
+        try_files $uri $uri/ =404;
+    }
+
+    location = /_lessonwizard_check {
+        internal;
+        proxy_pass http://127.0.0.1:8013/api/check;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header X-Original-URI $request_uri;
     }
 
     # 2β. Pyodide — μεγάλα αρχεία WASM, μακροχρόνια cache
@@ -654,6 +687,34 @@ server {
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Prefix /md-publish;
+
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    120s;
+        proxy_read_timeout    120s;
+        proxy_buffering off;
+    }
+
+    # -----------------------------------------------------------------
+    # 6ζ. Lesson Wizard — Ημερήσια Μαθήματα (@127.0.0.1:8013)
+    #      FastAPI (systemd: school-lessonwizard.service) με δική του πύλη
+    #      κωδικού καθηγητή (HMAC cookie, όπως το /app-builder/). Visual
+    #      επεξεργαστής διδακτικών φάσεων, upload υλικού φακέλου μαθήματος,
+    #      ωράριο από Excel & ενεργό μάθημα. Παρέχει και το /api/check για
+    #      την προστασία των *.teacher.html (auth_request παραπάνω).
+    # -----------------------------------------------------------------
+    location = /lesson-wizard {
+        return 301 /lesson-wizard/;
+    }
+
+    location ^~ /lesson-wizard/ {
+        proxy_pass http://127.0.0.1:8013/;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /lesson-wizard;
 
         proxy_connect_timeout 30s;
         proxy_send_timeout    120s;

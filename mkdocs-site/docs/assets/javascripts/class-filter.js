@@ -25,7 +25,9 @@
     return '/docs/';
   }
 
-  /** Επιστρέφει το slug της τάξης στον τρέχον δρόμο ή null. */
+  /** Επιστρέφει το slug της τάξης στον τρέχον δρόμο ή null.
+   *  Καλύπτει και τη νέα δομή /docs/mathimata/<τάξη>/ και την παλιά
+   *  /docs/_paradeigma/<τάξη>/. */
   function currentClass() {
     var path = window.location.pathname;
     for (var i = 0; i < CLASSES.length; i++) {
@@ -116,7 +118,9 @@
       og.label = group;
       CLASSES.filter(function (c) { return c.group === group; }).forEach(function (c) {
         var o = document.createElement('option');
-        o.value = base + c.slug + '/';
+        // Αν βρισκόμαστε στο παλιό υλικό, μένουμε εκεί· αλλιώς πάμε στη νέα δομή
+        var inOld = window.location.pathname.indexOf('/_paradeigma/') !== -1;
+        o.value = base + (inOld ? '_paradeigma/' : 'mathimata/') + c.slug + '/';
         o.textContent = c.label;
         if (c.slug === slug) o.selected = true;
         og.appendChild(o);

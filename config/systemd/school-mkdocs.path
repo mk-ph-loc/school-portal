@@ -14,13 +14,11 @@ StartLimitBurst=30
 [Path]
 PathModified=/opt/school-portal/mkdocs-site/mkdocs.yml
 PathChanged=/opt/school-portal/mkdocs-site/docs
-PathChanged=/opt/school-portal/mkdocs-site/docs/gymnasio-a
-PathChanged=/opt/school-portal/mkdocs-site/docs/gymnasio-b
-PathChanged=/opt/school-portal/mkdocs-site/docs/gymnasio-g
-PathChanged=/opt/school-portal/mkdocs-site/docs/lykeio-a
-PathChanged=/opt/school-portal/mkdocs-site/docs/lykeio-b
-PathChanged=/opt/school-portal/mkdocs-site/docs/lykeio-g
-PathChanged=/opt/school-portal/mkdocs-site/docs/teachers
+PathChanged=/opt/school-portal/mkdocs-site/docs/mathimata
+PathChanged=/opt/school-portal/mkdocs-site/docs/mathimata/gymnasio-g
+PathChanged=/opt/school-portal/mkdocs-site/docs/mathimata/gymnasio-g/pliroforiki
+PathChanged=/opt/school-portal/mkdocs-site/docs/_paradeigma
+PathChanged=/opt/school-portal/mkdocs-site/hooks
 Unit=school-mkdocs.service
 
 [Install]

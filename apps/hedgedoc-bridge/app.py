@@ -329,7 +329,10 @@ def list_lessons() -> list[dict]:
     groups = []
     for c in CLASS_GROUPS:
         lessons = []
-        class_dir = DOCS_DIR / c["slug"]
+        # Νέα δομή: mathimata/<τάξη>/· το παλιό υλικό ζει στο _paradeigma/<τάξη>/
+        class_dir = DOCS_DIR / "mathimata" / c["slug"]
+        if not class_dir.is_dir():
+            class_dir = DOCS_DIR / "_paradeigma" / c["slug"]
         if class_dir.is_dir():
             for p in sorted(class_dir.rglob("*.md")):
                 rel = p.relative_to(DOCS_DIR).as_posix()
@@ -366,7 +369,8 @@ def add_to_nav(rel_path: str, title: str) -> bool:
     Text-based εισαγωγή (όχι yaml round-trip) ώστε να διατηρούνται σχόλια,
     !!python/name tags και η μορφοποίηση του αρχείου ανέπαφα.
     """
-    slug = PurePosixPath(rel_path).parts[0]
+    parts = PurePosixPath(rel_path).parts
+    slug = parts[1] if parts[0] == "_paradeigma" else parts[0]
     label = CLASS_LABELS[slug]
     text = MKDOCS_YML.read_text(encoding="utf-8")
     if rel_path in text:
@@ -596,7 +600,9 @@ async def publish_new(request: Request):
     if mode not in ("plain", "collapsible"):
         raise HTTPException(400, "Μη έγκυρος τρόπος εισαγωγής.")
 
-    rel = f"{slug}/{filename}.md"
+    # Νέα δομή: οι δημοσιεύσεις πάνε στο _paradeigma/<τάξη>/ (παλιό υλικό/σημειώσεις).
+    # Τα δομημένα ημερήσια μαθήματα δημιουργούνται από το /lesson-wizard/.
+    rel = f"_paradeigma/{slug}/{filename}.md"
     target = DOCS_DIR / rel
     if target.exists():
         raise HTTPException(409, f"Το αρχείο {rel} υπάρχει ήδη — δώστε άλλο όνομα ή χρησιμοποιήστε την Επιλογή Α.")
@@ -613,4 +619,4 @@ async def publish_new(request: Request):
     nav_added = add_to_nav(rel, title)
     trigger_rebuild()
     return {"ok": True, "lesson": rel, "nav_added": nav_added,
-            "url": f"/docs/{slug}/{filename}/"}
+            "url": f"/docs/_paradeigma/{slug}/{filename}/"}

@@ -73,30 +73,44 @@ else
 fi
 
 echo
-echo "${B}=== 3. Εκπαιδευτικό υλικό (6 τάξεις) ===${N}"
+echo "${B}=== 3. Εκπαιδευτικό υλικό (νέα δομή + παλιό παράδειγμα) ===${N}"
 check "/docs/"                         200
+check "/docs/mathimata/gymnasio-g/pliroforiki/" 200
+for m in m01-anadromi-aformisi-spiral m02-pyrgoi-anoy m03-trigono-sierpinski; do
+    check "/docs/mathimata/gymnasio-g/pliroforiki/$m/" 200
+done
+check "/docs/_paradeigma/"             200
 for c in gymnasio-a gymnasio-b gymnasio-g lykeio-a lykeio-b lykeio-g; do
-    check "/docs/$c/"                  200
+    check "/docs/_paradeigma/$c/"      200
 done
 
 echo
 echo "${B}=== 4. Διαδραστικά στοιχεία ===${N}"
-check "/docs/games/binary-game.html"   200
-check "/docs/games/binary-game.js"     200
+check "/docs/_paradeigma/games/binary-game.html" 200
+check "/docs/_paradeigma/games/binary-game.js"   200
 check "/docs/assets/javascripts/class-filter.js" 200
 check "/docs/assets/javascripts/glossa.js"       200
 check "/docs/assets/javascripts/python-run.js"   200
 check "/docs/assets/javascripts/quiz.js"         200
+check "/docs/assets/javascripts/lesson-phases.js" 200
+check "/docs/assets/javascripts/schedule.js"     200
 check "/docs/assets/pyodide/pyodide.js"          200
 check "/docs/assets/pyodide/pyodide.asm.wasm"    200
-check "/docs/lykeio-a/quiz/"           200
+check "/docs/_paradeigma/lykeio-a/quiz/" 200
+check "/docs/mathimata/gymnasio-g/pliroforiki/m02-pyrgoi-anoy/anoy.html" 200
 
 echo
 echo "${B}=== 5. Προστασία περιοχών καθηγητών ===${N}"
 check "/pandoc/"                       401
 check "/pandoc/"                       200 "$TEACHER_USER:$TEACHER_PASS"
-check "/docs/teachers/"                401
-check "/docs/teachers/"                200 "$TEACHER_USER:$TEACHER_PASS"
+check "/docs/_paradeigma/teachers/"    401
+check "/docs/_paradeigma/teachers/"    200 "$TEACHER_USER:$TEACHER_PASS"
+# Σημειώσεις καθηγητή ημερήσιων μαθημάτων: 401 χωρίς cookie καθηγητή
+check "/docs/mathimata/gymnasio-g/pliroforiki/m02-pyrgoi-anoy/index.teacher.html" 401
+# Lesson Wizard API
+check "/lesson-wizard/healthz"         200
+check "/lesson-wizard/api/lessons"     401
+check "/lesson-wizard/api/schedule/public" 200
 check "/pandoc/"                       401 "$TEACHER_USER:wrongpass"
 
 echo

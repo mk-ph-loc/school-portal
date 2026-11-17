@@ -52,6 +52,13 @@ extra_javascript:
   - assets/javascripts/glossa.js
   - assets/javascripts/python-run.js
   - assets/javascripts/quiz.js
+  - assets/javascripts/lesson-phases.js
+  - assets/javascripts/schedule.js
+
+# Hook: μετατρέπει τα markers διδακτικών φάσεων σε δομικά στοιχεία και
+# διαχειρίζεται τις σημειώσεις καθηγητή (βλ. hooks/lesson_phases.py).
+hooks:
+  - hooks/lesson_phases.py
 
 # ΣΗΜΕΙΩΣΗ: Το theme.language είναι 'el' (πλήρης ελληνική διεπαφή).
 # Ο μηχανισμός αναζήτησης (lunr) δεν διαθέτει stemmer για τα ελληνικά,
@@ -122,39 +129,49 @@ extra:
 
 nav:
   - Αρχική: index.md
-  - Γυμνάσιο:
-      - Α' Γυμνασίου:
-          - gymnasio-a/index.md
-          - Εισαγωγή στην Πληροφορική: gymnasio-a/eisagogi.md
-          - Ψευδογλώσσα: gymnasio-a/pseudoglossa.md
-          - Python: gymnasio-a/python.md
-      - Β' Γυμνασίου:
-          - gymnasio-b/index.md
-          - Δομές Επανάληψης: gymnasio-b/epanalipsi.md
-          - Δυαδικό Σύστημα: gymnasio-b/dyadiko.md
-          - Ασκήσεις Python: gymnasio-b/python.md
+  # BEGIN AUTO-NAV MATHIMATA (διαχειρίζεται το Lesson Wizard — μην επεξεργάζεστε χειροκίνητα)
+  - Μαθήματα:
       - Γ' Γυμνασίου:
-          - gymnasio-g/index.md
-          - Πίνακες: gymnasio-g/pinakes.md
-          - Συναρτήσεις: gymnasio-g/synartiseis.md
-  - Λύκειο:
-      - Α' Λυκείου:
-          - lykeio-a/index.md
-          - Αλγοριθμική: lykeio-a/algoritmiki.md
-          - Δομές Δεδομένων: lykeio-a/domes-dedomenon.md
-          - Κουίζ: lykeio-a/quiz.md
-      - Β' Λυκείου:
-          - lykeio-b/index.md
-          - Αναζήτηση & Ταξινόμηση: lykeio-b/taxinomisi.md
-          - Πολυπλοκότητα: lykeio-b/polyplokotita.md
-      - Γ' Λυκείου:
-          - lykeio-g/index.md
-          - Επανάληψη ύλης: lykeio-g/epanaliptiki.md
-          - Θέματα Πανελλαδικών: lykeio-g/themata.md
-  - Εργαστήρι:
-      - games/index.md
-      - Πολυμέσα: media/index.md
-  - Καθηγητές:
-      - teachers/index.md
-      - Λύσεις Ασκήσεων: teachers/lyseis.md
+          - 'Πληροφορική Γ'' Γυμνασίου': mathimata/gymnasio-g/pliroforiki/index.md
+          - '🌀 Μ01 · Αναδρομή: Αυτοομοιότητα & Σπιράλ': mathimata/gymnasio-g/pliroforiki/m01-anadromi-aformisi-spiral/index.md
+          - '🗼 Μ02 · Οι Πύργοι του Ανόι': mathimata/gymnasio-g/pliroforiki/m02-pyrgoi-anoy/index.md
+          - '🔺 Μ03 · Το Τρίγωνο Sierpinski': mathimata/gymnasio-g/pliroforiki/m03-trigono-sierpinski/index.md
+  # END AUTO-NAV MATHIMATA
+  - Παλιό Υλικό (Παράδειγμα):
+      - _paradeigma/index.md
+      - Γυμνάσιο:
+          - Α' Γυμνασίου:
+              - _paradeigma/gymnasio-a/index.md
+              - Εισαγωγή στην Πληροφορική: _paradeigma/gymnasio-a/eisagogi.md
+              - Ψευδογλώσσα: _paradeigma/gymnasio-a/pseudoglossa.md
+              - Python: _paradeigma/gymnasio-a/python.md
+          - Β' Γυμνασίου:
+              - _paradeigma/gymnasio-b/index.md
+              - Δομές Επανάληψης: _paradeigma/gymnasio-b/epanalipsi.md
+              - Δυαδικό Σύστημα: _paradeigma/gymnasio-b/dyadiko.md
+              - Ασκήσεις Python: _paradeigma/gymnasio-b/python.md
+          - Γ' Γυμνασίου:
+              - _paradeigma/gymnasio-g/index.md
+              - Πίνακες: _paradeigma/gymnasio-g/pinakes.md
+              - Συναρτήσεις: _paradeigma/gymnasio-g/synartiseis.md
+      - Λύκειο:
+          - Α' Λυκείου:
+              - _paradeigma/lykeio-a/index.md
+              - Αλγοριθμική: _paradeigma/lykeio-a/algoritmiki.md
+              - Δομές Δεδομένων: _paradeigma/lykeio-a/domes-dedomenon.md
+              - Κουίζ: _paradeigma/lykeio-a/quiz.md
+          - Β' Λυκείου:
+              - _paradeigma/lykeio-b/index.md
+              - Αναζήτηση & Ταξινόμηση: _paradeigma/lykeio-b/taxinomisi.md
+              - Πολυπλοκότητα: _paradeigma/lykeio-b/polyplokotita.md
+          - Γ' Λυκείου:
+              - _paradeigma/lykeio-g/index.md
+              - Επανάληψη ύλης: _paradeigma/lykeio-g/epanaliptiki.md
+              - Θέματα Πανελλαδικών: _paradeigma/lykeio-g/themata.md
+      - Εργαστήρι:
+          - _paradeigma/games/index.md
+          - Πολυμέσα: _paradeigma/media/index.md
+      - Καθηγητές:
+          - _paradeigma/teachers/index.md
+          - Λύσεις Ασκήσεων: _paradeigma/teachers/lyseis.md
   - Σχετικά: about.md

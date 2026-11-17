@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Οι Πύργοι του Ανόι</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, 'Segoe UI', sans-serif; margin:0; background:#e0f2f1; color:#004d40; }
+  .wrap { max-width: 900px; margin:0 auto; padding:12px; }
+  h1 { font-size:1.1rem; margin:4px 0 8px; }
+  .controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:10px; font-size:.85rem; }
+  button, select { border:1px solid #00695c; background:#fff; color:#004d40; border-radius:6px;
+           padding:6px 12px; font-size:.85rem; cursor:pointer; }
+  button.primary { background:#00695c; color:#fff; }
+  .board { display:flex; gap:8px; }
+  .pole { flex:1; background:#fff; border:2px solid #b2dfdb; border-radius:10px; padding:8px;
+          min-height:260px; display:flex; flex-direction:column; justify-content:flex-end; align-items:center;
+          cursor:pointer; position:relative; transition:border-color .15s; }
+  .pole.sel { border-color:#d81b60; box-shadow:0 0 0 3px rgba(216,27,96,.2); }
+  .pole.target:hover { border-color:#00897b; }
+  .pole-name { position:absolute; top:6px; left:0; right:0; text-align:center; font-weight:700; opacity:.55; }
+  .disk { height:26px; border-radius:13px; margin-top:3px; color:#fff; font-size:.72rem; font-weight:700;
+          display:flex; align-items:center; justify-content:center; transition:all .15s; }
+  .status { font-size:.85rem; margin-top:10px; min-height:2.2em; padding:6px 10px; border-radius:6px; background:#b2dfdb; }
+  .status.err { background:#ffebee; color:#b71c1c; font-weight:600; }
+  .status.ok { background:#c8e6c9; color:#1b5e20; font-weight:700; }
+  .moves { font-weight:700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🗼 Οι Πύργοι του Ανόι — λύσε το με όσο λιγότερες κινήσεις μπορείς!</h1>
+  <div class="controls">
+    <label>Δίσκοι
+      <select id="n">
+        <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option>
+      </select>
+    </label>
+    <button id="reset" class="primary">↻ Νέο παιχνίδι</button>
+    <span>Κινήσεις: <span class="moves" id="moves">0</span></span>
+    <span>Ελάχιστο για <span id="nlbl">3</span> δίσκους: <strong id="min">7</strong> (2<sup>Ν</sup>−1)</span>
+  </div>
+  <div class="board">
+    <div class="pole" data-p="0"><div class="pole-name">Α</div></div>
+    <div class="pole" data-p="1"><div class="pole-name">Β</div></div>
+    <div class="pole" data-p="2"><div class="pole-name">Γ 🎯</div></div>
+  </div>
+  <div class="status" id="status">Κλικ σε έναν στύλο για να πάρεις τον πάνω δίσκο, μετά κλικ στον στύλο-προορισμό.</div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var COLORS = ['#ef5350','#ffa726','#ffee58','#66bb6a','#42a5f5','#ab47bc'];
+  var NAMES = ['Α','Β','Γ'];
+  var poles = [[], [], []], sel = -1, moves = 0, N = 3, won = false;
+  var statusEl = document.getElementById('status'), movesEl = document.getElementById('moves');
+  var poleEls = Array.prototype.slice.call(document.querySelectorAll('.pole'));
+
+  function render() {
+    poleEls.forEach(function (el, i) {
+      el.querySelectorAll('.disk').forEach(function (d) { d.remove(); });
+      poles[i].forEach(function (size) {
+        var d = document.createElement('div');
+        d.className = 'disk';
+        d.style.width = (28 + size * 12) + '%';
+        d.style.background = COLORS[size - 1];
+        d.style.color = size === 3 ? '#5d4037' : '#fff';
+        d.textContent = size;
+        el.appendChild(d);
+      });
+      el.classList.toggle('sel', i === sel);
+      el.classList.toggle('target', sel >= 0 && i !== sel);
+    });
+    movesEl.textContent = moves;
+  }
+
+  function reset() {
+    N = parseInt(document.getElementById('n').value, 10);
+    poles = [[], [], []];
+    for (var s = N; s >= 1; s--) poles[0].push(s);
+    sel = -1; moves = 0; won = false;
+    document.getElementById('nlbl').textContent = N;
+    document.getElementById('min').textContent = Math.pow(2, N) - 1;
+    statusEl.className = 'status';
+    statusEl.textContent = 'Κλικ σε έναν στύλο για να πάρεις τον πάνω δίσκο, μετά κλικ στον στύλο-προορισμό.';
+    render();
+  }
+
+  function clickPole(i) {
+    if (won) return;
+    if (sel === -1) {
+      if (!poles[i].length) {
+        statusEl.className = 'status err';
+        statusEl.textContent = '⚠️ Ο στύλος αυτός είναι άδειος — διάλεξε έναν με δίσκους.';
+        return;
+      }
+      sel = i;
+      statusEl.className = 'status';
+      statusEl.textContent = 'Πήρες τον δίσκο ' + poles[i][poles[i].length - 1] + '. Πού θα τον πας;';
+    } else if (sel === i) {
+      sel = -1;
+      statusEl.className = 'status';
+      statusEl.textContent = 'Ακύρωσες την επιλογή.';
+    } else {
+      var disk = poles[sel][poles[sel].length - 1];
+      var top = poles[i][poles[i].length - 1];
+      if (top !== undefined && top < disk) {
+        statusEl.className = 'status err';
+        statusEl.textContent = '🚫 Απαγορεύεται! Ο δίσκος ' + disk + ' δεν μπαίνει πάνω στον μικρότερο ' + top + '.';
+        sel = -1;
+      } else {
+        var from = sel;
+        poles[sel].pop(); poles[i].push(disk); moves++;
+        sel = -1;
+        statusEl.className = 'status';
+        statusEl.textContent = '✓ Μετακίνησε(' + NAMES[from] + ', ' + NAMES[i] + ') — κίνηση ' + moves + '. Συνέχισε!';
+        if (poles[2].length === N) {
+          won = true;
+          var min = Math.pow(2, N) - 1;
+          statusEl.className = 'status ok';
+          statusEl.textContent = '🏆 Τέλεια! Το έλυσες σε ' + moves + ' κινήσεις' +
+            (moves === min ? ' — το ΕΛΑΧΙΣΤΟ δυνατό (' + min + ')!' : ' (το ελάχιστο είναι ' + min + ' — ξαναδοκίμασε;)');
+        }
+      }
+    }
+    render();
+  }
+
+  poleEls.forEach(function (el) {
+    el.addEventListener('click', function () { clickPole(parseInt(el.getAttribute('data-p'), 10)); });
+  });
+  document.getElementById('reset').addEventListener('click', reset);
+  document.getElementById('n').addEventListener('change', reset);
+  reset();
+})();
+</script>
+</body>
+</html>

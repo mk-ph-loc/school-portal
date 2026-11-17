@@ -76,6 +76,11 @@ apps/hedgedoc/
 # --- Γέφυρα MD-Publish: μυστικά & backups εκτός git (ο κώδικας app.py μένει) ---
 apps/hedgedoc-bridge/.cookie-secret
 apps/hedgedoc-bridge/backups/
+
+# --- Lesson Wizard: μυστικά, δεδομένα ωραρίου & backups εκτός git ---
+apps/lesson-wizard/.cookie-secret
+apps/lesson-wizard/backups/
+apps/lesson-wizard/data/
 *.bak
 
 # --- H5P Studio: μυστικά, προσωρινά exports & backups εκτός git ---

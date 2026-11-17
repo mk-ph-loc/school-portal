@@ -117,7 +117,7 @@ def main() -> int:
 
         # ---------------------------------------------------------------
         print("\n=== 1. Κουμπιά «▶ Εκτέλεση» (Python) ===")
-        cdp.send("Page.navigate", {"url": f"{BASE}/docs/gymnasio-a/python/"})
+        cdp.send("Page.navigate", {"url": f"{BASE}/docs/_paradeigma/gymnasio-a/python/"})
         got = wait_for(cdp, "document.querySelectorAll('.py-run-btn').length", timeout=40)
         check("Τα κουμπιά δημιουργούνται", bool(got), f"{got} κουμπιά")
 
@@ -159,7 +159,7 @@ def main() -> int:
               bool(out2) and "Μαρία" in str(out2), repr(str(out2)[:70]))
         # ---------------------------------------------------------------
         print("\n=== 3. Χρωματισμός ελληνικής ψευδογλώσσας ===")
-        cdp.send("Page.navigate", {"url": f"{BASE}/docs/gymnasio-a/pseudoglossa/"})
+        cdp.send("Page.navigate", {"url": f"{BASE}/docs/_paradeigma/gymnasio-a/pseudoglossa/"})
         g = wait_for(cdp, "document.querySelectorAll('.gl-k').length", timeout=40)
         check("Keywords χρωματίζονται (.gl-k)", bool(g), f"{g} spans")
         gd = cdp.evaluate("""(() => ({
@@ -173,7 +173,7 @@ def main() -> int:
 
         # ---------------------------------------------------------------
         print("\n=== 4. Διαδραστικό κουίζ ===")
-        cdp.send("Page.navigate", {"url": f"{BASE}/docs/lykeio-a/quiz/"})
+        cdp.send("Page.navigate", {"url": f"{BASE}/docs/_paradeigma/lykeio-a/quiz/"})
         q = wait_for(cdp, "document.querySelectorAll('.quiz-option').length", timeout=40)
         check("Τα κουίζ αποδίδονται", bool(q), f"{q} επιλογές")
         cdp.evaluate("document.querySelectorAll('.quiz-option')[2].click(); true")
@@ -182,7 +182,7 @@ def main() -> int:
 
         # ---------------------------------------------------------------
         print("\n=== 5. Φιλτράρισμα μενού ανά τάξη ===")
-        cdp.send("Page.navigate", {"url": f"{BASE}/docs/gymnasio-b/dyadiko/"})
+        cdp.send("Page.navigate", {"url": f"{BASE}/docs/_paradeigma/gymnasio-b/dyadiko/"})
         sw = wait_for(cdp, "!!document.querySelector('.class-switcher__select')", timeout=40)
         check("Selector εναλλαγής τάξης", bool(sw))
         sel = cdp.evaluate(
@@ -191,7 +191,7 @@ def main() -> int:
 
         # ---------------------------------------------------------------
         print("\n=== 6. Παιχνίδι δυαδικού ===")
-        cdp.send("Page.navigate", {"url": f"{BASE}/docs/games/binary-game.html"})
+        cdp.send("Page.navigate", {"url": f"{BASE}/docs/_paradeigma/games/binary-game.html"})
         bg = wait_for(cdp,
                       "!!document.getElementById('target') && document.getElementById('target').textContent.length>0",
                       timeout=40)
