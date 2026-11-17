@@ -1,0 +1,109 @@
+<!-- MultiChoice & QuestionSet -->
+<template x-if="data.type==='multichoice' || data.type==='questionset'">
+  <div class="space-y-4">
+    <template x-if="data.type==='questionset'">
+      <div class="bg-white rounded-xl ring-1 ring-slate-200 p-4 space-y-2">
+        <h3 class="font-bold text-sm text-slate-900">📝 Ρυθμίσεις Σετ Ερωτήσεων</h3>
+        <div><label class="lbl">Εισαγωγικό κείμενο</label>
+          <textarea x-model="data.intro" rows="2" class="fld"></textarea></div>
+        <div><label class="lbl">Ποσοστό επιτυχίας (%)</label>
+          <input type="number" min="0" max="100" x-model.number="data.passPercentage" class="fld w-32"></div>
+      </div>
+    </template>
+    <template x-for="(q,qi) in questions()" :key="qi">
+      <div class="bg-white rounded-xl ring-1 ring-slate-200 p-4 space-y-2">
+        <div class="flex items-center gap-2">
+          <h3 class="font-bold text-sm text-slate-900 flex-1">Ερώτηση <span x-text="qi+1"></span></h3>
+          <template x-if="data.type==='questionset'">
+            <div class="flex gap-1">
+              <button @click="moveItem(data.questions,qi,-1)" class="btn-s" title="Πάνω">↑</button>
+              <button @click="moveItem(data.questions,qi,1)" class="btn-s" title="Κάτω">↓</button>
+              <button @click="data.questions.splice(qi,1)" class="btn-s !bg-red-50 !text-red-600" title="Διαγραφή">🗑</button>
+            </div>
+          </template>
+        </div>
+        <div><label class="lbl">Εκφώνηση</label>
+          <textarea x-model="q.question" rows="2" class="fld"></textarea></div>
+        <!-- Εικόνα ερώτησης -->
+        <div class="flex items-center gap-2">
+          <template x-if="q.image && q.image.path">
+            <img :src="mediaUrl(q.image.path)" class="h-14 rounded-lg ring-1 ring-slate-200 object-cover">
+          </template>
+          <button @click="uploadImage('question', qi)" class="btn-s">🖼 Εικόνα ερώτησης</button>
+          <template x-if="q.image && q.image.path">
+            <button @click="delete q.image" class="btn-s !bg-red-50 !text-red-600">✕ Αφαίρεση</button>
+          </template>
+        </div>
+        <!-- Επιλογές -->
+        <div class="space-y-2">
+          <template x-for="(a,ai) in q.answers" :key="ai">
+            <div class="rounded-lg ring-1 p-2.5 space-y-1.5" :class="a.correct?'ring-emerald-300 bg-emerald-50/60':'ring-slate-200 bg-slate-50/60'">
+              <div class="flex items-center gap-2">
+                <input type="checkbox" x-model="a.correct" class="w-4 h-4 accent-emerald-600" :id="'c'+qi+'_'+ai">
+                <label :for="'c'+qi+'_'+ai" class="text-xs font-semibold whitespace-nowrap" :class="a.correct?'text-emerald-700':'text-slate-500'">Σωστή</label>
+                <input type="text" x-model="a.text" class="fld flex-1" placeholder="Κείμενο επιλογής">
+                <button @click="q.answers.splice(ai,1)" class="btn-s !bg-red-50 !text-red-600 shrink-0">🗑</button>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <input type="text" x-model="a.feedback" class="fld !text-xs" placeholder="💬 Ανατροφοδότηση όταν επιλεγεί">
+                <input type="text" x-model="a.tip" class="fld !text-xs" placeholder="💡 Υπόδειξη (προαιρετικά)">
+              </div>
+            </div>
+          </template>
+          <button @click="q.answers.push({text:'',correct:false,feedback:'',tip:''})" class="btn-s">➕ Προσθήκη επιλογής</button>
+        </div>
+      </div>
+    </template>
+    <template x-if="data.type==='questionset'">
+      <button @click="data.questions.push({question:'',answers:[{text:'',correct:true,feedback:'',tip:''},{text:'',correct:false,feedback:'',tip:''}]})" class="btn-p w-full">➕ Προσθήκη Ερώτησης</button>
+    </template>
+  </div>
+</template>
+
+<!-- Blanks: Συμπλήρωση Κενών -->
+<template x-if="data.type==='blanks'">
+  <div class="space-y-4">
+    <div class="bg-white rounded-xl ring-1 ring-slate-200 p-4 space-y-2">
+      <h3 class="font-bold text-sm text-slate-900">✏️ Συμπλήρωση Κενών</h3>
+      <p class="text-xs text-slate-500">Γράψε την πρόταση, <strong>μαρκάρε μια λέξη</strong> και πάτησε «Μετατροπή σε Κενό» — θα μπει αυτόματα σε *αστερίσκους*. Προαιρετική υπόδειξη: <code class="bg-slate-100 px-1 rounded">*λέξη:υπόδειξη*</code>. Εναλλακτικές σωστές απαντήσεις: <code class="bg-slate-100 px-1 rounded">*λέξη1/λέξη2*</code>.</p>
+      <div><label class="lbl">Οδηγία προς τον μαθητή</label>
+        <input type="text" x-model="data.text" class="fld"></div>
+    </div>
+    <template x-for="(q,qi) in data.questions" :key="qi">
+      <div class="bg-white rounded-xl ring-1 ring-slate-200 p-4 space-y-2">
+        <div class="flex items-center gap-2">
+          <h3 class="font-bold text-sm text-slate-900 flex-1">Πρόταση <span x-text="qi+1"></span></h3>
+          <button @click="data.questions.splice(qi,1)" class="btn-s !bg-red-50 !text-red-600">🗑</button>
+        </div>
+        <textarea :id="'blank'+qi" x-model="data.questions[qi]" rows="3" class="fld font-mono !text-xs"></textarea>
+        <div class="flex flex-wrap items-center gap-2">
+          <button @click="makeBlank(qi)" class="btn-s !bg-violet-100 !text-violet-700">⭐ Μετατροπή σε Κενό (μαρκάρε λέξη πρώτα)</button>
+          <input type="text" placeholder="Υπόδειξη (προαιρετικά)" class="fld !text-xs flex-1 min-w-[140px]" :id="'hint'+qi">
+        </div>
+      </div>
+    </template>
+    <button @click="data.questions.push('<p></p>')" class="btn-p w-full">➕ Προσθήκη Πρότασης</button>
+  </div>
+</template>
+
+<!-- DragText: Σύρε τις Λέξεις -->
+<template x-if="data.type==='dragtext'">
+  <div class="space-y-4">
+    <div class="bg-white rounded-xl ring-1 ring-slate-200 p-4 space-y-2">
+      <h3 class="font-bold text-sm text-slate-900">🔀 Σύρε τις Λέξεις</h3>
+      <p class="text-xs text-slate-500">Γράψε το κείμενο με τις σωστές λέξεις στη θέση τους. <strong>Μαρκάρε μια λέξη</strong> και πάτησε «Μετατροπή σε Κενό» για να γίνει draggable (*λέξη*). Κάθε γραμμή = ξεχωριστή πρόταση.</p>
+      <div><label class="lbl">Οδηγία / Περιγραφή εργασίας</label>
+        <input type="text" x-model="data.taskDescription" class="fld"></div>
+      <div><label class="lbl">Κείμενο με *λέξεις-κενά*</label>
+        <textarea id="dragField" x-model="data.textField" rows="6" class="fld font-mono !text-xs"></textarea></div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button @click="makeDragWord()" class="btn-s !bg-violet-100 !text-violet-700">⭐ Μετατροπή σε Κενό</button>
+        <input type="text" id="dragHint" placeholder="Υπόδειξη (προαιρετικά)" class="fld !text-xs flex-1 min-w-[140px]">
+      </div>
+      <div><label class="lbl">Λέξεις-παγίδες (distractors) — π.χ. *λάθος1* *λάθος2*</label>
+        <input type="text" x-model="data.distractors" class="fld font-mono !text-xs" placeholder="*πλανήτης* *κομήτης*"></div>
+      <button @click="addDistractor()" class="btn-s">➕ Προσθήκη λέξης-παγίδας</button>
+    </div>
+  </div>
+</template>
+

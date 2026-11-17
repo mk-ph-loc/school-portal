@@ -28,6 +28,7 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/live-quiz/` | Ζωντανό Παιχνίδι Τάξης (Live Quiz) | FastAPI + WebSockets + SQLite @ `127.0.0.1:8005` | Ελεύθερη (είσοδος με PIN) |
 | `/live-quiz/teacher` | Live Quiz — Προτζέκτορας | ίδιο service, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
 | `/web-lab/` | Εργαστήριο Web (HTML / CSS / JS) | FastAPI + WebSockets + SQLite @ `127.0.0.1:8011` | Ελεύθερη (Solo ή δωμάτια με PIN· δημοσίευση: `teacher2026`) |
+| `/h5p-studio/` | 🎮 H5P Studio (Διαδραστικές Ασκήσεις) | FastAPI + SQLite + offline h5p-standalone @ `127.0.0.1:8012` | 🔐 Καθηγητές (`teacher2026`) — αναπαραγωγή `/play/<id>/` ελεύθερη |
 | `/crypto/` | CyberChef | Στατικό HTML/JS (0 MB RAM) | Ελεύθερη |
 | `/tools/` | IT-Tools | Στατικό SPA (0 MB RAM) | Ελεύθερη |
 | `/board/` | Ψηφιακός Πίνακας Excalidraw | Πλήρες static build excalidraw-app, ελληνικά (0 MB RAM) | Ελεύθερη |
@@ -180,6 +181,13 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   ├── weblab.db           # Βάση δωματίων (δημιουργείται αυτόματα, εκτός git)
 │   ├── templates/index.html   # 3-pane editor + preview + κονσόλα (Tailwind + Alpine)
 │   └── static/             # app.js, snippets.js (ελληνικά), vendor/codemirror (offline)
+├── h5p-studio/             # 🎮 H5P Studio Διαδραστικών Ασκήσεων (/h5p-studio/)
+│   ├── main.py             # FastAPI + SQLite: CRUD, import/export .h5p, AI wizard, embed
+│   ├── h5p.db              # Βάση μεταδεδομένων (δημιουργείται αυτόματα, εκτός git)
+│   ├── library/<act-id>/   # Έγκυρη δομή H5P: h5p.json + content/content.json + media
+│   ├── h5p-libraries/      # Τοπικές βιβλιοθήκες H5P (MultiChoice, QuestionSet, Blanks…)
+│   ├── templates/          # index/editor/play.html + partials (Tailwind + Alpine, ελληνικά)
+│   └── static/             # studio.js, editor.js, wizard.js + h5p-player/ (offline player)
 ├── lab-app/                # ΜΕΛΛΟΝΤΙΚΟ — δείτε README.md
 ├── app-builder/            # 🧙 Δημιουργός Custom Εφαρμογών (/app-builder/)
 │   ├── main.py             # FastAPI: create/list/delete/embed API (HMAC cookie)
@@ -284,6 +292,61 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
   (`index.html` + `app.json`) και τρέχει το `build-apps-manifest.py` →
   **ζωντανή κάρτα στο Dashboard** στη διεύθυνση `/apps/<id>/`
 
+## 🎮 H5P Studio — Διαδραστικές Ασκήσεις (`/h5p-studio/`)
+
+Πλήρες, αυτόνομο περιβάλλον δημιουργίας, διαχείρισης & αναπαραγωγής ασκήσεων
+**H5P** (FastAPI + Uvicorn + SQLite @ `127.0.0.1:8012`, χωρίς Docker).
+**Σημείωση:** η θύρα 8011 ανήκει ήδη στο Web Lab (`/web-lab/`).
+
+**Offline Player Engine (καμία εξάρτηση από CDN):**
+- Ο **h5p-standalone** player είναι εγκατεστημένος τοπικά στο
+  `h5p-studio/static/h5p-player/` και οι επίσημες βιβλιοθήκες H5P στο
+  `h5p-studio/h5p-libraries/` (MultiChoice, QuestionSet, Blanks, DragText,
+  ImageHotspots, Dialogcards, InteractiveVideo + όλες οι εξαρτήσεις τους,
+  με ελληνικά αρχεία γλώσσας `language/el.json` όπου υπάρχουν)
+- Κάθε δραστηριότητα αποθηκεύεται σε `library/<activity-id>/` με **έγκυρη δομή
+  H5P** (`h5p.json`, `content/content.json`, `content/images|videos/`) + στη
+  SQLite `h5p.db` (τίτλος, τύπος, τάξη, μάθημα, στόχος, δυσκολία)
+- `/h5p-studio/play/<id>/`: καθαρή responsive σελίδα για μαθητές — με
+  `?embed=1` φορτώνει χωρίς μενού μέσα σε `<iframe>` (auto-height postMessage),
+  αλλιώς εμφανίζει διακριτική μπάρα επιστροφής
+
+**Visual Editor (Tailwind + Alpine, 100% ελληνικά, split-screen preview):**
+- ✅ Πολλαπλής Επιλογής & 📝 Σετ Ερωτήσεων (οπτικές ερωτήσεις/επιλογές,
+  σωστές απαντήσεις, εικόνα ερώτησης, feedback & υποδείξεις)
+- ✏️ Συμπλήρωση Κενών: μαρκάρεις λέξη → «⭐ Μετατροπή σε Κενό» → `*λέξη:υπόδειξη*`
+- 🔀 Σύρε τις Λέξεις: ίδιο pattern + λέξεις-παγίδες (distractors)
+- 📍 Εικόνα με Hotspots: ανέβασμα εικόνας & **κλικ πάνω της** → πινέζα με
+  αυτόματα X%/Y%, χρώμα/εικονίδιο, τίτλος & επεξήγηση ανά πινέζα
+- 🃏 Κάρτες Μνήμης: εμπρός/πίσω όψη, εικόνα κάρτας, υπόδειξη
+- 🎬 Διαδραστικό Βίντεο: upload `.mp4/.webm` ή επιλογή από τα `docs/videos/`,
+  χρονικά σημεία `MM:SS` με παύση + ερώτηση πολλαπλής ή επεξηγηματικό πλαίσιο
+- **Ζωντανή Προεπισκόπηση** δεξιά (ίδια μηχανή με τους μαθητές, auto-refresh)
+
+**AI Οδηγός Δημιουργίας (Wizard 3 βημάτων):**
+1. Πλαίσιο μαθήματος: τάξη, μάθημα, κεφάλαιο, διδακτικός στόχος, δυσκολία, σημειώσεις
+2. Παιδαγωγικές προτάσεις τύπου H5P ανά στόχο (με εξήγηση αξιοποίησης στην τάξη)
+3. Διπλή λειτουργία: **✨ Αυτόματη Δημιουργία με AI** (OpenAI-compatible /
+   Alibaba Qwen — ρυθμίσεις από `.env.keys` ή το ⚙️ modal) που ανοίγει έτοιμο
+   τον editor, **και** γεννήτρια ελληνικών prompts (περιεχομένου/JSON +
+   εικόνας για hotspots) με κουμπιά αντιγραφής, συνδέσμους προς
+   NotebookLM/ChatGPT/Claude/Gemini και πεδίο «Επικόλληση JSON → Μετατροπή σε H5P»
+
+**Βιβλιοθήκη & Ενσωμάτωση:**
+- Φίλτρα ανά τάξη/μάθημα· προστασία δημιουργίας/επεξεργασίας/διαγραφής με
+  `teacher2026` (HMAC cookie όπως στο `/exams/`)
+- **📥 Import `.h5p`** (Lumi Desktop / Φωτόδεντρο / h5p.org): αποσυμπίεση,
+  επικύρωση `h5p.json` + βιβλιοθηκών, άμεση αναπαραγωγή
+- **⬇ Export `.h5p`**: έγκυρο ZIP με όλες τις βιβλιοθήκες μέσα (ανοίγει σε Lumi/Moodle)
+- **🧩 Ενσωμάτωση σε Μάθημα MkDocs**: έτοιμος `<iframe>` με αντιγραφή ή dropdown
+  με όλα τα `.md` των 6 τάξεων → append με 1 κλικ (+ αυτόματο `.bak` backup,
+  ιστορικό στο `h5p-studio/backups/`, άμεσο rebuild του `/docs/`)
+
+```bash
+# End-to-end έλεγχος (API + headless Chromium: όλοι οι τύποι, import/export, embed)
+venv/bin/python scripts/h5p-test.py
+```
+
 ## 💾 Κατανάλωση RAM
 
 | Υπηρεσία | Idle RAM | Σημείωση |
@@ -294,6 +357,7 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 | Exams App | ~45 MB | uvicorn, 1 worker, `MemoryMax=256M` |
 | Live Quiz | ~45 MB | uvicorn + WebSockets, 1 worker, `MemoryMax=256M` |
 | Web Lab | ~45 MB | uvicorn + WebSockets, 1 worker, `MemoryMax=256M` |
+| H5P Studio | ~45 MB | uvicorn, 1 worker, `MemoryMax=384M` (imports .h5p έως 100 MB) |
 | Pyodide | **0 MB** server-side | Τρέχει στον browser του μαθητή |
 | **Σύνολο** | **~65 MB** | |
 

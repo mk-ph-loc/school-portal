@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} — H5P Studio</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<!-- h5p-standalone player — 100% τοπικά assets (offline, χωρίς CDN) -->
+<link rel="stylesheet" href="{{ url_for('static', path='h5p-player/styles/h5p.css') }}">
+<script src="{{ url_for('static', path='h5p-player/main.bundle.js') }}" charset="UTF-8"></script>
+<style>
+  html,body{margin:0;padding:0;background:#fff;
+    font-family:"DejaVu Sans","Liberation Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .topbar{display:flex;align-items:center;gap:.75rem;padding:.5rem .9rem;
+    background:#0f172a;color:#e2e8f0;font-size:.85rem}
+  .topbar a{color:#7dd3fc;text-decoration:none;font-weight:600}
+  .topbar a:hover{text-decoration:underline}
+  .topbar .ttl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #h5p-container{max-width:960px;margin:0 auto;padding:8px}
+  .embed #h5p-container{max-width:none;padding:4px}
+  .err{max-width:640px;margin:3rem auto;padding:1.2rem;border-radius:12px;
+    background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:.9rem}
+</style>
+</head>
+<body class="{{ 'embed' if embed else '' }}">
+{% if not embed %}
+<div class="topbar">
+  <a href="/h5p-studio/">← Βιβλιοθήκη</a>
+  <span class="ttl">{{ title }}</span>
+  <span style="opacity:.7">{{ type_label }}</span>
+  <a href="/">🏠 Portal</a>
+</div>
+{% endif %}
+<div id="h5p-container"></div>
+<div id="h5p-error" class="err" hidden></div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const el = document.getElementById('h5p-container');
+  const options = {
+    h5pJsonPath: '{{ url_for("library", path=activity_id) }}',
+    librariesPath: '{{ url_for("h5p-libraries", path="") }}'.replace(/\/$/, ''),
+    frameJs: '{{ url_for("static", path="h5p-player/frame.bundle.js") }}',
+    frameCss: '{{ url_for("static", path="h5p-player/styles/h5p.css") }}',
+    frame: true, export: false, embed: false, copyright: false, icon: false,
+    fullScreen: true,
+    downloadUrl: undefined,
+    // Ελληνικά labels του πλαισίου H5P (buttons/διαλόγων)
+    translations: { H5P: {
+      fullscreen: 'Πλήρης οθόνη', disableFullscreen: 'Έξοδος πλήρους οθόνης',
+      download: 'Λήψη', copyrights: 'Δικαιώματα χρήσης', embed: 'Ενσωμάτωση',
+      confirmDialogHeader: 'Επιβεβαίωση', confirmDialogBody: 'Επιβεβαιώνεις τη συνέχεια;',
+      cancelLabel: 'Άκυρο', confirmLabel: 'Επιβεβαίωση', close: 'Κλείσιμο',
+      contentChanged: 'Το περιεχόμενο άλλαξε από την τελευταία φορά.',
+      startingOver: 'Θα ξεκινήσεις από την αρχή.',
+      offlineDialogHeader: 'Χάθηκε η σύνδεση', offlineDialogBody: 'Δεν στάλθηκαν τα αποτελέσματα.',
+      offlineDialogRetryMessage: 'Επόμενη προσπάθεια σε :num δευτ…',
+      offlineDialogRetryButtonLabel: 'Επανάληψη τώρα',
+      offlineSuccessfulSubmit: 'Τα αποτελέσματα στάλθηκαν.',
+      connectionLost: 'Χάθηκε η σύνδεση. Τα αποτελέσματα θα σταλούν μόλις επανέλθει.',
+      connectionReestablished: 'Η σύνδεση αποκαταστάθηκε.',
+      resubmitScores: 'Αποστολή αποθηκευμένων αποτελεσμάτων…',
+      mainTitle: 'Τίτλος', showMore: 'Περισσότερα', showLess: 'Λιγότερα'
+    } }
+  };
+  new H5PStandalone.H5P(el, options).then(function () {
+    // Αυτόματο ύψος iframe → γονική σελίδα (MkDocs) μέσω postMessage
+    function sendHeight() {
+      const h = Math.max(document.body.scrollHeight, 320);
+      try { parent.postMessage({ h5pStudioHeight: h, aid: '{{ activity_id }}' }, '*'); } catch (e) {}
+    }
+    sendHeight();
+    if (window.ResizeObserver) new ResizeObserver(sendHeight).observe(document.body);
+    window.addEventListener('load', sendHeight);
+    setTimeout(sendHeight, 1500);
+  }).catch(function (err) {
+    console.error(err);
+    const box = document.getElementById('h5p-error');
+    box.hidden = false;
+    box.textContent = 'Σφάλμα φόρτωσης της δραστηριότητας H5P: ' + (err && err.message ? err.message : err);
+  });
+});
+</script>
+</body>
+</html>

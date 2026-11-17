@@ -1,0 +1,157 @@
+<!-- Image Hotspots -->
+<template x-if="data.type==='hotspots'">
+  <div class="space-y-4">
+    <div class="bg-white rounded-xl ring-1 ring-slate-200 p-4 space-y-3">
+      <h3 class="font-bold text-sm text-slate-900">📍 Εικόνα με Hotspots</h3>
+      <p class="text-xs text-slate-500">Ανέβασε μια εικόνα (διάγραμμα/φωτογραφία) και μετά <strong>κάνε κλικ οπουδήποτε πάνω της</strong> για να τοποθετήσεις πινέζα — οι συντεταγμένες X%, Y% υπολογίζονται αυτόματα!</p>
+      <div class="flex flex-wrap items-center gap-2">
+        <button @click="uploadImage('hotspot-bg')" class="btn-p">🖼 Ανέβασμα Εικόνας</button>
+        <div class="flex items-center gap-1.5">
+          <label class="lbl !mb-0">Χρώμα πινέζας:</label>
+          <input type="color" x-model="data.color" class="w-9 h-8 rounded cursor-pointer border border-slate-300">
+        </div>
+        <div class="flex items-center gap-1.5">
+          <label class="lbl !mb-0">Εικονίδιο:</label>
+          <select x-model="data.icon" class="fld !w-auto !py-1 !text-xs">
+            <option value="plus">＋ Plus</option><option value="info">ℹ Info</option>
+            <option value="question">; Ερώτηση</option><option value="check">✓ Check</option>
+            <option value="exclamation">! Θαυμαστικό</option><option value="times">✕ Times</option>
+            <option value="minus">− Minus</option>
+          </select>
+        </div>
+      </div>
+      <!-- Καμβάς τοποθέτησης πινέζας -->
+      <template x-if="data.image && data.image.path">
+        <div class="relative select-none rounded-xl overflow-hidden ring-1 ring-slate-300 cursor-crosshair" @click="placePin($event)">
+          <img :src="mediaUrl(data.image.path)" class="w-full block pointer-events-none" draggable="false">
+          <template x-for="(h,hi) in data.hotspots" :key="hi">
+            <div class="pin" :style="'left:'+h.x+'%;top:'+h.y+'%;background:'+data.color"
+                 :class="selectedPin===hi ? 'ring-4 ring-yellow-300' : ''"
+                 @click.stop="selectedPin=hi" x-text="pinGlyph()"></div>
+          </template>
+        </div>
+      </template>
+      <template x-if="!data.image || !data.image.path">
+        <div class="rounded-xl border-2 border-dashed border-slate-300 p-8 text-center text-slate-400 text-sm">Δεν έχει ανέβει εικόνα ακόμη.</div>
+      </template>
+    </div>
+    <!-- Λίστα hotspots -->
+    <template x-for="(h,hi) in data.hotspots" :key="'h'+hi">
+      <div class="bg-white rounded-xl ring-1 p-4 space-y-2" :class="selectedPin===hi?'ring-violet-400':'ring-slate-200'" @click="selectedPin=hi">
+        <div class="flex items-center gap-2">
+          <span class="pin !static !transform-none shrink-0" :style="'background:'+data.color" x-text="hi+1"></span>
+          <h3 class="font-bold text-sm text-slate-900 flex-1">Πινέζα <span x-text="hi+1"></span>
+            <span class="text-xs font-normal text-slate-400">(X: <span x-text="Number(h.x).toFixed(1)"></span>%, Y: <span x-text="Number(h.y).toFixed(1)"></span>%)</span></h3>
+          <button @click="data.hotspots.splice(hi,1); selectedPin=-1" class="btn-s !bg-red-50 !text-red-600">🗑</button>
+        </div>
+        <div><label class="lbl">Τίτλος</label>
+          <input type="text" x-model="h.header" class="fld"></div>
+        <div><label class="lbl">Επεξήγηση (ανοίγει όταν ο μαθητής πατήσει την πινέζα)</label>
+          <textarea x-model="h.content" rows="3" class="fld"></textarea></div>
+      </div>
+    </template>
+  </div>
+</template>
+
+<!-- Dialog Cards -->
+<template x-if="data.type==='dialogcards'">
+  <div class="space-y-4">
+    <div class="bg-white rounded-xl ring-1 ring-slate-200 p-4 space-y-2">
+      <h3 class="font-bold text-sm text-slate-900">🃏 Κάρτες Μνήμης / Flashcards</h3>
+      <div><label class="lbl">Οδηγία προς τον μαθητή</label>
+        <input type="text" x-model="data.description" class="fld"></div>
+    </div>
+    <template x-for="(c,ci) in data.cards" :key="ci">
+      <div class="bg-white rounded-xl ring-1 ring-slate-200 p-4 space-y-2">
+        <div class="flex items-center gap-2">
+          <h3 class="font-bold text-sm text-slate-900 flex-1">Κάρτα <span x-text="ci+1"></span></h3>
+          <button @click="moveItem(data.cards,ci,-1)" class="btn-s">↑</button>
+          <button @click="moveItem(data.cards,ci,1)" class="btn-s">↓</button>
+          <button @click="data.cards.splice(ci,1)" class="btn-s !bg-red-50 !text-red-600">🗑</button>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-2">
+          <div><label class="lbl">Εμπρός όψη (ερώτηση/όρος)</label>
+            <textarea x-model="c.front" rows="3" class="fld"></textarea></div>
+          <div><label class="lbl">Πίσω όψη (απάντηση/επεξήγηση)</label>
+            <textarea x-model="c.back" rows="3" class="fld"></textarea></div>
+        </div>
+        <div class="flex items-center gap-2">
+          <template x-if="c.image && c.image.path">
+            <img :src="mediaUrl(c.image.path)" class="h-12 rounded-lg ring-1 ring-slate-200 object-cover">
+          </template>
+          <button @click="uploadImage('card', ci)" class="btn-s">🖼 Εικόνα κάρτας</button>
+          <template x-if="c.image && c.image.path">
+            <button @click="delete c.image" class="btn-s !bg-red-50 !text-red-600">✕</button>
+          </template>
+          <input type="text" x-model="c.tip" class="fld !text-xs flex-1" placeholder="💡 Υπόδειξη (προαιρετικά)">
+        </div>
+      </div>
+    </template>
+    <button @click="data.cards.push({front:'',back:'',tip:''})" class="btn-p w-full">➕ Προσθήκη Κάρτας</button>
+  </div>
+</template>
+
+<!-- Interactive Video -->
+<template x-if="data.type==='video'">
+  <div class="space-y-4">
+    <div class="bg-white rounded-xl ring-1 ring-slate-200 p-4 space-y-3">
+      <h3 class="font-bold text-sm text-slate-900">🎬 Διαδραστικό Βίντεο</h3>
+      <div><label class="lbl">Περιγραφή (εμφανίζεται στην αρχική οθόνη)</label>
+        <input type="text" x-model="data.description" class="fld"></div>
+      <div class="flex flex-wrap gap-2 items-center">
+        <button @click="$refs.vidInput.click()" class="btn-p">⬆ Ανέβασμα .mp4/.webm</button>
+        <select x-model="pickedVideo" @change="pickExistingVideo()" class="fld !w-auto !text-xs flex-1 min-w-[200px]">
+          <option value="">— ή επίλεξε υπάρχον βίντεο από τα docs/ —</option>
+          <template x-for="v in existingVideos" :key="v.path">
+            <option :value="v.path" x-text="v.name + ' (' + v.size_mb + ' MB)'"></option>
+          </template>
+        </select>
+      </div>
+      <template x-if="data.video && data.video.path">
+        <video :src="mediaUrl(data.video.path)" controls class="w-full rounded-xl ring-1 ring-slate-300 max-h-64 bg-black"></video>
+      </template>
+      <p class="text-xs text-slate-500">Πρόσθεσε χρονικά σημεία (<code class="bg-slate-100 px-1 rounded">MM:SS</code>) όπου το βίντεο θα κάνει <strong>παύση</strong> και θα εμφανίζει ερώτηση πολλαπλής επιλογής ή επεξηγηματικό πλαίσιο.</p>
+    </div>
+    <template x-for="(it,ii) in data.interactions" :key="ii">
+      <div class="bg-white rounded-xl ring-1 ring-slate-200 p-4 space-y-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <h3 class="font-bold text-sm text-slate-900 flex-1">Σημείο <span x-text="ii+1"></span></h3>
+          <label class="lbl !mb-0">Χρόνος (MM:SS):</label>
+          <input type="text" :value="fmtTime(it.time)" @change="it.time=parseTime($event.target.value)" class="fld !w-24 font-mono text-center" placeholder="01:30">
+          <label class="flex items-center gap-1 text-xs text-slate-600"><input type="checkbox" x-model="it.pause" class="accent-violet-600"> Παύση</label>
+          <select x-model="it.kind" class="fld !w-auto !py-1 !text-xs">
+            <option value="mc">❓ Ερώτηση πολλαπλής</option>
+            <option value="text">💬 Επεξηγηματικό πλαίσιο</option>
+          </select>
+          <button @click="data.interactions.splice(ii,1)" class="btn-s !bg-red-50 !text-red-600">🗑</button>
+        </div>
+        <div><label class="lbl">Ετικέτα σημείου</label>
+          <input type="text" x-model="it.label" class="fld" placeholder="π.χ. Έλεγξε αν κατάλαβες!"></div>
+        <template x-if="it.kind==='text'">
+          <div><label class="lbl">Κείμενο επεξήγησης</label>
+            <textarea x-model="it.text" rows="3" class="fld"></textarea></div>
+        </template>
+        <template x-if="it.kind==='mc'">
+          <div class="space-y-2">
+            <div><label class="lbl">Εκφώνηση</label>
+              <textarea x-model="it.question" rows="2" class="fld"></textarea></div>
+            <template x-for="(a,ai) in it.answers" :key="ai">
+              <div class="flex items-center gap-2 rounded-lg ring-1 p-2" :class="a.correct?'ring-emerald-300 bg-emerald-50/60':'ring-slate-200'">
+                <input type="checkbox" x-model="a.correct" class="w-4 h-4 accent-emerald-600">
+                <input type="text" x-model="a.text" class="fld flex-1" placeholder="Επιλογή">
+                <input type="text" x-model="a.feedback" class="fld flex-1 !text-xs" placeholder="💬 Feedback">
+                <button @click="it.answers.splice(ai,1)" class="btn-s !bg-red-50 !text-red-600">🗑</button>
+              </div>
+            </template>
+            <button @click="it.answers.push({text:'',correct:false,feedback:''})" class="btn-s">➕ Επιλογή</button>
+          </div>
+        </template>
+      </div>
+    </template>
+    <div class="flex gap-2">
+      <button @click="data.interactions.push({time:30,kind:'mc',pause:true,label:'',question:'',answers:[{text:'',correct:true,feedback:''},{text:'',correct:false,feedback:''}]})" class="btn-p flex-1">➕ Σημείο με Ερώτηση</button>
+      <button @click="data.interactions.push({time:60,kind:'text',pause:true,label:'',text:''})" class="btn-p flex-1 !bg-cyan-600 hover:!bg-cyan-500">➕ Σημείο με Κείμενο</button>
+    </div>
+  </div>
+</template>
+

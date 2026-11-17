@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Επεξεργασία: {{ title }} — H5P Studio</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<script src="/assets/tailwind.min.js"></script>
+<script>
+  window.ACTIVITY_ID = "{{ activity_id }}";
+  window.ACTIVITY_TYPE = "{{ atype }}";
+</script>
+<style>
+  [x-cloak]{display:none !important}
+  body{font-family:"DejaVu Sans","Liberation Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .fld{width:100%;border-radius:.5rem;border:1px solid #cbd5e1;padding:.45rem .7rem;font-size:.85rem;background:#fff}
+  .lbl{display:block;font-size:.7rem;font-weight:600;color:#475569;margin-bottom:.2rem}
+  .btn-p{padding:.45rem 1rem;border-radius:.6rem;background:#7c3aed;color:#fff;font-size:.8rem;font-weight:600}
+  .btn-p:hover{background:#8b5cf6}
+  .btn-s{padding:.35rem .8rem;border-radius:.5rem;background:#f1f5f9;color:#334155;font-size:.75rem;font-weight:600}
+  .btn-s:hover{background:#e2e8f0}
+  .pin{position:absolute;width:26px;height:26px;border-radius:9999px;transform:translate(-50%,-50%);
+       border:2.5px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.45);cursor:pointer;display:grid;place-items:center;
+       color:#fff;font-size:13px;font-weight:bold}
+</style>
+</head>
+<body class="bg-slate-100 h-screen flex flex-col overflow-hidden" x-data="editor()" x-init="init()">
+
+<!-- ===== Header ===== -->
+<header class="bg-slate-900 text-white px-4 py-2.5 flex flex-wrap items-center gap-2 shrink-0">
+  <a href="/h5p-studio/" class="text-sm text-sky-300 hover:underline font-semibold">← Βιβλιοθήκη</a>
+  <span class="text-slate-500">|</span>
+  <input type="text" x-model="meta.title" class="bg-slate-800 rounded-lg px-3 py-1.5 text-sm font-semibold flex-1 min-w-[180px] ring-1 ring-slate-700 focus:ring-violet-500 outline-none" placeholder="Τίτλος δραστηριότητας">
+  <span class="text-xs px-2 py-1 rounded-lg bg-violet-600/30 text-violet-200 ring-1 ring-violet-500/40" x-text="typeLabel()"></span>
+  <select x-model="meta.class_slug" class="bg-slate-800 rounded-lg px-2 py-1.5 text-xs ring-1 ring-slate-700">
+    <option value="">— Τάξη —</option>
+    {% for c in classes %}<option value="{{ c.slug }}">{{ c.label }}</option>{% endfor %}
+  </select>
+  <select x-model="meta.subject" class="bg-slate-800 rounded-lg px-2 py-1.5 text-xs ring-1 ring-slate-700">
+    <option value="">— Μάθημα —</option>
+    {% for s in subjects %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+  </select>
+  <button @click="save()" :disabled="busy" class="btn-p disabled:opacity-50">💾 Αποθήκευση</button>
+  <button @click="refreshPreview(true)" class="px-3 py-1.5 rounded-lg bg-cyan-600 text-xs font-semibold hover:bg-cyan-500">🔄 Προεπισκόπηση</button>
+  <span x-show="dirty" class="text-[11px] text-amber-300">● μη αποθηκευμένες αλλαγές</span>
+  <span x-show="busy" x-cloak class="text-[11px] text-slate-300 animate-pulse" x-text="busyMsg"></span>
+</header>
+
+<!-- ===== Split screen: Editor (αριστερά) | Preview (δεξιά) ===== -->
+<div class="flex-1 flex flex-col lg:flex-row min-h-0">
+  <!-- Αριστερά: φόρμες -->
+  <div class="lg:w-1/2 overflow-y-auto p-4 space-y-4" @input="dirty=true" @change="dirty=true">
+    {% include 'editor_forms_a.html' %}
+    {% include 'editor_forms_b.html' %}
+  </div>
+
+  <!-- Δεξιά: ζωντανή προεπισκόπηση -->
+  <div class="lg:w-1/2 border-t lg:border-t-0 lg:border-l border-slate-300 bg-white flex flex-col min-h-[420px]">
+    <div class="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-2 shrink-0">
+      <span class="text-xs font-bold text-slate-600">👁 ΖΩΝΤΑΝΗ ΠΡΟΕΠΙΣΚΟΠΗΣΗ</span>
+      <span class="text-[11px] text-slate-400">(όπως θα τη δει ο μαθητής)</span>
+      <label class="ml-auto flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer">
+        <input type="checkbox" x-model="autoPreview" class="accent-violet-600"> Αυτόματη ανανέωση
+      </label>
+    </div>
+    <div class="flex-1 relative">
+      <iframe x-ref="previewFrame" class="absolute inset-0 w-full h-full border-0" title="Προεπισκόπηση H5P"></iframe>
+      <div x-show="!previewReady" class="absolute inset-0 grid place-items-center bg-slate-50 text-slate-400 text-sm p-6 text-center">
+        <div>
+          <div class="text-3xl mb-2">👁</div>
+          Πάτησε «🔄 Προεπισκόπηση» για να δεις τη δραστηριότητα ζωντανά.<br>
+          <span class="text-xs">(Οι αλλαγές αποθηκεύονται προσωρινά μόνο για την προεπισκόπηση)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="file" accept="image/*" x-ref="imgInput" class="hidden" @change="onImagePicked($event)">
+<input type="file" accept=".mp4,.webm,.ogv" x-ref="vidInput" class="hidden" @change="onVideoPicked($event)">
+
+<div x-show="toast" x-cloak x-transition class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm shadow-lg" x-text="toast"></div>
+
+<script src="{{ url_for('static', path='editor.js') }}"></script>
+<script defer src="/assets/alpine.min.js"></script>
+</body>
+</html>

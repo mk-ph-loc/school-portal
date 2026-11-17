@@ -1,0 +1,141 @@
+<!-- ===== Modal AI Οδηγού Δημιουργίας (Wizard 3 βημάτων) ===== -->
+<div x-show="showWizard" x-cloak class="fixed inset-0 z-50 bg-slate-900/60 grid place-items-center p-4" @keydown.escape.window="showWizard=false">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto" @click.outside="showWizard=false">
+    <div class="sticky top-0 bg-gradient-to-r from-violet-700 to-fuchsia-600 text-white px-6 py-4 rounded-t-2xl flex items-center gap-3">
+      <span class="text-2xl">✨</span>
+      <div class="flex-1">
+        <h2 class="font-bold">AI Οδηγός Δημιουργίας (Wizard)</h2>
+        <div class="flex gap-1.5 mt-1.5 text-[11px]">
+          <span class="px-2 py-0.5 rounded-full" :class="wizStep>=1?'bg-white text-violet-700 font-bold':'bg-white/20'">1 · Πλαίσιο Μαθήματος</span>
+          <span class="px-2 py-0.5 rounded-full" :class="wizStep>=2?'bg-white text-violet-700 font-bold':'bg-white/20'">2 · Παιδαγωγικές Προτάσεις</span>
+          <span class="px-2 py-0.5 rounded-full" :class="wizStep>=3?'bg-white text-violet-700 font-bold':'bg-white/20'">3 · Παραγωγή με AI</span>
+        </div>
+      </div>
+      <button @click="showWizard=false" class="text-white/80 hover:text-white text-xl leading-none">✕</button>
+    </div>
+
+    <!-- Βήμα 1: Context -->
+    <div x-show="wizStep===1" class="p-6 space-y-3">
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Τάξη</label>
+          <select x-model="wiz.class_slug" class="w-full text-sm rounded-lg border-slate-300 border px-3 py-2 bg-white">
+            {% for c in classes %}<option value="{{ c.slug }}">{{ c.label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Μάθημα</label>
+          <select x-model="wiz.subject" class="w-full text-sm rounded-lg border-slate-300 border px-3 py-2 bg-white">
+            {% for s in subjects %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Κεφάλαιο / Τίτλος Ημερήσιου Μαθήματος</label>
+        <input type="text" x-model="wiz.chapter" placeholder="π.χ. Δομές Επιλογής στη Python (if/else)" class="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm">
+      </div>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Διδακτικός Στόχος</label>
+          <select x-model="wiz.goal" class="w-full text-sm rounded-lg border-slate-300 border px-3 py-2 bg-white">
+            <option value="intro">Εισαγωγή εννοιών</option>
+            <option value="practice">Εξάσκηση & Εμπέδωση</option>
+            <option value="visual">Οπτική εξερεύνηση</option>
+            <option value="assessment">Αξιολόγηση</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Επίπεδο Δυσκολίας</label>
+          <select x-model="wiz.difficulty" class="w-full text-sm rounded-lg border-slate-300 border px-3 py-2 bg-white">
+            <option value="easy">Εύκολο</option>
+            <option value="medium">Μέτριο</option>
+            <option value="hard">Δύσκολο</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Σημειώσεις / Κείμενο Μαθήματος (προαιρετικά — το AI θα βασιστεί ΑΠΟΚΛΕΙΣΤΙΚΑ σε αυτό)</label>
+        <textarea x-model="wiz.notes" rows="5" placeholder="Επικόλλησε εδώ τις σημειώσεις ή το κείμενο του μαθήματος…" class="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm"></textarea>
+      </div>
+      <div class="flex justify-end pt-2">
+        <button @click="wizNext2()" :disabled="!wiz.chapter.trim()" class="px-5 py-2 text-sm rounded-lg bg-violet-600 text-white font-semibold hover:bg-violet-500 disabled:opacity-50">Επόμενο: Προτάσεις →</button>
+      </div>
+    </div>
+
+    <!-- Βήμα 2: Προτάσεις -->
+    <div x-show="wizStep===2" x-cloak class="p-6">
+      <p class="text-sm text-slate-600 mb-3">Με βάση τον στόχο <strong x-text="goalLabel(wiz.goal)"></strong>, προτείνονται οι παρακάτω τύποι H5P:</p>
+      <div class="space-y-2">
+        <template x-for="s in wizSuggestions" :key="s.type">
+          <button @click="wiz.type=s.type" class="w-full text-left rounded-xl p-4 ring-2 transition"
+                  :class="wiz.type===s.type ? 'ring-violet-600 bg-violet-50' : 'ring-slate-200 bg-white hover:ring-violet-300'">
+            <div class="flex items-center gap-2 font-semibold text-slate-900 text-sm">
+              <span class="text-lg" x-text="s.icon"></span><span x-text="s.label"></span>
+              <span x-show="wiz.type===s.type" class="ml-auto text-violet-600 text-xs font-bold">✓ Επιλέχθηκε</span>
+            </div>
+            <p class="text-xs text-slate-600 mt-1.5 leading-relaxed" x-text="s.why"></p>
+          </button>
+        </template>
+      </div>
+      <div class="mt-3">
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Ή επίλεξε άλλον τύπο:</label>
+        <select x-model="wiz.type" class="w-full text-sm rounded-lg border-slate-300 border px-3 py-2 bg-white">
+          <template x-for="(label,t) in typeLabels" :key="t">
+            <template x-if="t!=='external'"><option :value="t" x-text="label"></option></template>
+          </template>
+        </select>
+      </div>
+      <div class="flex justify-between pt-4">
+        <button @click="wizStep=1" class="px-4 py-2 text-sm rounded-lg bg-slate-100 hover:bg-slate-200">← Πίσω</button>
+        <button @click="wizNext3()" :disabled="!wiz.type" class="px-5 py-2 text-sm rounded-lg bg-violet-600 text-white font-semibold hover:bg-violet-500 disabled:opacity-50">Επόμενο: Παραγωγή Υλικού →</button>
+      </div>
+    </div>
+
+    <!-- Βήμα 3: AI (διπλή λειτουργία) -->
+    <div x-show="wizStep===3" x-cloak class="p-6 space-y-4">
+      <!-- Α. Άμεση παραγωγή -->
+      <div class="rounded-xl bg-gradient-to-r from-violet-50 to-fuchsia-50 ring-1 ring-violet-200 p-4">
+        <h3 class="font-bold text-slate-900 text-sm">Α. Άμεση Παραγωγή με Ενσωματωμένο AI</h3>
+        <p class="text-xs text-slate-600 mt-1">Το backend ζητά από το μοντέλο (Qwen / OpenAI-compatible) αυστηρά δομημένο JSON, δημιουργεί τη δραστηριότητα και ανοίγει αμέσως τον Visual Editor για έλεγχο & προεπισκόπηση.</p>
+        <button @click="wizGenerate()" :disabled="busy || !aiConfigured"
+                class="mt-3 px-4 py-2 text-sm rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold shadow hover:opacity-90 disabled:opacity-50">
+          ✨ Αυτόματη Δημιουργία Άσκησης με AI
+        </button>
+        <span x-show="busy" class="ml-2 text-xs text-violet-700 animate-pulse" x-text="busyMsg"></span>
+        <p x-show="!aiConfigured" class="mt-2 text-xs text-amber-700">⚠️ Δεν υπάρχει ρυθμισμένο API Key — άνοιξε τις «⚙️ Ρυθμίσεις AI» ή χρησιμοποίησε την επιλογή Β παρακάτω.</p>
+      </div>
+
+      <!-- Β. Prompts για εξωτερικά AI -->
+      <div class="rounded-xl ring-1 ring-slate-200 p-4">
+        <h3 class="font-bold text-slate-900 text-sm">Β. Γεννήτρια Prompts για Εξωτερικά AI</h3>
+        <div class="flex flex-wrap gap-1.5 mt-2 text-xs">
+          <a href="https://notebooklm.google.com/" target="_blank" class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 font-semibold hover:bg-emerald-100">📓 NotebookLM ↗</a>
+          <a href="https://chatgpt.com/" target="_blank" class="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-200 font-semibold hover:bg-teal-100">💬 ChatGPT ↗</a>
+          <a href="https://claude.ai/" target="_blank" class="px-2.5 py-1 rounded-lg bg-orange-50 text-orange-700 ring-1 ring-orange-200 font-semibold hover:bg-orange-100">🤖 Claude ↗</a>
+          <a href="https://gemini.google.com/" target="_blank" class="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-200 font-semibold hover:bg-blue-100">♊ Gemini ↗</a>
+        </div>
+        <label class="block text-xs font-semibold text-slate-600 mt-3 mb-1">Prompt Παραγωγής Περιεχομένου / JSON</label>
+        <textarea readonly rows="6" class="w-full rounded-lg border-slate-300 border px-3 py-2 text-xs font-mono bg-slate-50" x-text="wizPrompts.content_prompt"></textarea>
+        <button @click="copyText(wizPrompts.content_prompt, 'Το prompt περιεχομένου αντιγράφηκε!')" class="mt-1.5 px-3 py-1.5 text-xs rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-700">📋 Αντιγραφή Prompt</button>
+
+        <template x-if="wizPrompts.image_prompt">
+          <div class="mt-3">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Prompt Δημιουργίας Εικόνας / Διαγράμματος (για Image Hotspots)</label>
+            <textarea readonly rows="5" class="w-full rounded-lg border-slate-300 border px-3 py-2 text-xs font-mono bg-slate-50" x-text="wizPrompts.image_prompt"></textarea>
+            <button @click="copyText(wizPrompts.image_prompt, 'Το prompt εικόνας αντιγράφηκε!')" class="mt-1.5 px-3 py-1.5 text-xs rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-700">📋 Αντιγραφή Prompt</button>
+          </div>
+        </template>
+
+        <label class="block text-xs font-semibold text-slate-600 mt-4 mb-1">Επικόλληση JSON Απάντησης AI → Μετατροπή σε H5P</label>
+        <textarea x-model="wizPaste" rows="5" placeholder='Επικόλλησε εδώ το JSON που επέστρεψε το AI, π.χ. {"type":"multichoice","question":"…","answers":[…]}' class="w-full rounded-lg border-slate-300 border px-3 py-2 text-xs font-mono"></textarea>
+        <button @click="wizPasteJson()" :disabled="busy || !wizPaste.trim()" class="mt-1.5 px-4 py-2 text-xs rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 disabled:opacity-50">🔄 Μετατροπή σε H5P & Άνοιγμα Editor</button>
+      </div>
+
+      <div class="flex justify-between pt-1">
+        <button @click="wizStep=2" class="px-4 py-2 text-sm rounded-lg bg-slate-100 hover:bg-slate-200">← Πίσω</button>
+        <button @click="showWizard=false" class="px-4 py-2 text-sm rounded-lg bg-slate-100 hover:bg-slate-200">Κλείσιμο</button>
+      </div>
+    </div>
+  </div>
+</div>
+

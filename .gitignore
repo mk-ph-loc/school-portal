@@ -78,6 +78,15 @@ apps/hedgedoc-bridge/.cookie-secret
 apps/hedgedoc-bridge/backups/
 *.bak
 
+# --- H5P Studio: μυστικά, προσωρινά exports & backups εκτός git ---
+# (Ο κώδικας, τα templates, ο offline player static/h5p-player/, οι τοπικές
+#  βιβλιοθήκες h5p-libraries/ ΚΑΙ η βιβλιοθήκη δραστηριοτήτων library/<id>/
+#  ΜΕΝΟΥΝ στο git — 100% offline αναπαραγωγή & versioned εκπαιδευτικό υλικό.)
+h5p-studio/.cookie-secret
+h5p-studio/backups/
+h5p-studio/.export-*.h5p
+h5p-studio/library/preview-tmp/
+
 # --- Λειτουργικό σύστημα ---
 .DS_Store
 Thumbs.db

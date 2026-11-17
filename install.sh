@@ -64,6 +64,10 @@ WEBLAB_DIR="${PORTAL_DIR}/web-lab"                         # συνεργατι�
 WEBLAB_PORT="8011"                                         # (8010 = excalidraw-room /board-ws/)
 CODEMIRROR_VERSION="5.65.16"                               # τοπικός editor — 100% offline
 
+# --- H5P Studio Διαδραστικών Ασκήσεων (FastAPI + SQLite, χωρίς Docker) ---
+H5P_DIR="${PORTAL_DIR}/h5p-studio"                         # visual editor + offline player στο /h5p-studio/
+H5P_PORT="8012"                                            # (8011 = Web Lab /web-lab/)
+
 SKIP_DEPS=0
 DO_UPDATE=0
 
@@ -158,7 +162,7 @@ fi
 # 3. Δομή φακέλων
 # ---------------------------------------------------------------------------
 log "Δημιουργία δομής φακέλων…"
-mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},app-builder/{static,templates},apps/hedgedoc-bridge/templates,web-lab/{static,templates},lab-app,custom-apps/_template,apps,config/{nginx,systemd,etherpad},scripts,data/build,data/filebrowser,shared-files}
+mkdir -p "${PORTAL_DIR}"/{dashboard/assets,dashboard/lab,mkdocs-site/docs,pandoc-app/{templates,static,data/templates,data/uploads},exams-app/{submissions,static,templates},live-quiz-app/{static,templates},app-builder/{static,templates},apps/hedgedoc-bridge/templates,web-lab/{static,templates},h5p-studio/{static,templates,library,h5p-libraries,backups},lab-app,custom-apps/_template,apps,config/{nginx,systemd,etherpad},scripts,data/build,data/filebrowser,shared-files}
 mkdir -p "${DOCS_OUT}" "${TOOLS_OUT}"/{cyberchef,it-tools,board,circuits,blockly,sql/vendor,pdf-tools/vendor/fonts}
 ok "Η δομή φακέλων δημιουργήθηκε."
 
@@ -838,6 +842,23 @@ if [[ -f "${WEBLAB_DIR}/.cookie-secret" ]]; then
     chown www-data:www-data "${WEBLAB_DIR}/.cookie-secret"
     chmod 660 "${WEBLAB_DIR}/.cookie-secret"
 fi
+
+# h5p-studio: η SQLite βάση (h5p.db), το .cookie-secret, η βιβλιοθήκη
+# δραστηριοτήτων (library/) & τα backups γράφονται από τη διεργασία www-data.
+chown -R www-data:www-data "${H5P_DIR}"
+chmod 2775 "${H5P_DIR}" "${H5P_DIR}/library"
+for h5_file in "${H5P_DIR}"/h5p.db*; do
+    [[ -e "${h5_file}" ]] && chown www-data:www-data "${h5_file}" && chmod 664 "${h5_file}"
+done
+if [[ -f "${H5P_DIR}/.cookie-secret" ]]; then
+    chown www-data:www-data "${H5P_DIR}/.cookie-secret"
+    chmod 660 "${H5P_DIR}/.cookie-secret"
+fi
+# Το AI του H5P Studio διαβάζει το .env.keys της πύλης (Alibaba Qwen API)
+if [[ -f "${PORTAL_DIR}/.env.keys" ]]; then
+    chgrp www-data "${PORTAL_DIR}/.env.keys"
+    chmod 640 "${PORTAL_DIR}/.env.keys"
+fi
 touch "${PORTAL_DIR}/data/mkdocs-build.lock"
 chown root:www-data "${PORTAL_DIR}/data/mkdocs-build.lock"
 chmod 664 "${PORTAL_DIR}/data/mkdocs-build.lock"
@@ -907,6 +928,7 @@ install -m 644 "${PORTAL_DIR}/config/systemd/school-filebrowser.service" /etc/sy
 install -m 644 "${PORTAL_DIR}/config/systemd/school-exams.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-livequiz.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-weblab.service" /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-h5p.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-appbuilder.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-etherpad.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-excalidraw-room.service" /etc/systemd/system/
@@ -921,6 +943,11 @@ if [[ -f "${WEBLAB_DIR}/main.py" ]]; then
     systemctl enable --now school-weblab.service
 else
     warn "Παράλειψη school-weblab.service (λείπει το web-lab/main.py)."
+fi
+if [[ -f "${H5P_DIR}/main.py" ]]; then
+    systemctl enable --now school-h5p.service
+else
+    warn "Παράλειψη school-h5p.service (λείπει το h5p-studio/main.py)."
 fi
 systemctl enable --now school-appbuilder.service
 if [[ -f "${ETHERPAD_DIR}/package.json" ]] && command -v node >/dev/null 2>&1; then
@@ -1023,6 +1050,8 @@ check_url "/live-quiz/teacher"       200
 check_url "/live-quiz/healthz"       200
 check_url "/web-lab/"                200
 check_url "/web-lab/healthz"         200
+check_url "/h5p-studio/"             200
+check_url "/h5p-studio/healthz"      200
 check_url "/pandoc/"                 401
 check_url "/pandoc/"                 200 "${TEACHER_USER}:${TEACHER_PASS}"
 check_url "/docs/teachers/"          401
@@ -1081,6 +1110,8 @@ echo "  🎯 Live Quiz Τάξης:    http://${IP_ADDR}/live-quiz/ (είσοδο
 echo "     Προτζέκτορας:       http://${IP_ADDR}/live-quiz/teacher  (κωδικός ${TEACHER_PASS})"
 echo "  🌐 Εργαστήριο Web:     http://${IP_ADDR}/web-lab/   (HTML/CSS/JS editor + δωμάτια ομάδας)"
 echo "     Δημοσίευση έργων:   κωδικός ${TEACHER_PASS} → ζωντανή κάρτα στο Dashboard (/apps/)"
+echo "  🎮 H5P Studio:         http://${IP_ADDR}/h5p-studio/ (διαδραστικές ασκήσεις + AI wizard)"
+echo "     Δημιουργία/επεξεργασία: κωδικός ${TEACHER_PASS} · αναπαραγωγή μαθητών ελεύθερη"
 echo
 echo "  🔐 Πρόσβαση καθηγητών:"
 echo "     Dashboard:  κωδικός ${TEACHER_PASS}"
@@ -1095,6 +1126,7 @@ echo "     systemctl status school-filebrowser.service"
 echo "     systemctl status school-exams.service"
 echo "     systemctl status school-livequiz.service"
 echo "     systemctl status school-weblab.service"
+echo "     systemctl status school-h5p.service"
 echo "     systemctl status school-appbuilder.service"
 echo "     systemctl status school-etherpad.service"
 echo "     systemctl status school-excalidraw-room.service"

@@ -1,0 +1,30 @@
+<!-- ===== Modal Ρυθμίσεων AI ===== -->
+<div x-show="showSettings" x-cloak class="fixed inset-0 z-50 bg-slate-900/60 grid place-items-center p-4" @keydown.escape.window="showSettings=false">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6" @click.outside="showSettings=false">
+    <h2 class="text-lg font-bold text-slate-900">⚙️ Ρυθμίσεις AI (OpenAI-compatible)</h2>
+    <p class="text-sm text-slate-500 mt-1">
+      Κατάσταση: <span class="font-semibold" :class="settings.configured ? 'text-emerald-600' : 'text-amber-600'"
+        x-text="settings.configured ? '✅ Ρυθμισμένο (' + settings.source + ')' : '⚠️ Χωρίς API Key'"></span>
+    </p>
+    <div class="mt-4 space-y-3">
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">API Key (κενό = χρήση από .env.keys της πύλης)</label>
+        <input type="password" x-model="settingsForm.api_key" placeholder="sk-..." class="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Base URL</label>
+        <input type="text" x-model="settingsForm.base_url" :placeholder="settings.base_url" class="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Μοντέλο</label>
+        <select x-model="settingsForm.model" class="w-full text-sm rounded-lg border-slate-300 border px-3 py-2 bg-white">
+          <template x-for="m in settings.models" :key="m"><option :value="m" x-text="m"></option></template>
+        </select>
+      </div>
+    </div>
+    <div class="flex gap-2 justify-end mt-4">
+      <button @click="showSettings=false" class="px-4 py-2 text-sm rounded-lg bg-slate-100 hover:bg-slate-200">Κλείσιμο</button>
+      <button @click="saveSettings()" class="px-4 py-2 text-sm rounded-lg bg-violet-600 text-white font-semibold hover:bg-violet-500">Αποθήκευση</button>
+    </div>
+  </div>
+</div>

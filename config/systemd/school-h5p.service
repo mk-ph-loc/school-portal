@@ -1,0 +1,54 @@
+[Unit]
+Description=Ψηφιακή Πύλη — H5P Studio Διαδραστικών Ασκήσεων (FastAPI/Uvicorn + SQLite)
+Documentation=file:///opt/school-portal/README.md
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/school-portal/h5p-studio
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=HOME=/opt/school-portal/h5p-studio
+# ΣΗΜΕΙΩΣΗ: Η 8011 χρησιμοποιείται ήδη από το Web Lab (/web-lab/)·
+# το H5P Studio ακούει στο 127.0.0.1:8012 πίσω από τον Nginx στο /h5p-studio/.
+ExecStart=/opt/school-portal/venv/bin/uvicorn main:app \
+    --host 127.0.0.1 --port 8012 \
+    --root-path /h5p-studio --proxy-headers --forwarded-allow-ips 127.0.0.1 \
+    --workers 1 --no-access-log --log-level warning \
+    --timeout-keep-alive 5
+
+Restart=on-failure
+RestartSec=5s
+
+# --- Κατανάλωση πόρων (imports .h5p έως 100 MB γίνονται σε memory buffer) ---
+MemoryMax=384M
+MemoryHigh=256M
+CPUWeight=50
+Nice=5
+TasksMax=64
+
+# --- Ασφάλεια / hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+# Η εφαρμογή γράφει ΜΟΝΟ: h5p.db (+WAL), .cookie-secret, library/<id>/ &
+# backups/ μέσα στον φάκελό της, και mkdocs-site/docs/<τάξη>/*.md κατά την
+# «Ενσωμάτωση σε Μάθημα» (όπως το md-publish bridge) + data/ για το build lock.
+ReadWritePaths=/opt/school-portal/h5p-studio /opt/school-portal/mkdocs-site /opt/school-portal/data
+# Ανάγνωση του .env.keys της πύλης για το AI API (Alibaba Qwen)
+ReadOnlyPaths=/opt/school-portal
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target
