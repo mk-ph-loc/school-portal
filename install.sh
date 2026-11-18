@@ -60,6 +60,8 @@ MDBRIDGE_DIR="${PORTAL_DIR}/apps/hedgedoc-bridge"          # γέφυρα δημ
 MDBRIDGE_PORT="8009"
 LESSONWIZARD_DIR="${PORTAL_DIR}/apps/lesson-wizard"        # ημερήσια μαθήματα στο /lesson-wizard/
 LESSONWIZARD_PORT="8013"
+CLASSROOM_DIR="${PORTAL_DIR}/apps/classroom-hub"           # ζωντανή τάξη στο /classroom/
+CLASSROOM_PORT="8014"                                      # παρουσία, εντολές, timers ωραρίου
 
 # --- Εργαστήριο Web HTML/CSS/JS (FastAPI + WebSockets + SQLite, χωρίς Docker) ---
 WEBLAB_DIR="${PORTAL_DIR}/web-lab"                         # συνεργατικός editor στο /web-lab/
@@ -215,6 +217,33 @@ fetch_asset "https://cdn.jsdelivr.net/npm/alpinejs@${ALPINE_VERSION}/dist/cdn.mi
             "${PORTAL_DIR}/dashboard/assets/alpine.min.js" "Alpine.js"
 fetch_asset "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@${TAILWIND_VERSION}/dist/index.global.js" \
             "${PORTAL_DIR}/dashboard/assets/tailwind.min.js" "Tailwind CSS"
+
+# --- Vendor βιβλιοθήκες MkDocs (MathJax / Mermaid / Reveal.js — 100% τοπικά) ---
+VENDOR_DIR="${PORTAL_DIR}/mkdocs-site/docs/assets/vendor"
+mkdir -p "${VENDOR_DIR}"/{mermaid,mathjax,reveal/theme,reveal/plugin/highlight}
+fetch_asset "https://cdn.jsdelivr.net/npm/mermaid@11.12.1/dist/mermaid.min.js" \
+            "${VENDOR_DIR}/mermaid/mermaid.min.js" "Mermaid 11 (διαγράμματα)"
+fetch_asset "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg-full.js" \
+            "${VENDOR_DIR}/mathjax/tex-svg-full.js" "MathJax 3 (μαθηματικά)"
+fetch_asset "https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.js" \
+            "${VENDOR_DIR}/reveal/reveal.js" "Reveal.js (slides)"
+fetch_asset "https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.css" \
+            "${VENDOR_DIR}/reveal/reveal.css" "Reveal.css"
+fetch_asset "https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/theme/white.css" \
+            "${VENDOR_DIR}/reveal/theme/white.css" "Reveal theme white"
+fetch_asset "https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/theme/black.css" \
+            "${VENDOR_DIR}/reveal/theme/black.css" "Reveal theme black"
+fetch_asset "https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/highlight/highlight.js" \
+            "${VENDOR_DIR}/reveal/plugin/highlight/highlight.js" "Reveal highlight plugin"
+fetch_asset "https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/highlight/monokai.css" \
+            "${VENDOR_DIR}/reveal/plugin/highlight/monokai.css" "Reveal monokai.css"
+# Το πλωτό μενού πλοήγησης σερβίρεται και μέσα από το MkDocs (extra_javascript).
+cp -f "${PORTAL_DIR}/dashboard/assets/portal-nav.js" \
+      "${PORTAL_DIR}/mkdocs-site/docs/assets/javascripts/portal-nav.js" 2>/dev/null || true
+# GIF animation για τη σελίδα «Παράδειγμα Δυνατοτήτων» (Pillow, idempotent).
+if [[ -x "${PORTAL_DIR}/venv/bin/python" && -f "${PORTAL_DIR}/scripts/make-demo-assets.py" ]]; then
+    "${PORTAL_DIR}/venv/bin/python" "${PORTAL_DIR}/scripts/make-demo-assets.py" >/dev/null 2>&1 || true
+fi
 
 # --- CodeMirror 5 για το /web-lab/ (έρχεται από το git· εδώ μόνο fallback) ---
 CM_DIR="${WEBLAB_DIR}/static/vendor/codemirror"
@@ -820,6 +849,30 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 6ιε. Classroom Hub — Ζωντανή Τάξη (/classroom/, FastAPI + WS @8014)
+#      Παρουσία guest/μαθητή/καθηγητή, εντολές τάξης, timers ωραρίου,
+#      ενιαίο Excel ρυθμίσεων. Δικαιώματα όπως στο lesson-wizard.
+# ---------------------------------------------------------------------------
+if [[ -f "${CLASSROOM_DIR}/app.py" ]]; then
+    chown -R root:www-data "${CLASSROOM_DIR}"
+    chmod 2775 "${CLASSROOM_DIR}"
+    mkdir -p "${CLASSROOM_DIR}/data"
+    chown www-data:www-data "${CLASSROOM_DIR}/data"
+    chmod 2775 "${CLASSROOM_DIR}/data"
+    if [[ -f "${CLASSROOM_DIR}/.cookie-secret" ]]; then
+        chown www-data:www-data "${CLASSROOM_DIR}/.cookie-secret"
+        chmod 600 "${CLASSROOM_DIR}/.cookie-secret"
+    fi
+    # Η SQLite βάση πρέπει να είναι group-writable (όπως exams/live-quiz)
+    for cr_file in "${CLASSROOM_DIR}/data"/classroom.db*; do
+        [[ -e "${cr_file}" ]] && chown www-data:www-data "${cr_file}" && chmod 664 "${cr_file}"
+    done
+    ok "Το Classroom Hub (Ζωντανή Τάξη) είναι έτοιμο."
+else
+    warn "Λείπει το apps/classroom-hub/app.py — το /classroom/ δεν θα λειτουργεί."
+fi
+
+# ---------------------------------------------------------------------------
 # 7. Δικαιώματα (setgid ώστε root & www-data να συνεργάζονται)
 # ---------------------------------------------------------------------------
 log "Ρύθμιση δικαιωμάτων…"
@@ -959,6 +1012,7 @@ install -m 644 "${PORTAL_DIR}/config/systemd/school-excalidraw-room.service" /et
 install -m 644 "${PORTAL_DIR}/config/systemd/school-hedgedoc.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-mdbridge.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-lessonwizard.service" /etc/systemd/system/
+install -m 644 "${PORTAL_DIR}/config/systemd/school-classroom.service" /etc/systemd/system/
 systemctl daemon-reload
 
 systemctl enable --now school-pandoc.service
@@ -999,6 +1053,11 @@ if [[ -f "${LESSONWIZARD_DIR}/app.py" ]]; then
     systemctl enable --now school-lessonwizard.service
 else
     warn "Παράλειψη school-lessonwizard.service (λείπει το apps/lesson-wizard/app.py)."
+fi
+if [[ -f "${CLASSROOM_DIR}/app.py" ]]; then
+    systemctl enable --now school-classroom.service
+else
+    warn "Παράλειψη school-classroom.service (λείπει το apps/classroom-hub/app.py)."
 fi
 systemctl enable --now school-mkdocs.path
 systemctl start school-mkdocs.service
@@ -1063,6 +1122,10 @@ check_url "/lesson-wizard/healthz"   200
 check_url "/lesson-wizard/api/lessons" 401
 check_url "/lesson-wizard/api/check" 401
 check_url "/lesson-wizard/api/schedule/public" 200
+check_url "/classroom/"              200
+check_url "/classroom/healthz"       200
+check_url "/classroom/api/roster"    401
+check_url "/classroom/api/config/template" 401
 check_url "/circuits/"               200
 check_url "/circuits/circuitjs.html" 200
 check_url "/blockly/"                200
@@ -1131,6 +1194,8 @@ echo "  ✍️  Συνεργατικό Markdown: http://${IP_ADDR}/md-pad/ (Hedg
 echo "     Πρότυπο δυνατοτήτων: http://${IP_ADDR}/md-pad/template-demo"
 echo "  📤 Δημοσίευση → MkDocs: http://${IP_ADDR}/md-publish/ (κωδικός ${TEACHER_PASS})"
 echo "  🧙 Lesson Wizard:       http://${IP_ADDR}/lesson-wizard/ (κωδικός ${TEACHER_PASS})"
+echo "  🏫 Ζωντανή Τάξη:        http://${IP_ADDR}/classroom/  (guest/μαθητής ελεύθερα· καθηγητής: ${TEACHER_PASS})"
+echo "     Ενιαίο Excel ρυθμίσεων: μενού + εργαλειοθήκες + ωράριο + timers + γεγονότα + quiz"
 echo "  ⚡ Κυκλώματα:          http://${IP_ADDR}/circuits/ (CircuitJS1, static, 0 MB)"
 echo "  🧩 Blockly Games:      http://${IP_ADDR}/blockly/  (ελληνικά, static, 0 MB)"
 echo "  🗄️  SQL Playground:     http://${IP_ADDR}/sql/      (SQLite WASM, static, 0 MB)"
@@ -1169,6 +1234,7 @@ echo "     systemctl status school-excalidraw-room.service"
 echo "     systemctl status school-hedgedoc.service"
 echo "     systemctl status school-mdbridge.service"
 echo "     systemctl status school-lessonwizard.service"
+echo "     systemctl status school-classroom.service"
 echo "     systemctl start school-mkdocs.service    # rebuild υλικού"
 echo "     journalctl -u school-pandoc.service -f"
 echo "     sudo ${PORTAL_DIR}/install.sh --update   # ενημέρωση"

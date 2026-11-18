@@ -38,6 +38,7 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 | `/md-pad/` | Συνεργατικό Markdown (HedgeDoc) | HedgeDoc 1.12.0 (Node.js 22 + SQLite) @ `127.0.0.1:8007` | Ελεύθερη (ανώνυμη επεξεργασία) |
 | `/md-publish/` | Δημοσίευση HedgeDoc → MkDocs | FastAPI micro-bridge @ `127.0.0.1:8009`, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
 | `/lesson-wizard/` | 🧙 Lesson Wizard — Ημερήσια Μαθήματα & Ωράριο | FastAPI + openpyxl @ `127.0.0.1:8013`, HMAC cookie | 🔐 Καθηγητές (`teacher2026`) |
+| `/classroom/` | 🏫 Ζωντανή Τάξη — Κεντρικό Παράθυρο (παρουσία, εντολές, chat/forum, timers ωραρίου) | FastAPI + WebSockets + SQLite + openpyxl @ `127.0.0.1:8014` | Ελεύθερη (guest/μαθητής) · καθηγητής: `teacher2026` |
 | `/circuits/` | CircuitJS1 — Προσομοιωτής Κυκλωμάτων | Στατικό build pfalstad/circuitjs1 (0 MB RAM) | Ελεύθερη |
 | `/blockly/` | Blockly Games (ελληνικά) | Επίσημο offline static πακέτο Google (0 MB RAM) | Ελεύθερη |
 | `/sql/` | SQL Playground | Στατικό HTML + sql.js/SQLite WASM (0 MB RAM) | Ελεύθερη |
@@ -159,13 +160,22 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   │       ├── javascripts/     # class-filter, glossa, python-run, quiz,
 │   │       │                    # lesson-phases (fullscreen), schedule (ωράριο)
 │   │       ├── stylesheets/     # extra.css
-│   │       └── pyodide/         # Pyodide 314.0.8 (offline)
+│   │       ├── pyodide/         # Pyodide 314.0.8 (offline)
+│   │       └── vendor/          # MathJax / Mermaid / Reveal.js (offline, install.sh)
 │   └── overrides/
 ├── apps/lesson-wizard/     # 🧙 Lesson Wizard (/lesson-wizard/, FastAPI @8013)
-│   ├── app.py              # φάσεις CRUD, upload υλικού, ωράριο Excel, /api/check
-│   ├── templates/ static/  # Alpine UI με drag & drop φάσεων
+│   ├── app.py              # φάσεις CRUD, tags/fav, πλέγμα ωραρίου, broadcast,
+│   │                       # file browser docs/, βιβλιοθήκη PDF, /api/check
+│   ├── templates/ static/  # Alpine UI: φίλτρα, grid ωραρίου, drag & drop
 │   ├── data/               # schedule.json, active-overrides.json, πρότυπο xlsx
 │   └── backups/            # .bak πριν από κάθε εγγραφή
+├── apps/classroom-hub/     # 🏫 Ζωντανή Τάξη (/classroom/, FastAPI + WS @8014)
+│   ├── app.py              # παρουσία guest/μαθητή/καθηγητή (heartbeat), εντολές
+│   │                       # τάξης, poll/quiz, timers ωραρίου ±offset, γεγονότα,
+│   │                       # chat/forum, ενιαίο Excel ρυθμίσεων (12 καρτέλες)
+│   ├── templates/index.html   # shell: μόνιμο μενού ανά ρόλο + iframe εφαρμογών
+│   ├── static/classroom.js    # Alpine: dock⇄float εργαλειοθήκες, WS, confetti
+│   └── data/               # classroom.db, config.json, rythmiseis-protypo.xlsx
 ├── pandoc-app/             # Visual Pandoc Studio (/pandoc/)
 │   ├── main.py             # FastAPI + pandoc + WeasyPrint
 │   ├── templates/index.html
@@ -443,15 +453,110 @@ slides.pdf, διαδραστικά .html, φύλλα εργασίας, αποσ�
   προσθήκη από παλέτα τύπων, επεξεργασία περιεχομένου, upload υλικού στον
   φάκελο του μαθήματος, δημιουργία νέου μαθήματος από template, αυτόματο
   `nav` + rebuild, `.bak` backup πριν από κάθε εγγραφή.
-- **🗓️ Ωράριο:** κατέβασε το πρότυπο Excel από το wizard (φύλλα *Τμήματα /
-  Ωρες / Ωραριο*), συμπλήρωσέ το και ανέβασέ το. Ο μαθητής δηλώνει το τμήμα
-  του («Το τμήμα μου» στο header) → βλέπει μόνο τα μαθήματα της τάξης του +
-  widget **«Τώρα στο σχολείο»** με το ενεργό μάθημα της ώρας. Ο καθηγητής
-  μπορεί ανά πάσα στιγμή να ορίσει χειροκίνητα «Ενεργό μάθημα τώρα» ανά τμήμα.
+- **🔎 Φίλτρα / 🏷 Tags / ⭐ Αγαπημένα:** η λίστα μαθημάτων φιλτράρεται ανά
+  **τάξη, μάθημα, tag και αναζήτηση κειμένου**· κάθε μάθημα παίρνει tags και
+  «αγαπημένο» (μπαίνουν στο front-matter `tags: [...]`, `favorite: true` —
+  ταξιδεύουν με το αρχείο/git και φαίνονται ως chips στη σελίδα του μαθητή).
+  Από κάθε κάρτα: **▶ Ενεργό τώρα**, **📡 Μετάδοση**, **👁 Μετάβαση** με 1 κλικ.
+- **🗓️ Ωράριο — διαδραστικό πλέγμα (τύπου Excel):** γραμμές = ημέρες,
+  στήλες = διδακτικές ώρες, κελιά = μάθημα + τμήμα. **Κλικ σε κελί** →
+  επεξεργασία / ▶ ενεργό μάθημα / 📡 μετάδοση / 👁 μετάβαση / 🗑 καθαρισμός.
+  **Drag & drop** κελιού για μετακίνηση (Ctrl = αντιγραφή), προσθήκη τμημάτων
+  & ζωνών ωρών χωρίς Excel. Το **τρέχον μάθημα φωτίζεται πράσινα** με βάση την
+  ώρα συστήματος (ανανέωση 20″)· υπάρχει **🧪 εικονική ώρα** (ημέρα+ώρα) για
+  πειραματισμούς — επηρεάζει μόνο την προβολή του καθηγητή, όχι τους μαθητές.
+  Η εισαγωγή από Excel παραμένει (φύλλα *Τμήματα / Ωρες / Ωραριο*). Ο μαθητής
+  δηλώνει το τμήμα του («Το τμήμα μου» στο header) → βλέπει μόνο τα μαθήματα
+  της τάξης του + widget **«Τώρα στο σχολείο»** με το ενεργό μάθημα της ώρας.
+- **📡 Μετάδοση μαθήματος:** banner «Ο καθηγητής προβάλλει…» εμφανίζεται σε
+  όλες τις σελίδες `/docs/` των μαθητών (όλων ή συγκεκριμένου τμήματος, με TTL
+  & προαιρετικό μήνυμα) και οδηγεί απευθείας στο μάθημα. Auto-refresh ανά λεπτό.
+- **📂 Γενικός File Browser (καρτέλα «Αρχεία»):** περιήγηση σε όλους τους
+  φακέλους του `docs/` με breadcrumbs· κλικ σε `.md/.html/.css/.js/…` → inline
+  editor με αποθήκευση+backup· τα ημερήσια μαθήματα ανοίγουν στον visual editor
+  φάσεων· upload υλικού & δημιουργία φακέλου παντού (αυστηρό path validation).
+- **📖 Βιβλιοθήκη βιβλίων (καρτέλα «Βιβλία»):** upload σχολικών PDF →
+  [`/docs/vivliothiki/`](http://localhost/docs/vivliothiki/) με αυτόματη σελίδα
+  βιβλιοθήκης & nav. Κουμπί **«🔗 Link σε μάθημα»** εισάγει σύνδεσμο που ανοίγει
+  το βιβλίο σε **συγκεκριμένη σελίδα**: `[📖 …, σελ. 10](….pdf#page=10)` —
+  το `#page=N` είναι το πρότυπο όλων των PDF viewers (το `#pagenumber=` δεν
+  αναγνωρίζεται από browsers).
+- **🧭 Πλωτό μενού πλοήγησης (παντού):** το `dashboard/assets/portal-nav.js`
+  προσθέτει κουμπί 🧭 κάτω-δεξιά σε dashboard, `/docs/` και όλα τα apps
+  (wizard, exams, live-quiz, web-lab, h5p, app-builder, md-publish) με γρήγορη
+  μετάβαση σε Αρχική / Υλικό / Βιβλιοθήκη / Ωράριο / εργαστήρια (οι περιοχές
+  καθηγητή εμφανίζονται μόνο όταν αναγνωρίζεται καθηγητής).
 
 **Πιλότος:** Γ' Γυμνασίου → Πληροφορική → Ε1 Αλγοριθμική (Αναδρομή), 3 ημερήσια
 μαθήματα βασισμένα στο βιβλίο ΙΕΠ (σελ. 7–10) και τις οδηγίες διδασκαλίας 2026-27.
 Το παλιό υλικό διατηρείται άθικτο στο [`/docs/_paradeigma/`](http://localhost/docs/_paradeigma/).
+
+### 🏫 Ζωντανή Τάξη — Κεντρικό Παράθυρο (`/classroom/`)
+
+Νέο service **Classroom Hub** (`apps/classroom-hub/`, FastAPI + WebSockets + SQLite
+@ `127.0.0.1:8014`, systemd `school-classroom.service`) — το «χειριστήριο» της τάξης:
+
+- **Συνεχής παρακολούθηση παρουσίας:** κάθε browser κρατά WebSocket με heartbeat
+  ανά 15″· ο server ξέρει ανά πάσα στιγμή **ποιος είναι συνδεδεμένος, με ποιον ρόλο
+  (guest / μαθητής / καθηγητής), σε ποιο τμήμα και ποια σελίδα βλέπει**. Ο καθηγητής
+  έχει ζωντανό roster (είσοδοι/έξοδοι άμεσα, αποσύνδεση «φαντασμάτων» στα 45″).
+- **Ρόλοι:** *Guest* → αυτόματο **παιχνιδιάρικο όνομα τύπου Google Docs**
+  («Γενναίος Πάνθηρας» 🐆…) από τις λίστες του Excel. *Μαθητής* → όνομα + τμήμα
+  (+ προαιρετικός κωδικός τάξης από το Excel). *Καθηγητής* → `teacher2026`
+  (HMAC cookie, ίδιο μοτίβο με όλη την πύλη).
+- **Μόνιμο κεντρικό μενού** (📚 Μαθήματα · 📣 Ανακοινώσεις · 💬 Chat · 🗂️ Forum ·
+  ❓ Βοήθεια + ό,τι άλλο ορίσετε): **διαμορφώσιμο ανά ρόλο από το Excel** —
+  κάθε εφαρμογή ανοίγει **μέσα στο κεντρικό παράθυρο (iframe)** χωρίς να χάνεται
+  το μενού (όλα τα apps της πύλης είναι same-origin).
+- **Εργαλειοθήκες dock ⇄ float:** κουμπωμένες στην αριστερή μπάρα ή πλωτές
+  (drag από την κεφαλίδα, resize από τη γωνία)· οι θέσεις αποθηκεύονται ανά χρήστη.
+- **Εντολές τάξης (καθηγητής → επιλεγμένο κοινό/τμήμα):** 📣 ανακοινώσεις,
+  🎉 συγχαρητήρια & 🏆 βραβεία (προσωποποιημένα, με confetti), 🎲 **τυχαία επιλογή**
+  από τους συνδεδεμένους, 📊 **poll** με διακόπτη «βλέπουν όλοι τα αποτελέσματα»
+  (αλλιώς μόνο ο καθηγητής — στο κλείσιμο όλοι βλέπουν το τελικό), ➡️ **υποχρεωτική
+  μετάβαση** μαθητών/guests σε συγκεκριμένη σελίδα, 📝 **quiz** — στους μαθητές
+  **καταγράφεται** το αποτέλεσμα (SQLite, όνομα+τμήμα+σκορ), στους guests γίνεται
+  **μόνο εξάσκηση**. Η βαθμολόγηση γίνεται στον server (το `correct` δεν φεύγει ποτέ
+  στους πελάτες).
+- **⏱️ Χρονομετρητές ιδιωτικοί ή δημόσιοι**, απλοί ή **συγχρονισμένοι με το ωράριο**:
+  anchor σε έναρξη/λήξη διδακτικής ώρας **+ offset ±λεπτών** που ορίζετε εσείς.
+  **Γεγονότα** στο τέλος ημέρας/ώρας (ανακοίνωση, συγχαρητήρια, βραβείο, μετάβαση)
+  πυροδοτούνται αυτόματα μία φορά/ημέρα από background task.
+- **💬 Chat τάξης & 🗂️ Forum** (νήματα, απαντήσεις, κλείδωμα/διαγραφή από καθηγητή,
+  δικαιώματα guest από το Excel) πάνω στο ίδιο WebSocket + SQLite.
+- **📊 ΕΝΙΑΙΟ πρότυπο Excel `rythmiseis-protypo.xlsx` (12 καρτέλες)** για ΟΛΕΣ τις
+  ρυθμίσεις, με χρωματικούς κώδικες (🟦 κεφαλίδες μην αγγίζετε · 🟨 υποχρεωτικά ·
+  🟩 προαιρετικά · 🟥 ευαίσθητοι κωδικοί), dropdowns ΝΑΙ/ΟΧΙ & οδηγίες:
+  *Οδηγίες, Τμήματα, Ωρες, Ωραριο* (**αυτούσιες με το πρότυπο του Lesson Wizard** —
+  το ίδιο αρχείο ανεβαίνει και στα δύο apps), *Μενού, Εργαλειοθήκες, Ρόλοι,
+  Ονόματα Guest, Timers, Γεγονότα, Μηνύματα, Poll-Quiz*. Άγνωστες καρτέλες
+  αγνοούνται → το αρχείο επεκτείνεται μελλοντικά χωρίς αλλαγές κώδικα.
+  Upload από την εργαλειοθήκη «🎛️ Εντολές Τάξης» → εφαρμόζεται **ζωντανά σε όλους**.
+- **Έλεγχοι:** `scripts/classroom-test.py` (end-to-end μέσω Nginx: ρόλοι, roster,
+  εντολές, poll ορατότητα, quiz καταγραφή, timers, Excel round-trip με τον parser
+  του Lesson Wizard) και `scripts/classroom-browser-test.py` (πραγματικός
+  headless Chromium: είσοδοι, iframe, dock⇄float, ζωντανές ανακοινώσεις).
+
+### 🎪 Παράδειγμα ΟΛΩΝ των δυνατοτήτων MkDocs
+
+Η σελίδα [`/docs/paradeigma-dynatotiton/`](http://localhost/docs/paradeigma-dynatotiton/)
+είναι ζωντανή βιτρίνα κάθε δυνατότητας — **100% offline**:
+
+- **Μαθηματικά LaTeX** → MathJax 3 τοπικά (`assets/vendor/mathjax/`, lazy load).
+- **Διαγράμματα Mermaid** (flowchart, sequence, class, state, ER, gantt, pie,
+  mindmap) → τοπικό `assets/vendor/mermaid/`. ⚠️ Το ενσωματωμένο mermaid του
+  Material τραβάει από CDN — το `mermaid-init.js` «αρπάζει» τα μπλοκ πριν τον
+  handler του Material και τα αποδίδει με την τοπική βιβλιοθήκη (light/dark sync).
+- **Slides Reveal.js** (`<div class="slides-source" markdown="1">` με `---`) →
+  fullscreen παρουσίαση από το `mkdocs-extras.js` (τοπικό `assets/vendor/reveal/`).
+- **GIF animation** (παράγεται με Pillow: `scripts/make-demo-assets.py`),
+  admonitions όλων των τύπων, tabs, task lists, annotations κώδικα, snippets,
+  footnotes, emoji, glightbox zoom, Pyodide Python, ψευδογλώσσα, κουίζ, iframes.
+- Ό,τι **δεν** είναι κατεστημένο επισημαίνεται με 🔧 και τις εντολές εγκατάστασης:
+  **Marp CLI** (`npm i -g @marp-team/marp-cli`), **PlantUML** (`apt install
+  default-jre graphviz` + `pip install plantuml-markdown`), **ffmpeg**, texlive.
+
+Τα vendor assets κατεβαίνουν από το `install.sh` (όπως Alpine/Tailwind/Pyodide).
 
 **Έλεγχος πιλότου σε πραγματικό browser:**
 ```bash

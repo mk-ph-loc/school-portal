@@ -33,6 +33,11 @@ site/
 # --- Pyodide (μεγάλα δυαδικά, κατεβαίνουν από το install.sh) ---
 mkdocs-site/docs/assets/pyodide/
 
+# --- Vendor βιβλιοθήκες MkDocs (MathJax/Mermaid/Reveal — κατεβαίνουν από install.sh) ---
+mkdocs-site/docs/assets/vendor/
+# Το portal-nav.js στο docs/ είναι αντίγραφο του dashboard/assets/portal-nav.js
+mkdocs-site/docs/assets/javascripts/portal-nav.js
+
 # --- Frontend vendor assets (κατεβαίνουν από το install.sh) ---
 dashboard/assets/tailwind.min.js
 dashboard/assets/alpine.min.js
@@ -79,6 +84,10 @@ apps/hedgedoc-bridge/backups/
 
 # --- Lesson Wizard: μυστικά, δεδομένα ωραρίου & backups εκτός git ---
 apps/lesson-wizard/.cookie-secret
+apps/classroom-hub/.cookie-secret
+apps/classroom-hub/data/config.json
+apps/classroom-hub/data/rythmiseis-upload.xlsx
+apps/classroom-hub/data/rythmiseis-protypo.xlsx
 apps/lesson-wizard/backups/
 apps/lesson-wizard/data/
 *.bak

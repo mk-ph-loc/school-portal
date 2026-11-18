@@ -75,6 +75,20 @@
       </template>
     </div>
 
+    <!-- Κάρτα Ζωντανής Τάξης (κεντρικό παράθυρο με μενού, chat, forum, quiz, timers) -->
+    <a href="/classroom/" class="card-hover mt-5 block rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 p-6 text-white shadow-sm">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-white/20 ring-1 ring-white/30 grid place-items-center text-2xl">🏫</div>
+          <div>
+            <h3 class="text-lg font-bold">Ζωντανή Τάξη — Κεντρικό Παράθυρο</h3>
+            <p class="text-emerald-50 text-sm mt-0.5">Μπες ως επισκέπτης (με παιχνιδιάρικο όνομα!), μαθητής ή καθηγητής. Όλες οι εφαρμογές σε ένα παράθυρο με μόνιμο μενού, chat, forum, ανακοινώσεις, quiz και χρονομετρητές δεμένους με το ωράριο.</p>
+          </div>
+        </div>
+        <span class="text-sm font-semibold px-4 py-2 rounded-lg bg-white/15 ring-1 ring-white/30 whitespace-nowrap">Είσοδος →</span>
+      </div>
+    </a>
+
     <!-- Κάρτα Παράδοσης Εργασιών & Ψηφιακών Διαγωνισμάτων -->
     <a href="/exams/" class="card-hover mt-5 block rounded-2xl bg-gradient-to-r from-blue-700 to-indigo-600 p-6 text-white shadow-sm">
       <div class="flex flex-wrap items-center justify-between gap-4">
@@ -210,7 +224,7 @@
       <a href="/lesson-wizard/" class="card-hover block rounded-2xl bg-white p-6 ring-2 ring-indigo-300 shadow-sm">
         <div class="w-12 h-12 rounded-xl bg-indigo-100 grid place-items-center text-2xl">🧙</div>
         <h3 class="mt-4 text-lg font-bold text-slate-900">Lesson Wizard — Ημερήσια Μαθήματα</h3>
-        <p class="mt-1 text-sm text-slate-600">Οπτικός επεξεργαστής σχεδίων μαθήματος: drag &amp; drop διδακτικών φάσεων (αφόρμηση, συζήτηση, παρουσίαση, δραστηριότητα, αξιολόγηση), σημειώσεις καθηγητή, υλικό φακέλου, ωράριο από Excel &amp; ενεργό μάθημα ανά τμήμα.</p>
+        <p class="mt-1 text-sm text-slate-600">Οπτικός επεξεργαστής σχεδίων μαθήματος: φίλτρα ανά τάξη/μάθημα, tags &amp; ⭐ αγαπημένα, drag &amp; drop φάσεων, σημειώσεις καθηγητή, διαδραστικό πλέγμα ωραρίου (edit/drag&amp;drop, εικονική ώρα), 📡 μετάδοση μαθήματος, file browser &amp; βιβλιοθήκη βιβλίων με links σε σελίδα PDF.</p>
         <div class="mt-4 text-sm font-semibold text-indigo-700">Άνοιγμα →</div>
       </a>
       <a href="/md-publish/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
@@ -224,6 +238,18 @@
         <h3 class="mt-4 text-lg font-bold text-slate-900">H5P Studio (Διαδραστικές Ασκήσεις)</h3>
         <p class="mt-1 text-sm text-slate-600">Φτιάξε διαδραστικές ασκήσεις H5P με γραφικό editor &amp; ζωντανή προεπισκόπηση: quiz, κενά, hotspots σε εικόνες, κάρτες μνήμης, διαδραστικό βίντεο — με AI οδηγό δημιουργίας &amp; ενσωμάτωση στα μαθήματα με 1 κλικ.</p>
         <div class="mt-4 text-sm font-semibold text-violet-700">Άνοιγμα →</div>
+      </a>
+      <a href="/docs/vivliothiki/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="w-12 h-12 rounded-xl bg-amber-100 grid place-items-center text-2xl">📖</div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">Βιβλιοθήκη Βιβλίων</h3>
+        <p class="mt-1 text-sm text-slate-600">Τα σχολικά βιβλία (PDF) σε ένα μέρος — οι σύνδεσμοι μέσα στα μαθήματα ανοίγουν κατευθείαν στη σωστή σελίδα (<code>#page=N</code>). Upload &amp; διαχείριση από το Lesson Wizard → Βιβλία.</p>
+        <div class="mt-4 text-sm font-semibold text-amber-700">Άνοιγμα →</div>
+      </a>
+      <a href="/docs/paradeigma-dynatotiton/" class="card-hover block rounded-2xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
+        <div class="w-12 h-12 rounded-xl bg-pink-100 grid place-items-center text-2xl">🎪</div>
+        <h3 class="mt-4 text-lg font-bold text-slate-900">Δυνατότητες MkDocs (Demo)</h3>
+        <p class="mt-1 text-sm text-slate-600">Ζωντανό παράδειγμα ΟΛΩΝ των δυνατοτήτων: μαθηματικά LaTeX, διαγράμματα Mermaid, slides, GIF animation, κουίζ, Python — και τι χρειάζεται εγκατάσταση για όσα λείπουν.</p>
+        <div class="mt-4 text-sm font-semibold text-pink-700">Άνοιγμα →</div>
       </a>
     </div>
 
@@ -458,5 +484,6 @@
 </footer>
 
 <script src="/assets/portal.js"></script>
+<script src="/assets/portal-nav.js" defer></script>
 </body>
 </html>

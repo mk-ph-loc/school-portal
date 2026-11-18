@@ -723,6 +723,41 @@ server {
     }
 
     # -----------------------------------------------------------------
+    # 6ιστ. Ζωντανή Τάξη — Classroom Hub (@127.0.0.1:8014, WebSockets)
+    #       Κεντρικό παράθυρο με μόνιμο μενού ανά ρόλο (guest/μαθητής/
+    #       καθηγητής), όλες οι εφαρμογές σε iframe, dock/float εργαλειοθήκες,
+    #       παρουσία σε πραγματικό χρόνο, ανακοινώσεις/βραβεία/polls/quiz,
+    #       timers συγχρονισμένοι με το ωράριο ±offset, ενιαίο Excel ρυθμίσεων.
+    #       Ο καθηγητής προστατεύεται με κωδικό teacher2026 (HMAC cookie).
+    # -----------------------------------------------------------------
+    location = /classroom {
+        return 301 /classroom/;
+    }
+
+    location ^~ /classroom/ {
+        proxy_pass http://127.0.0.1:8014/;
+        proxy_http_version 1.1;
+
+        # --- Υποστήριξη WebSockets (παρουσία/heartbeat & εντολές τάξης) ---
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Οι συνδέσεις WS μένουν ανοιχτές καθ' όλη τη διάρκεια του μαθήματος
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    3600s;
+        proxy_read_timeout    3600s;
+        proxy_buffering off;
+
+        # Ανέβασμα ενιαίου Excel ρυθμίσεων
+        client_max_body_size 10m;
+    }
+
+    # -----------------------------------------------------------------
     # 7. Διάφορα
     # -----------------------------------------------------------------
     location = /healthz {

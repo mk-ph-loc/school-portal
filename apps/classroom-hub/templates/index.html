@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ζωντανή Τάξη — Ψηφιακή Πύλη Σχολείου</title>
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<script src="/assets/tailwind.min.js"></script>
+<script defer src="/assets/alpine.min.js"></script>
+<style>
+  [x-cloak]{display:none !important}
+  body{font-family:"DejaVu Sans","Liberation Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .tb-panel{position:fixed;z-index:60;background:#fff;border-radius:.9rem;
+    box-shadow:0 12px 40px rgba(15,23,42,.28);border:1px solid #e2e8f0;display:flex;flex-direction:column;overflow:hidden}
+  .tb-head{cursor:move;user-select:none;background:linear-gradient(135deg,#312e81,#1d4ed8);color:#fff;
+    padding:.45rem .7rem;font-size:.8rem;font-weight:700;display:flex;align-items:center;gap:.4rem}
+  .tb-body{flex:1;overflow:auto;padding:.6rem;font-size:.82rem}
+  .tb-resize{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;
+    background:linear-gradient(135deg,transparent 50%,#94a3b8 50%)}
+  .confetti{position:fixed;top:-12px;z-index:100;font-size:1.3rem;pointer-events:none;animation:fall linear forwards}
+  @keyframes fall{to{transform:translateY(105vh) rotate(720deg);opacity:.7}}
+  .toast-in{animation:toastin .25s ease}
+  @keyframes toastin{from{transform:translateY(-14px);opacity:0}to{transform:none;opacity:1}}
+  #dock{scrollbar-width:thin}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased h-screen flex flex-col overflow-hidden"
+      x-data="classroom()" x-init="init()">
+
+<!-- ============ ΕΚΡΑΝ ΕΙΣΟΔΟΥ (guest / μαθητής / καθηγητής) ============ -->
+<div x-show="!identity" x-cloak class="fixed inset-0 z-[90] bg-gradient-to-br from-indigo-950 via-blue-900 to-sky-800 grid place-items-center p-4 overflow-auto">
+  <div class="w-full max-w-md rounded-2xl bg-white p-7 shadow-2xl">
+    <div class="text-center">
+      <div class="text-5xl">🏫</div>
+      <h1 class="mt-2 text-2xl font-extrabold text-slate-900">Ζωντανή Τάξη</h1>
+      <p class="text-sm text-slate-500 mt-1">Ψηφιακή Πύλη Σχολείου &amp; Εργαστηρίου</p>
+    </div>
+    <div class="mt-5 grid grid-cols-3 gap-2 text-xs font-bold">
+      <button @click="joinRole='guest'" :class="joinRole==='guest' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded-xl py-3 transition">🎲<br>Επισκέπτης</button>
+      <button @click="joinRole='student'" :class="joinRole==='student' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded-xl py-3 transition">👨‍🎓<br>Μαθητής</button>
+      <button @click="joinRole='teacher'" :class="joinRole==='teacher' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded-xl py-3 transition">🧑‍🏫<br>Καθηγητής</button>
+    </div>
+    <div class="mt-4 space-y-3">
+      <template x-if="joinRole==='guest'">
+        <p class="text-sm text-slate-600 bg-emerald-50 ring-1 ring-emerald-200 rounded-lg p-3">
+          Θα μπεις με ένα <strong>παιχνιδιάρικο τυχαίο όνομα</strong> (όπως στα συνεργατικά έγγραφα).
+          Τα quiz για εσένα είναι μόνο εξάσκηση — δεν καταγράφονται.</p>
+      </template>
+      <template x-if="joinRole==='student'">
+        <div class="space-y-3">
+          <input x-model="joinName" placeholder="Το όνομά σου" maxlength="40"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          <select x-model="joinTmima" class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm bg-white">
+            <option value="">— Τμήμα (προαιρετικό) —</option>
+            <template x-for="t in tmimataList" :key="t.name"><option :value="t.name" x-text="t.name"></option></template>
+          </select>
+          <input x-model="joinCode" type="password" placeholder="Κωδικός τάξης (αν ζητείται)"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+      </template>
+      <template x-if="joinRole==='teacher'">
+        <div class="space-y-3">
+          <input x-model="joinName" placeholder="Όνομα καθηγητή (προαιρετικό)" maxlength="40"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <input x-model="joinCode" type="password" placeholder="Κωδικός καθηγητή" @keydown.enter="join()"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+      </template>
+      <p x-show="joinError" x-text="joinError" class="text-sm text-red-600 font-semibold"></p>
+      <button @click="join()" :disabled="joining"
+              class="w-full rounded-xl bg-gradient-to-r from-blue-700 to-indigo-600 hover:from-blue-800 hover:to-indigo-700 text-white font-bold py-3 transition disabled:opacity-50">
+        <span x-text="joining ? 'Σύνδεση…' : 'Είσοδος στην Τάξη →'"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============ ΜΟΝΙΜΟ ΚΕΝΤΡΙΚΟ ΜΕΝΟΥ (πάντα ορατό) ============ -->
+<header x-show="identity" x-cloak class="bg-gradient-to-r from-indigo-950 via-blue-900 to-sky-800 text-white shadow-lg z-40 shrink-0">
+  <div class="px-3 py-2 flex items-center gap-2 flex-wrap">
+    <a href="/" class="flex items-center gap-2 mr-1" title="Αρχική Πύλη">
+      <span class="text-xl">🏫</span>
+      <span class="font-extrabold text-sm hidden sm:inline">Ζωντανή Τάξη</span>
+    </a>
+    <nav class="flex items-center gap-1 flex-wrap">
+      <template x-for="m in menu" :key="m.id">
+        <button @click="openMenu(m)"
+                :class="activeUrl===m.url ? 'bg-white/25 ring-1 ring-white/40' : 'bg-white/10 hover:bg-white/20'"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+          <span x-text="m.icon"></span><span x-text="m.title"></span>
+        </button>
+      </template>
+    </nav>
+    <div class="ml-auto flex items-center gap-2">
+      <span x-show="!wsOk" class="text-[10px] px-2 py-1 rounded-full bg-red-500/30 ring-1 ring-red-300/50 animate-pulse">⟳ επανασύνδεση…</span>
+      <span x-show="wsOk && role==='teacher'" class="text-[10px] px-2 py-1 rounded-full bg-emerald-400/20 ring-1 ring-emerald-300/40">
+        👥 <span x-text="roster.length"></span> συνδεδεμένοι</span>
+      <span class="text-xs px-2.5 py-1 rounded-full bg-white/10 ring-1 ring-white/25 flex items-center gap-1.5">
+        <span x-text="identity?.emoji"></span>
+        <span class="font-bold max-w-[140px] truncate" x-text="identity?.name"></span>
+        <span class="text-[9px] uppercase opacity-70" x-text="roleLabel"></span>
+      </span>
+      <button @click="leave()" class="text-[10px] px-2 py-1 rounded-full bg-white/10 hover:bg-red-500/40 ring-1 ring-white/25 transition">Έξοδος</button>
+    </div>
+  </div>
+</header>
+
+<!-- ============ ΚΕΝΤΡΙΚΟ ΠΑΡΑΘΥΡΟ: iframe + dock εργαλειοθηκών ============ -->
+<div x-show="identity" x-cloak class="flex-1 flex min-h-0">
+  <!-- Dock (κουμπωτές εργαλειοθήκες) -->
+  <aside id="dock" x-show="dockedPanels.length" class="w-[340px] shrink-0 bg-white border-r border-slate-200 overflow-y-auto p-2 space-y-2">
+    <template x-for="p in dockedPanels" :key="p.id">
+      <div class="rounded-xl ring-1 ring-slate-200 overflow-hidden">
+        <div class="bg-gradient-to-r from-indigo-900 to-blue-800 text-white px-3 py-1.5 text-xs font-bold flex items-center gap-2">
+          <span x-text="p.title" class="flex-1"></span>
+          <button @click="toggleMode(p)" title="Ξεκούμπωμα (float)" class="hover:bg-white/20 rounded px-1">⇱</button>
+          <button @click="p.open=!p.open" class="hover:bg-white/20 rounded px-1" x-text="p.open?'−':'+'"></button>
+        </div>
+        <div x-show="p.open"><div :id="'dock-slot-'+p.id" class="p-2 text-sm"></div></div>
+      </div>
+    </template>
+  </aside>
+
+  <!-- Κύρια περιοχή εφαρμογής -->
+  <main class="flex-1 relative min-w-0 bg-slate-200">
+    <div x-show="activeUrl && !activeUrl.startsWith('#')" class="absolute inset-0 flex flex-col">
+      <div class="bg-white/90 border-b border-slate-200 px-3 py-1 flex items-center gap-2 text-xs text-slate-600 shrink-0">
+        <span class="font-bold truncate" x-text="activeTitle"></span>
+        <code class="text-[10px] bg-slate-100 rounded px-1.5 py-0.5" x-text="activeUrl"></code>
+        <a :href="activeUrl" target="_blank" class="ml-auto text-blue-700 hover:underline whitespace-nowrap" title="Άνοιγμα σε νέα καρτέλα">↗ νέα καρτέλα</a>
+        <button @click="reloadFrame()" class="text-blue-700 hover:underline">⟳</button>
+      </div>
+      <iframe id="app-frame" :src="frameSrc" class="flex-1 w-full border-0 bg-white"
+              allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+    </div>
+    <!-- Αρχική / panels μενού (#announcements, #chat, #forum, #help) -->
+    <div x-show="!activeUrl || activeUrl.startsWith('#')" class="absolute inset-0 overflow-y-auto p-4" id="home-area">
+      <div x-show="!activeUrl" class="max-w-3xl mx-auto">
+        <div class="rounded-2xl bg-white ring-1 ring-slate-200 p-6 text-center shadow-sm">
+          <div class="text-4xl">👋</div>
+          <h2 class="mt-2 text-xl font-extrabold">Καλώς ήρθες, <span x-text="identity?.name"></span>!</h2>
+          <p class="text-sm text-slate-500 mt-1">Διάλεξε κάτι από το κεντρικό μενού — όλα ανοίγουν εδώ μέσα, χωρίς να χάνεις το μενού.</p>
+        </div>
+        <div class="mt-4 grid sm:grid-cols-2 gap-3">
+          <template x-for="m in menu.filter(x=>x.url.startsWith('/'))" :key="m.id">
+            <button @click="openMenu(m)" class="rounded-xl bg-white ring-1 ring-slate-200 hover:ring-blue-400 p-4 text-left transition shadow-sm">
+              <span class="text-2xl" x-text="m.icon"></span>
+              <div class="font-bold mt-1" x-text="m.title"></div>
+            </button>
+          </template>
+        </div>
+      </div>
+      <div id="panel-host" class="max-w-3xl mx-auto"></div>
+    </div>
+  </main>
+</div>
+
+
+<!-- ============ FLOAT ΕΡΓΑΛΕΙΟΘΗΚΕΣ (draggable / resizable) ============ -->
+<template x-for="p in floatingPanels" :key="'fl-'+p.id">
+  <div class="tb-panel" x-show="identity && p.open !== false"
+       :style="`left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px`" :id="'float-'+p.id">
+    <div class="tb-head" @pointerdown="dragStart($event,p)">
+      <span x-text="p.title" class="flex-1 truncate"></span>
+      <button @click.stop="toggleMode(p)" title="Κούμπωμα στο dock" class="hover:bg-white/20 rounded px-1">⇲</button>
+      <button @click.stop="p.open=false" class="hover:bg-white/20 rounded px-1">✕</button>
+    </div>
+    <div class="tb-body"><div :id="'float-slot-'+p.id"></div></div>
+    <div class="tb-resize" @pointerdown="resizeStart($event,p)"></div>
+  </div>
+</template>
+
+<!-- Περιεχόμενο εργαλειοθηκών: ζωντανά templates που μετακινούνται σε dock/float slots -->
+<div id="widget-templates" class="hidden">
+
+  <!-- 👥 Roster (καθηγητής) -->
+  <div data-widget="roster">
+    <div class="space-y-1 max-h-72 overflow-y-auto">
+      <template x-for="c in roster" :key="c.uid">
+        <div class="flex items-center gap-2 rounded-lg bg-slate-50 ring-1 ring-slate-200 px-2 py-1.5">
+          <span x-text="c.emoji"></span>
+          <div class="min-w-0 flex-1">
+            <div class="font-bold text-xs truncate" :style="`color:${c.color}`" x-text="c.name"></div>
+            <div class="text-[10px] text-slate-500 truncate">
+              <span x-text="c.role==='teacher'?'🧑‍🏫 καθηγητής':(c.role==='student'?'👨‍🎓 '+(c.tmima||'μαθητής'):'🎲 επισκέπτης')"></span>
+              <span x-show="c.page"> · <span x-text="c.page"></span></span>
+            </div>
+          </div>
+          <button @click="awardTo(c)" title="🏆 Βραβείο" class="text-sm hover:scale-125 transition">🏆</button>
+          <button @click="congratsTo(c)" title="🎉 Συγχαρητήρια" class="text-sm hover:scale-125 transition">🎉</button>
+        </div>
+      </template>
+      <p x-show="!roster.length" class="text-xs text-slate-400 italic">Κανείς συνδεδεμένος ακόμα…</p>
+    </div>
+  </div>
+
+  <!-- 🎛️ Εντολές τάξης (καθηγητής) — μέρος 1: κοινό, ανακοινώσεις, κλήρωση, πλοήγηση -->
+  <div data-widget="commands">
+    <div class="space-y-3">
+      <div>
+        <label class="text-[10px] font-bold uppercase text-slate-500">Κοινό</label>
+        <div class="flex gap-1">
+          <select x-model="cmd.audience" class="flex-1 rounded border border-slate-300 px-2 py-1 text-xs bg-white">
+            <option value="all">Όλοι</option><option value="students">Μαθητές + Guests</option>
+            <option value="guests">Μόνο Guests</option><option value="role:student">Μόνο Μαθητές</option>
+          </select>
+          <select x-model="cmd.tmima" class="w-24 rounded border border-slate-300 px-1 py-1 text-xs bg-white">
+            <option value="">Τμήμα: όλα</option>
+            <template x-for="t in tmimataList" :key="t.name"><option :value="t.name" x-text="t.name"></option></template>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="text-[10px] font-bold uppercase text-slate-500">📣 Ανακοίνωση / 🎉 / 🏆</label>
+        <select x-show="messagesBank.length" x-model="cmd.msgId" @change="applyMessage()" class="w-full mb-1 rounded border border-slate-300 px-2 py-1 text-xs bg-white">
+          <option value="">— πρότυπο από Excel —</option>
+          <template x-for="m in messagesBank" :key="m.id"><option :value="m.id" x-text="m.kind+': '+m.text.slice(0,50)"></option></template>
+        </select>
+        <textarea x-model="cmd.text" rows="2" placeholder="Μήνυμα προς την τάξη…" class="w-full rounded border border-slate-300 px-2 py-1 text-xs"></textarea>
+        <div class="flex gap-1 mt-1">
+          <button @click="sendAnnounce('announce')" class="flex-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5">📣 Αποστολή</button>
+          <button @click="sendAnnounce('congrats')" class="rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-2">🎉</button>
+          <button @click="sendAnnounce('award')" class="rounded bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-2">🏆</button>
+        </div>
+      </div>
+      <button @click="randomPick()" class="w-full rounded bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-1.5">🎲 Τυχαία Επιλογή</button>
+      <div>
+        <label class="text-[10px] font-bold uppercase text-slate-500">➡️ Υποχρεωτική μετάβαση σε σελίδα</label>
+        <div class="flex gap-1">
+          <input x-model="cmd.navUrl" placeholder="/docs/ ή /live-quiz/…" class="flex-1 rounded border border-slate-300 px-2 py-1 text-xs">
+          <button @click="sendNavigate()" class="rounded bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-2">Πάμε!</button>
+        </div>
+      </div>
+
+      <!-- 📊 Δημοσκόπηση -->
+      <div class="border-t border-slate-200 pt-2">
+        <label class="text-[10px] font-bold uppercase text-slate-500">📊 Δημοσκόπηση (poll)</label>
+        <select x-show="pollsBank.length" x-model="cmd.pollId" @change="applyPoll()" class="w-full mb-1 rounded border border-slate-300 px-2 py-1 text-xs bg-white">
+          <option value="">— έτοιμη από Excel —</option>
+          <template x-for="p in pollsBank" :key="p.id"><option :value="p.id" x-text="p.question.slice(0,60)"></option></template>
+        </select>
+        <input x-model="cmd.pollQ" placeholder="Ερώτηση…" class="w-full mb-1 rounded border border-slate-300 px-2 py-1 text-xs">
+        <input x-model="cmd.pollOpts" placeholder="Επιλογές χωρισμένες με κόμμα (π.χ. Ναι, Όχι)" class="w-full rounded border border-slate-300 px-2 py-1 text-xs">
+        <label class="flex items-center gap-1.5 mt-1 text-xs">
+          <input type="checkbox" x-model="cmd.pollShow" class="rounded"> Βλέπουν όλοι τα αποτελέσματα ζωντανά
+        </label>
+        <button @click="sendPoll()" class="w-full mt-1 rounded bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold py-1.5">📊 Αποστολή Poll</button>
+      </div>
+
+      <!-- 📝 Quiz -->
+      <div class="border-t border-slate-200 pt-2">
+        <label class="text-[10px] font-bold uppercase text-slate-500">📝 Quiz (μαθητές: καταγραφή · guests: εξάσκηση)</label>
+        <select x-model="cmd.quizBankId" class="w-full mb-1 rounded border border-slate-300 px-2 py-1 text-xs bg-white">
+          <option value="">— quiz από την τράπεζα Excel —</option>
+          <template x-for="q in quizzesBank" :key="q.id"><option :value="q.id" x-text="q.title+' ('+q.count+' ερωτήσεις)'"></option></template>
+        </select>
+        <div class="flex gap-1">
+          <button @click="sendQuizBank()" :disabled="!cmd.quizBankId" class="flex-1 rounded bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-40 text-white text-xs font-bold py-1.5">📝 Αποστολή</button>
+          <a href="/live-quiz/teacher" target="_blank" class="rounded bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold px-2 py-1.5" title="Πλήρες Live Quiz με προτζέκτορα">🎮 Live</a>
+        </div>
+        <div x-show="quizProgress.length" class="mt-1 space-y-0.5 max-h-28 overflow-y-auto">
+          <template x-for="r in quizProgress" :key="r.uid">
+            <div class="text-[11px] flex justify-between bg-fuchsia-50 rounded px-1.5 py-0.5">
+              <span x-text="r.name+(r.tmima?' ('+r.tmima+')':'')"></span>
+              <b x-text="r.score+'/'+r.total"></b>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- ⏱️ Δημιουργία timer -->
+      <div class="border-t border-slate-200 pt-2">
+        <label class="text-[10px] font-bold uppercase text-slate-500">⏱️ Νέος χρονομετρητής</label>
+        <input x-model="cmd.timerLabel" placeholder="Ετικέτα (π.χ. Διάβασμα)" class="w-full mb-1 rounded border border-slate-300 px-2 py-1 text-xs">
+        <div class="flex gap-1 mb-1">
+          <input x-model.number="cmd.timerMin" type="number" min="1" max="240" placeholder="Λεπτά" class="w-20 rounded border border-slate-300 px-2 py-1 text-xs">
+          <select x-model="cmd.timerVis" class="flex-1 rounded border border-slate-300 px-2 py-1 text-xs bg-white">
+            <option value="public">🌍 Δημόσιος (όλοι)</option>
+            <option value="private">🔒 Ιδιωτικός (μόνο εγώ)</option>
+          </select>
+        </div>
+        <details class="text-xs">
+          <summary class="cursor-pointer text-slate-500 font-semibold">🗓️ Ή συγχρονισμός με το ωράριο ±offset</summary>
+          <div class="flex gap-1 mt-1">
+            <select x-model.number="cmd.timerPeriod" class="flex-1 rounded border border-slate-300 px-1 py-1 text-xs bg-white">
+              <option :value="0">— ώρα ωραρίου —</option>
+              <template x-for="(per,i) in periodsList" :key="i"><option :value="i+1" x-text="(i+1)+'η ώρα ('+per.start+'–'+per.end+')'"></option></template>
+            </select>
+            <select x-model="cmd.timerEdge" class="rounded border border-slate-300 px-1 py-1 text-xs bg-white">
+              <option value="end">λήξη</option><option value="start">έναρξη</option>
+            </select>
+            <input x-model.number="cmd.timerOffset" type="number" placeholder="±λεπτά" title="Offset σε λεπτά (+/-)" class="w-16 rounded border border-slate-300 px-1 py-1 text-xs">
+          </div>
+        </details>
+        <button @click="sendTimer()" class="w-full mt-1 rounded bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5">⏱️ Εκκίνηση</button>
+        <div x-show="timersCfg.length" class="mt-1 space-y-0.5">
+          <template x-for="t in timersCfg.filter(x=>x.enabled)" :key="t.id">
+            <button @click="startCfgTimer(t.id)" class="w-full text-left text-[11px] bg-amber-50 hover:bg-amber-100 rounded px-1.5 py-0.5">
+              ▶ <span x-text="t.label"></span> <span class="text-slate-400" x-text="t.visibility==='private'?'🔒':'🌍'"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- ⚙️ Ρυθμίσεις Excel -->
+      <div class="border-t border-slate-200 pt-2">
+        <label class="text-[10px] font-bold uppercase text-slate-500">⚙️ Ενιαίες ρυθμίσεις Excel</label>
+        <div class="flex gap-1">
+          <a href="api/config/template" class="flex-1 text-center rounded bg-slate-600 hover:bg-slate-700 text-white text-xs font-bold py-1.5">⬇ Πρότυπο</a>
+          <label class="flex-1 text-center rounded bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1.5 cursor-pointer">
+            ⬆ Ανέβασμα<input type="file" accept=".xlsx,.xlsm" class="hidden" @change="uploadConfig($event)">
+          </label>
+        </div>
+        <p x-show="cfgSummary" x-text="cfgSummary" class="text-[10px] text-emerald-700 mt-1"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⏱️ Widget χρονομετρητών (όλοι οι ρόλοι) -->
+  <div data-widget="timer">
+    <div class="space-y-2">
+      <template x-for="t in activeTimers" :key="t.id">
+        <div class="rounded-lg bg-amber-50 ring-1 ring-amber-200 p-2">
+          <div class="flex items-center justify-between text-xs font-bold">
+            <span x-text="(t.visibility==='private'?'🔒 ':'')+t.label"></span>
+            <button x-show="role==='teacher'" @click="stopTimer(t.id)" class="text-red-500 hover:text-red-700">✕</button>
+          </div>
+          <div class="text-2xl font-extrabold tabular-nums text-center" :class="timerLeft(t)<60?'text-red-600':'text-amber-700'" x-text="fmtLeft(timerLeft(t))"></div>
+        </div>
+      </template>
+      <p x-show="!activeTimers.length" class="text-xs text-slate-400 italic text-center py-2">Δεν υπάρχει ενεργός χρονομετρητής.</p>
+    </div>
+  </div>
+
+  <!-- 💬 Widget chat (όλοι οι ρόλοι με δικαίωμα) -->
+  <div data-widget="chat">
+    <div class="flex flex-col h-64">
+      <div id="chat-log" class="flex-1 overflow-y-auto space-y-1 pr-1">
+        <template x-for="m in chatMsgs" :key="m.id">
+          <div class="text-xs">
+            <b :style="`color:${m.color||'#334155'}`" x-text="(m.emoji||'')+' '+m.name"></b>
+            <span class="text-slate-400 text-[9px]" x-text="fmtTime(m.ts)"></span>
+            <div class="bg-slate-50 rounded px-2 py-1 mt-0.5 break-words" x-text="m.text"></div>
+          </div>
+        </template>
+      </div>
+      <div class="flex gap-1 mt-2">
+        <input x-model="chatText" @keydown.enter="sendChat()" maxlength="500" placeholder="Γράψε μήνυμα…"
+               class="flex-1 rounded border border-slate-300 px-2 py-1.5 text-xs">
+        <button @click="sendChat()" class="rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3">➤</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============ TOASTS & ANNOUNCEMENTS ============ -->
+<div class="fixed top-14 left-1/2 -translate-x-1/2 z-[95] w-[min(92vw,540px)] space-y-2 pointer-events-none">
+  <template x-for="a in toasts" :key="a.id">
+    <div class="toast-in pointer-events-auto rounded-xl shadow-2xl p-4 text-white text-sm font-semibold flex items-start gap-3"
+         :class="a.kind==='award' ? 'bg-gradient-to-r from-amber-500 to-yellow-500' : (a.kind==='congrats' ? 'bg-gradient-to-r from-emerald-600 to-teal-500' : 'bg-gradient-to-r from-blue-700 to-indigo-600')">
+      <span class="text-2xl" x-text="a.kind==='award'?'🏆':(a.kind==='congrats'?'🎉':'📣')"></span>
+      <div class="flex-1" x-text="a.text"></div>
+      <button @click="dismissToast(a.id)" class="opacity-70 hover:opacity-100">✕</button>
+    </div>
+  </template>
+</div>
+
+<!-- ============ MODAL POLL (ψηφοφορία + ζωντανά αποτελέσματα) ============ -->
+<div x-show="activePoll && !activePoll.closed" x-cloak
+     class="fixed inset-0 z-[80] bg-slate-900/60 grid place-items-center p-4">
+  <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+    <h3 class="font-extrabold text-lg">📊 <span x-text="activePoll?.question"></span></h3>
+    <div x-show="!activePoll?.answered" class="mt-4 space-y-2">
+      <template x-for="(opt,i) in activePoll?.options||[]" :key="i">
+        <button @click="votePoll(i)" class="w-full text-left rounded-xl ring-1 ring-slate-300 hover:ring-cyan-500 hover:bg-cyan-50 px-4 py-2.5 text-sm font-semibold transition" x-text="opt"></button>
+      </template>
+    </div>
+    <p x-show="activePoll?.answered" class="mt-3 text-xs text-emerald-600 font-bold">✓ Η ψήφος σου καταχωρήθηκε!</p>
+    <div x-show="(activePoll?.show_results || role==='teacher') && pollResults" class="mt-4 space-y-1">
+      <template x-for="(opt,i) in pollResults?.options||[]" :key="'r'+i">
+        <div class="text-xs">
+          <div class="flex justify-between"><span x-text="opt"></span><b x-text="pollResults.counts[i]"></b></div>
+          <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-cyan-500 transition-all" :style="`width:${pollResults.total?100*pollResults.counts[i]/pollResults.total:0}%`"></div></div>
+        </div>
+      </template>
+      <p class="text-[10px] text-slate-400 text-right">Σύνολο ψήφων: <span x-text="pollResults?.total"></span></p>
+    </div>
+    <div class="mt-4 flex gap-2 justify-end">
+      <button x-show="role==='teacher'" @click="closePoll()" class="rounded-lg bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold px-3 py-1.5">Κλείσιμο Poll</button>
+      <button x-show="activePoll?.answered || role==='teacher'" @click="activePoll=null;pollResults=null" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-xs font-bold px-3 py-1.5">Απόκρυψη</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL QUIZ ============ -->
+<div x-show="activeQuiz" x-cloak class="fixed inset-0 z-[80] bg-slate-900/60 grid place-items-center p-4 overflow-auto">
+  <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl my-8">
+    <div class="flex items-center justify-between">
+      <h3 class="font-extrabold text-lg">📝 <span x-text="activeQuiz?.title"></span></h3>
+      <span class="text-[10px] px-2 py-1 rounded-full font-bold"
+            :class="role==='student' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'"
+            x-text="role==='student' ? 'ΚΑΤΑΓΡΑΦΕΤΑΙ' : (role==='guest' ? 'ΕΞΑΣΚΗΣΗ (guest)' : 'ΔΟΚΙΜΗ')"></span>
+    </div>
+    <template x-if="!quizResult">
+      <div class="mt-4 space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+        <template x-for="(q,qi) in activeQuiz?.questions||[]" :key="qi">
+          <div>
+            <div class="text-sm font-bold"><span x-text="qi+1"></span>. <span x-text="q.text"></span></div>
+            <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+              <template x-for="(opt,oi) in q.options" :key="oi">
+                <button @click="quizAnswers[qi]=oi"
+                        :class="quizAnswers[qi]===oi ? 'bg-fuchsia-600 text-white ring-fuchsia-600' : 'bg-white ring-slate-300 hover:ring-fuchsia-400'"
+                        class="rounded-lg ring-1 px-3 py-2 text-xs font-semibold text-left transition" x-text="opt"></button>
+              </template>
+            </div>
+          </div>
+        </template>
+        <button @click="submitQuiz()" class="w-full rounded-xl bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-3">Υποβολή Απαντήσεων</button>
+      </div>
+    </template>
+    <template x-if="quizResult">
+      <div class="mt-4 text-center">
+        <div class="text-5xl" x-text="quizResult.score===quizResult.total?'🏆':(quizResult.score>=quizResult.total/2?'🎉':'💪')"></div>
+        <div class="mt-2 text-3xl font-extrabold" x-text="quizResult.score+' / '+quizResult.total"></div>
+        <p class="mt-1 text-sm font-semibold" :class="quizResult.recorded?'text-blue-700':'text-emerald-700'" x-text="quizResult.note"></p>
+        <div class="mt-3 space-y-1 text-left max-h-48 overflow-y-auto">
+          <template x-for="(f,i) in quizResult.feedback" :key="i">
+            <div class="text-xs rounded px-2 py-1" :class="f.ok?'bg-emerald-50 text-emerald-700':'bg-red-50 text-red-700'">
+              <span x-text="f.ok?'✓':'✗'"></span> Ερώτηση <span x-text="i+1"></span> — σωστή: <b x-text="activeQuiz.questions[i].options[f.correct]"></b>
+            </div>
+          </template>
+        </div>
+        <button @click="activeQuiz=null;quizResult=null" class="mt-4 rounded-xl bg-slate-200 hover:bg-slate-300 font-bold px-6 py-2 text-sm">Κλείσιμο</button>
+      </div>
+    </template>
+  </div>
+</div>
+
+<script src="static/classroom.js"></script>
+</body>
+</html>
+
