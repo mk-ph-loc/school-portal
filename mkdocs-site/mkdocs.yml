@@ -54,6 +54,10 @@ extra_javascript:
   - assets/javascripts/quiz.js
   - assets/javascripts/lesson-phases.js
   - assets/javascripts/schedule.js
+  - assets/javascripts/mathjax-config.js
+  - assets/javascripts/mermaid-init.js
+  - assets/javascripts/mkdocs-extras.js
+  - assets/javascripts/portal-nav.js
 
 # Hook: μετατρέπει τα markers διδακτικών φάσεων σε δομικά στοιχεία και
 # διαχειρίζεται τις σημειώσεις καθηγητή (βλ. hooks/lesson_phases.py).
@@ -130,6 +134,7 @@ extra:
 nav:
   - Αρχική: index.md
   # BEGIN AUTO-NAV MATHIMATA (διαχειρίζεται το Lesson Wizard — μην επεξεργάζεστε χειροκίνητα)
+  - 📖 Βιβλιοθήκη: vivliothiki/index.md
   - Μαθήματα:
       - Γ' Γυμνασίου:
           - 'Πληροφορική Γ'' Γυμνασίου': mathimata/gymnasio-g/pliroforiki/index.md
@@ -137,6 +142,7 @@ nav:
           - '🗼 Μ02 · Οι Πύργοι του Ανόι': mathimata/gymnasio-g/pliroforiki/m02-pyrgoi-anoy/index.md
           - '🔺 Μ03 · Το Τρίγωνο Sierpinski': mathimata/gymnasio-g/pliroforiki/m03-trigono-sierpinski/index.md
   # END AUTO-NAV MATHIMATA
+  - 🎪 Δυνατότητες MkDocs: paradeigma-dynatotiton/index.md
   - Παλιό Υλικό (Παράδειγμα):
       - _paradeigma/index.md
       - Γυμνάσιο:

@@ -108,10 +108,52 @@ def main() -> int:
             cookie = h.split(";")[0]
     check("login καθηγητή", st == 200 and bool(cookie))
     st, _, data = http_json("/lesson-wizard/api/lessons", cookie=cookie)
-    check("3 ημερήσια μαθήματα πιλότου", st == 200 and len(data.get("lessons", [])) == 3,
-          str(len(data.get("lessons", []))))
+    lessons = data.get("lessons", [])
+    check("≥3 ημερήσια μαθήματα πιλότου", st == 200 and len(lessons) >= 3, str(len(lessons)))
+    check("lessons: πεδία tags/favorite", all("tags" in l and "favorite" in l for l in lessons))
     st, _, pub = http_json("/lesson-wizard/api/schedule/public")
     check("δημόσιο ωράριο (τμήματα από Excel)", st == 200 and len(pub.get("tmimata", [])) >= 3)
+    check("public API: πεδίο broadcast", "broadcast" in pub)
+
+    # --- Νέα APIs: meta (tags/fav), πλέγμα ωραρίου, fs, books ---
+    key = "gymnasio-g/pliroforiki/m01-anadromi-aformisi-spiral"
+    st, _, m = http_json(f"/lesson-wizard/api/meta/{key}",
+                         {"tags": ["test-tag"], "favorite": True}, cookie=cookie)
+    check("api/meta: tags & favorite", st == 200 and m.get("favorite") is True
+          and "test-tag" in m.get("tags", []))
+    st, _, cell = http_json("/lesson-wizard/api/schedule/cell",
+                            {"tmima": "Γ1", "day": "Δευτέρα", "period": "1",
+                             "title": "TEST", "url": "/docs/"}, cookie=cookie)
+    ok_cell = st == 200 and cell["schedule"]["timetable"]["Γ1"]["Δευτέρα"]["1"]["title"] == "TEST"
+    check("api/schedule/cell: εγγραφή κελιού", ok_cell)
+    st, _, mv = http_json("/lesson-wizard/api/schedule/move",
+                          {"from": {"tmima": "Γ1", "day": "Δευτέρα", "period": "1"},
+                           "to": {"tmima": "Γ1", "day": "Τρίτη", "period": "1"}}, cookie=cookie)
+    tt = mv.get("schedule", {}).get("timetable", {}).get("Γ1", {})
+    check("api/schedule/move: drag&drop μετακίνηση",
+          st == 200 and "1" not in tt.get("Δευτέρα", {}) and tt.get("Τρίτη", {}).get("1", {}).get("title") == "TEST")
+    st, _, _ = http_json("/lesson-wizard/api/schedule/cell",
+                         {"tmima": "Γ1", "day": "Τρίτη", "period": "1", "clear": True}, cookie=cookie)
+    check("api/schedule/cell: καθαρισμός", st == 200)
+    st, _, bad = http_json("/lesson-wizard/api/schedule/cell",
+                           {"tmima": "XXX", "day": "Δευτέρα", "period": "1", "title": "X"}, cookie=cookie)
+    check("api/schedule/cell: άγνωστο τμήμα → 400", st == 400)
+    st, _, bc = http_json("/lesson-wizard/api/broadcast",
+                          {"title": "TEST BC", "url": "/docs/", "minutes": 5}, cookie=cookie)
+    check("api/broadcast: έναρξη", st == 200 and bc.get("broadcast", {}).get("title") == "TEST BC")
+    st, _, pub2 = http_json("/lesson-wizard/api/schedule/public")
+    check("broadcast ορατό στους μαθητές", (pub2.get("broadcast") or {}).get("title") == "TEST BC")
+    st, _, _ = http_json("/lesson-wizard/api/broadcast", {"clear": True}, cookie=cookie)
+    check("api/broadcast: διακοπή", st == 200)
+    st, _, fs = http_json("/lesson-wizard/api/fs/list?path=mathimata/gymnasio-g/pliroforiki/m02-pyrgoi-anoy",
+                          cookie=cookie)
+    check("api/fs/list: φάκελος μαθήματος + lesson_key",
+          st == 200 and fs.get("lesson_key") == "gymnasio-g/pliroforiki/m02-pyrgoi-anoy"
+          and any(f["name"] == "index.md" for f in fs.get("files", [])))
+    st, _, _ = http_json("/lesson-wizard/api/fs/list?path=/etc", cookie=cookie)
+    check("api/fs: απόλυτη διαδρομή εκτός docs → 400", st == 400)
+    st, _, bks = http_json("/lesson-wizard/api/books", cookie=cookie)
+    check("api/books: λίστα βιβλίων", st == 200 and isinstance(bks.get("books"), list))
 
     tn_url = "/docs/mathimata/gymnasio-g/pliroforiki/m02-pyrgoi-anoy/index.teacher.html"
     try:
@@ -222,7 +264,87 @@ def main() -> int:
         wiz = wait_for(cdp, "document.body.textContent.indexOf('Ημερήσια μαθήματα') !== -1")
         check("wizard UI: λίστα μαθημάτων (authed μέσω cookie)", bool(wiz))
         cards = wait_for(cdp, "document.querySelectorAll('.grid .bg-white').length >= 3", timeout=15)
-        check("wizard: 3 κάρτες μαθημάτων", bool(cards))
+        check("wizard: ≥3 κάρτες μαθημάτων", bool(cards))
+
+        # --- Φίλτρα & αγαπημένα ---
+        fav_btn = wait_for(cdp, "(function(){var b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('Αγαπημένα')); if(b){b.click(); return true;} return false;})()")
+        time.sleep(0.4)
+        only_favs = cdp.evaluate("(function(){var cards=[...document.querySelectorAll('.grid > div')].filter(d=>d.className.includes('shadow-sm')); return cards.length>=1 && cards.every(d=>d.className.includes('ring-amber'));})()")
+        check("φίλτρο ⭐ Αγαπημένα: μόνο αγαπημένες κάρτες", bool(fav_btn) and bool(only_favs))
+        cdp.evaluate("(function(){var b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='καθαρισμός'); if(b)b.click();})()")
+        time.sleep(0.3)
+        tag_filter = cdp.evaluate("(function(){var s=[...document.querySelectorAll('select')].find(x=>x.innerHTML.includes('tags')); return !!s;})()")
+        check("μπάρα φίλτρων με dropdown tags", bool(tag_filter))
+
+        # --- Πλέγμα ωραρίου ---
+        cdp.evaluate("(function(){var b=[...document.querySelectorAll('nav button')].find(x=>x.textContent.includes('Ωράριο')); b.click();})()")
+        grid = wait_for(cdp, "document.querySelectorAll('.sched-grid tbody tr').length === 5 && document.querySelectorAll('.sched-grid thead th').length >= 8")
+        check("ωράριο: πλέγμα 5 ημερών × 7 ωρών", bool(grid))
+        filled = cdp.evaluate("document.querySelectorAll('.sched-cell.filled').length >= 1")
+        check("ωράριο: γεμάτα κελιά με μάθημα", bool(filled))
+        # Εικονική ώρα → το σωστό κελί γίνεται 'now'
+        cdp.evaluate("(function(){var b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('Εικονική ώρα')); b.click();})()")
+        time.sleep(0.3)
+        vnow = wait_for(cdp, "(function(){var sel=[...document.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='Τετάρτη')&&s.closest('.bg-amber-50')); if(!sel) return false; sel.value='Τετάρτη'; sel.dispatchEvent(new Event('change')); var t=document.querySelector('.bg-amber-50 input[type=time]'); t.value='12:30'; t.dispatchEvent(new Event('input')); var ap=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Εφαρμογή'); ap.click(); return true;})()")
+        time.sleep(0.5)
+        now_cell = cdp.evaluate("document.querySelectorAll('.sched-cell.now').length === 1")
+        badge = cdp.evaluate("document.body.textContent.includes('ΕΙΚΟΝΙΚΗ')")
+        check("εικονική ώρα: 1 κελί «τώρα» + badge", bool(vnow) and bool(now_cell) and bool(badge))
+        cdp.evaluate("(function(){var b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('Πραγματική ώρα')); if(b)b.click();})()")
+        # Κλικ σε γεμάτο κελί → popover ενεργειών
+        pop = wait_for(cdp, "(function(){var c=document.querySelector('.sched-cell.filled'); if(!c) return false; c.click(); return true;})()")
+        time.sleep(0.4)
+        pop_ok = cdp.evaluate("(function(){var t=document.body.textContent; return t.includes('Επεξεργασία κελιού') && t.includes('Ενεργό τώρα') && t.includes('Μετάδοση');})()")
+        check("κελί: popover edit/ενεργό/μετάδοση/μετάβαση", bool(pop) and bool(pop_ok))
+        cdp.evaluate("(function(){var b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Κλείσιμο'); if(b)b.click();})()")
+        # --- Καρτέλα Αρχεία (file browser) ---
+        cdp.evaluate("(function(){var b=[...document.querySelectorAll('nav button')].find(x=>x.textContent.includes('Αρχεία')); b.click();})()")
+        fs_ok = wait_for(cdp, "[...document.querySelectorAll('.divide-y > div')].some(x=>x.textContent.includes('mathimata'))")
+        check("file browser: λίστα ρίζας docs/", bool(fs_ok))
+        nav_in = wait_for(cdp, "(function(){var d=[...document.querySelectorAll('.divide-y > div')].find(x=>x.textContent.includes('mathimata')); if(!d) return false; d.click(); return true;})()")
+        # Μπήκαμε στο mathimata/ → breadcrumb «mathimata» + υποφάκελος gymnasio-g στη λίστα
+        crumbs = wait_for(cdp, "(function(){var crumb=[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='mathimata'); var sub=[...document.querySelectorAll('.divide-y > div')].some(x=>x.textContent.includes('gymnasio-g')); return crumb && sub;})()", timeout=10)
+        check("file browser: πλοήγηση σε υποφάκελο + breadcrumbs", bool(nav_in) and bool(crumbs))
+
+        # --- Καρτέλα Βιβλία ---
+        cdp.evaluate("(function(){var b=[...document.querySelectorAll('nav button')].find(x=>x.textContent.includes('Βιβλία')); b.click();})()")
+        books_ok = wait_for(cdp, "document.body.textContent.includes('Βιβλιοθήκη βιβλίων') && document.body.textContent.includes('#page=N')")
+        check("βιβλία: καρτέλα με υπόδειξη #page=N", bool(books_ok))
+
+        # --- 🧭 Floating menu (wizard) ---
+        fab = wait_for(cdp, "!!document.getElementById('portal-nav-fab')")
+        check("floating menu: FAB υπάρχει στο wizard", bool(fab))
+        cdp.evaluate("document.getElementById('portal-nav-fab').click()")
+        menu_ok = wait_for(cdp, "(function(){var m=document.getElementById('portal-nav-menu'); return m && m.classList.contains('open') && m.textContent.includes('Αρχική Πύλη');})()")
+        check("floating menu: ανοίγει με βασικούς προορισμούς", bool(menu_ok))
+
+        # --- 🎪 Σελίδα δυνατοτήτων: MathJax / Mermaid / Slides / GIF ---
+        cdp.send("Page.navigate", {"url": BASE + "/docs/paradeigma-dynatotiton/"})
+        mj = wait_for(cdp, "document.querySelectorAll('.arithmatex svg, mjx-container').length >= 3", timeout=45)
+        check("MathJax: μαθηματικά αποδίδονται (SVG)", bool(mj))
+        mm = wait_for(cdp, "document.querySelectorAll('pre.mmd-local[data-processed=true] svg').length >= 8", timeout=60)
+        check("Mermaid: ≥8 διαγράμματα αποδίδονται", bool(mm))
+        gif = cdp.evaluate("(function(){var i=document.querySelector('img[src*=animation]'); return i && i.complete && i.naturalWidth>0;})()")
+        check("GIF animation φορτώνει", bool(gif))
+        slides_btn = cdp.evaluate("!!document.querySelector('.slides-launch')")
+        check("Reveal slides: κουμπί παρουσίασης", bool(slides_btn))
+        cdp.evaluate("document.querySelector('.slides-launch').click()")
+        reveal_ok = wait_for(cdp, "(function(){var o=document.querySelector('.slides-overlay'); return o && o.querySelectorAll('.reveal .slides section').length>=4;})()", timeout=30)
+        check("Reveal slides: fullscreen με ≥4 διαφάνειες", bool(reveal_ok))
+        cdp.evaluate("(function(){var b=document.querySelector('.slides-close'); if(b)b.click();})()")
+        chips = cdp.evaluate("document.querySelectorAll('.lesson-chip').length >= 1")
+        check("tags chips στη σελίδα (front-matter)", bool(chips))
+        fab2 = wait_for(cdp, "!!document.getElementById('portal-nav-fab')")
+        check("floating menu: FAB υπάρχει στο /docs/", bool(fab2))
+
+        # --- 📡 Broadcast banner στους μαθητές ---
+        http_json("/lesson-wizard/api/broadcast",
+                  {"title": "BC TEST", "url": "/docs/", "minutes": 5}, cookie=cookie)
+        cdp.send("Network.clearBrowserCookies")
+        cdp.send("Page.navigate", {"url": BASE + "/docs/?bctest=1"})
+        banner = wait_for(cdp, "(function(){var b=document.getElementById('teacher-broadcast'); return b && b.textContent.includes('BC TEST');})()", timeout=20)
+        check("broadcast: banner «Ο καθηγητής προβάλλει» στον μαθητή", bool(banner))
+        http_json("/lesson-wizard/api/broadcast", {"clear": True}, cookie=cookie)
     finally:
         if cdp:
             cdp.close()

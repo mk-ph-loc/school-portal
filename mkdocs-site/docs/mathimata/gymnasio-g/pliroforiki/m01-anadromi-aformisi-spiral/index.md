@@ -6,6 +6,8 @@ lesson:
   unit: Ε1 · Αλγοριθμική
   book_pages: 7-8
   duration: 45
+tags: [test-tag]
+favorite: true
 ---
 
 # 🌀 Μ01 · Αναδρομή: Αυτοομοιότητα & Σπιράλ
@@ -14,11 +16,9 @@ lesson:
 [Άνοιγμα στο βιβλίο (PDF)](https://eclass.sch.gr/modules/document/file.php/0740110278/GYMNASIO-plhroforiki/21-0227-01_V2_Pliroforiki_G-Gymnasiou_Vivlio-Mathiti.pdf){target=_blank} ·
 [Οι σελίδες του μαθήματος](vivlio-sel-7-8.pdf){target=_blank}
 
-
-
-
-
 <!-- /phase -->
+
+[📖 Πληροφορική Γ Γυμνασίου (απόσπασμα σελ. 7-8), σελ. 2](/docs/vivliothiki/pliroforiki-g-gymnasiou.pdf#page=2){target=_blank}
 
 <!-- phase: aformisi | title: Αφόρμηση — Εικόνες μέσα σε εικόνες | duration: 5 -->
 ## 🎯 Ας ξεκινήσουμε!

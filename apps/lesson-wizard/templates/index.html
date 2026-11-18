@@ -14,6 +14,23 @@
   .phase-card.dragging{opacity:.4}
   .phase-card.drag-over{outline:2px dashed #6366f1;outline-offset:2px}
   textarea{field-sizing:content}
+  /* Πλέγμα ωραρίου (τύπου Excel) */
+  .sched-grid{border-collapse:separate;border-spacing:0;width:100%}
+  .sched-grid th,.sched-grid td{border:1px solid #e2e8f0;padding:0}
+  .sched-grid thead th{background:#eef2ff;font-size:.7rem;padding:.4rem .5rem;white-space:nowrap}
+  .sched-grid tbody th{background:#f8fafc;font-size:.75rem;padding:.4rem .6rem;text-align:left;white-space:nowrap}
+  .sched-cell{min-width:7.5rem;height:3.6rem;vertical-align:top;cursor:pointer;position:relative;background:#fff}
+  .sched-cell:hover{background:#eef2ff}
+  .sched-cell.filled{background:#e0e7ff}
+  .sched-cell.filled:hover{background:#c7d2fe}
+  .sched-cell.now-col{box-shadow:inset 0 0 0 1px #f59e0b}
+  .sched-cell.now{background:#bbf7d0 !important;animation:pulse-now 2s infinite}
+  .sched-cell.drag-over{outline:2px dashed #6366f1;outline-offset:-2px}
+  .sched-cell .cell-inner{padding:.3rem .45rem;font-size:.72rem;line-height:1.25}
+  .sched-cell .cell-title{font-weight:700;color:#312e81;display:block}
+  .sched-cell .cell-sub{color:#64748b;font-size:.62rem}
+  @keyframes pulse-now{0%,100%{box-shadow:inset 0 0 0 2px #16a34a}50%{box-shadow:inset 0 0 0 2px #86efac}}
+  .virtual-badge{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
 </style>
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col"
@@ -50,7 +67,7 @@
   <div x-show="authed" x-cloak>
     <!-- Tabs -->
     <nav class="flex gap-2 mb-5 flex-wrap">
-      <template x-for="t in [['lessons','📚 Μαθήματα'],['schedule','🗓️ Ωράριο'],['active','⚡ Ενεργό μάθημα']]">
+      <template x-for="t in [['lessons','📚 Μαθήματα'],['schedule','🗓️ Ωράριο'],['active','⚡ Ενεργό & Μετάδοση'],['files','📂 Αρχεία'],['books','📖 Βιβλία']]">
         <button @click="tab=t[0]" :class="tab===t[0] ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-indigo-50'"
                 class="rounded-lg px-4 py-2 text-sm font-semibold shadow-sm" x-text="t[1]"></button>
       </template>
@@ -61,26 +78,62 @@
       <!-- Λίστα -->
       <div x-show="!editing">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h2 class="font-bold text-lg">Ημερήσια μαθήματα</h2>
+          <h2 class="font-bold text-lg">Ημερήσια μαθήματα <span class="text-sm font-normal text-slate-400" x-text="'(' + filteredLessons().length + '/' + lessons.length + ')'"></span></h2>
           <button @click="showNew=true" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold">➕ Νέο ημερήσιο μάθημα</button>
         </div>
+        <!-- Φίλτρα: τάξη / μάθημα / tag / αναζήτηση / αγαπημένα -->
+        <div class="bg-white rounded-xl shadow-sm p-3 mb-4 flex flex-wrap gap-2 items-center text-sm">
+          <select x-model="filters.cls" class="border border-slate-300 rounded-lg px-2 py-1.5">
+            <option value="">🏫 Όλες οι τάξεις</option>
+            {% for c in classes %}<option value="{{ c.slug }}">{{ c.label }}</option>{% endfor %}
+          </select>
+          <select x-model="filters.subject" class="border border-slate-300 rounded-lg px-2 py-1.5">
+            <option value="">📘 Όλα τα μαθήματα</option>
+            <template x-for="s in allSubjects()" :key="s"><option :value="s" x-text="s"></option></template>
+          </select>
+          <select x-model="filters.tag" class="border border-slate-300 rounded-lg px-2 py-1.5">
+            <option value="">🏷 Όλα τα tags</option>
+            <template x-for="t in allTags()" :key="t"><option :value="t" x-text="'#'+t"></option></template>
+          </select>
+          <input x-model="filters.q" placeholder="🔍 Αναζήτηση τίτλου…" class="border border-slate-300 rounded-lg px-3 py-1.5 flex-1 min-w-[10rem]">
+          <button @click="filters.fav=!filters.fav"
+                  :class="filters.fav ? 'bg-amber-400 text-amber-900' : 'bg-slate-100 text-slate-600 hover:bg-amber-100'"
+                  class="rounded-lg px-3 py-1.5 font-semibold">⭐ Αγαπημένα</button>
+          <button x-show="filters.cls||filters.subject||filters.tag||filters.q||filters.fav"
+                  @click="filters={cls:'',subject:'',tag:'',q:'',fav:false}"
+                  class="text-xs text-slate-400 hover:text-slate-600 underline">καθαρισμός</button>
+        </div>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <template x-for="l in lessons" :key="l.url">
-            <div class="bg-white rounded-xl shadow-sm p-4 flex flex-col gap-2">
-              <div class="text-xs text-indigo-500 font-semibold" x-text="l.class_label + ' · ' + l.subject"></div>
+          <template x-for="l in filteredLessons()" :key="l.url">
+            <div class="bg-white rounded-xl shadow-sm p-4 flex flex-col gap-2" :class="l.favorite ? 'ring-2 ring-amber-300' : ''">
+              <div class="flex items-start justify-between gap-2">
+                <div class="text-xs text-indigo-500 font-semibold" x-text="l.class_label + ' · ' + l.subject"></div>
+                <button @click="toggleFav(l)" class="text-lg leading-none" :title="l.favorite ? 'Αφαίρεση από αγαπημένα' : 'Προσθήκη στα αγαπημένα'"
+                        x-text="l.favorite ? '⭐' : '☆'" :class="l.favorite ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'"></button>
+              </div>
               <div class="font-bold text-sm leading-snug" x-text="l.title"></div>
               <div class="text-xs text-slate-500">
                 <span x-text="l.phases + ' φάσεις'"></span> · <span x-text="'⏱ ' + l.duration + '΄'"></span>
                 · <span x-text="l.files.length + ' αρχεία υλικού'"></span>
               </div>
-              <div class="flex gap-2 mt-auto pt-2">
+              <!-- Tags -->
+              <div class="flex flex-wrap gap-1 items-center">
+                <template x-for="t in l.tags" :key="t">
+                  <button @click="filters.tag=t" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-full px-2 py-0.5 text-[.65rem]" x-text="'#'+t"></button>
+                </template>
+                <button @click="editTags(l)" class="text-[.65rem] text-slate-400 hover:text-indigo-600 border border-dashed border-slate-300 rounded-full px-2 py-0.5">＋ tag</button>
+              </div>
+              <div class="flex gap-1.5 mt-auto pt-2 flex-wrap">
                 <button @click="openLesson(l)" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 text-sm font-semibold">✏️ Επεξεργασία</button>
-                <a :href="l.url" target="_blank" class="bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1.5 text-sm">👁</a>
+                <a :href="l.url" target="_blank" title="Μετάβαση στο μάθημα" class="bg-slate-100 hover:bg-slate-200 rounded-lg px-2.5 py-1.5 text-sm">👁</a>
+                <button @click="quickActive(l)" title="Ενεργό μάθημα τώρα (override ωραρίου)" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-lg px-2.5 py-1.5 text-sm">▶</button>
+                <button @click="quickBroadcast(l)" title="Μετάδοση στους μαθητές (banner)" class="bg-sky-100 hover:bg-sky-200 text-sky-800 rounded-lg px-2.5 py-1.5 text-sm">📡</button>
               </div>
             </div>
           </template>
         </div>
         <p x-show="!lessons.length" class="text-slate-500 text-sm mt-4">Δεν υπάρχουν ακόμη ημερήσια μαθήματα.</p>
+        <p x-show="lessons.length && !filteredLessons().length" class="text-slate-500 text-sm mt-4">Κανένα μάθημα δεν ταιριάζει με τα φίλτρα.</p>
       </div>
       <!-- Editor φάσεων -->
       <div x-show="editing" x-cloak>
@@ -191,30 +244,149 @@
       </div>
     </section>
 
-    <!-- ============ TAB: ΩΡΑΡΙΟ ============ -->
+    <!-- ============ TAB: ΩΡΑΡΙΟ (πλέγμα τύπου Excel) ============ -->
     <section x-show="tab==='schedule'" x-cloak>
-      <div class="bg-white rounded-xl shadow-sm p-5 max-w-2xl">
-        <h2 class="font-bold text-lg mb-2">🗓️ Ωράριο σχολείου από Excel</h2>
-        <p class="text-sm text-slate-500 mb-4">
-          Κατέβασε το πρότυπο, συμπλήρωσε τα φύλλα <b>Τμήματα / Ωρες / Ωραριο</b> και ανέβασέ το.
-          Οι μαθητές θα βλέπουν μόνο τα μαθήματα της τάξης τους και το ενεργό μάθημα της ώρας.
-        </p>
-        <div class="flex gap-3 flex-wrap items-center">
-          <a href="api/schedule/template" class="bg-slate-200 hover:bg-slate-300 rounded-lg px-4 py-2 text-sm font-semibold">⬇️ Πρότυπο Excel</a>
-          <label class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer">
-            ⬆️ Ανέβασμα συμπληρωμένου ωραρίου
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <div>
+            <h2 class="font-bold text-lg">🗓️ Ωράριο καθηγητή — πλέγμα</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Γραμμές: ημέρες · Στήλες: διδακτικές ώρες · Κλικ σε κελί για ενέργειες · Σύρε κελί για μετακίνηση (Ctrl=αντιγραφή)</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap text-sm">
+            <span class="rounded-lg px-3 py-1.5 font-semibold" :class="virtual.on ? 'virtual-badge' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'">
+              🕐 <span x-text="clockLabel()"></span>
+            </span>
+            <button @click="showVirtual=!showVirtual" class="bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg px-3 py-1.5 font-semibold">🧪 Εικονική ώρα</button>
+          </div>
+        </div>
+
+        <!-- Πίνακας εικονικής ώρας -->
+        <div x-show="showVirtual" x-cloak class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 flex flex-wrap items-center gap-2 text-sm">
+          <span class="font-semibold text-amber-800">🧪 Πειραματισμός:</span>
+          <select x-model="virtual.day" class="border border-amber-300 rounded-lg px-2 py-1.5 bg-white">
+            <template x-for="d in days" :key="d"><option :value="d" x-text="d"></option></template>
+          </select>
+          <input type="time" x-model="virtual.time" class="border border-amber-300 rounded-lg px-2 py-1.5 bg-white">
+          <button @click="virtual.on=true" class="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-3 py-1.5 font-semibold">Εφαρμογή</button>
+          <button @click="virtual.on=false; showVirtual=false" class="bg-white hover:bg-slate-100 border border-slate-300 rounded-lg px-3 py-1.5">↩ Πραγματική ώρα</button>
+          <span class="text-xs text-amber-700">Η εικονική ώρα επηρεάζει μόνο τον χρωματισμό «τώρα» εδώ — όχι τους μαθητές.</span>
+        </div>
+
+        <!-- Επιλογή τμήματος + διαχείριση -->
+        <div class="flex items-center gap-2 flex-wrap mb-3 text-sm">
+          <span class="text-slate-500">Τμήμα:</span>
+          <template x-for="t in schedule.tmimata || []" :key="t.name">
+            <button @click="gridTmima=t.name" :class="gridTmima===t.name ? 'bg-indigo-600 text-white' : 'bg-slate-100 hover:bg-indigo-50 text-slate-700'"
+                    class="rounded-lg px-3 py-1.5 font-semibold" x-text="t.name"></button>
+          </template>
+          <button @click="showTmimaForm=!showTmimaForm" class="text-xs text-indigo-600 hover:underline">＋ τμήμα</button>
+          <button @click="openPeriodsForm()" class="text-xs text-indigo-600 hover:underline">✏️ ώρες</button>
+          <span class="flex-1"></span>
+          <a href="api/schedule/template" class="bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold">⬇️ Πρότυπο Excel</a>
+          <label class="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer">
+            ⬆️ Εισαγωγή Excel
             <input type="file" accept=".xlsx,.xlsm" class="hidden" @change="uploadSchedule($event)">
           </label>
         </div>
-        <div x-show="schedule.tmimata?.length" class="mt-5">
-          <h3 class="font-semibold text-sm mb-2">Τρέχον ωράριο (<span x-text="schedule.updated"></span>)</h3>
-          <div class="text-xs text-slate-600 space-y-1">
-            <div>Τμήματα: <span class="mono" x-text="(schedule.tmimata||[]).map(t=>t.name).join(', ')"></span></div>
-            <div>Διδακτικές ώρες: <span class="mono" x-text="(schedule.periods||[]).map((p,i)=>(i+1)+': '+p.start+'–'+p.end).join(' · ')"></span></div>
+        <div x-show="showTmimaForm" x-cloak class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 flex flex-wrap gap-2 items-center text-sm">
+          <input x-model="tmimaForm.name" placeholder="π.χ. Α1" class="border border-slate-300 rounded-lg px-2 py-1.5 w-24">
+          <select x-model="tmimaForm.class_slug" class="border border-slate-300 rounded-lg px-2 py-1.5">
+            {% for c in classes %}<option value="{{ c.slug }}">{{ c.label }}</option>{% endfor %}
+          </select>
+          <button @click="addTmima()" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 font-semibold">Προσθήκη</button>
+          <button x-show="gridTmima" @click="removeTmima()" class="bg-red-100 hover:bg-red-200 text-red-700 rounded-lg px-3 py-1.5">🗑 Διαγραφή «<span x-text="gridTmima"></span>»</button>
+        </div>
+        <div x-show="showPeriodsForm" x-cloak class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 text-sm">
+          <div class="flex flex-wrap gap-2 items-end">
+            <template x-for="(p,i) in periodsForm" :key="i">
+              <label class="text-xs"><span x-text="(i+1)+'η ώρα'"></span>
+                <span class="flex gap-1 mt-1">
+                  <input type="time" x-model="p.start" class="border border-slate-300 rounded px-1 py-1">
+                  <input type="time" x-model="p.end" class="border border-slate-300 rounded px-1 py-1">
+                </span>
+              </label>
+            </template>
+            <button @click="periodsForm.push({start:'14:50',end:'15:35'})" class="text-xs text-indigo-600 hover:underline">＋ ώρα</button>
+            <button x-show="periodsForm.length>1" @click="periodsForm.pop()" class="text-xs text-red-500 hover:underline">－ ώρα</button>
+            <button @click="savePeriods()" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 font-semibold">💾 Αποθήκευση ωρών</button>
           </div>
         </div>
+        <!-- Το πλέγμα (ημέρες × ώρες) -->
+        <div class="overflow-x-auto" x-show="(schedule.periods||[]).length && gridTmima">
+          <table class="sched-grid">
+            <thead>
+              <tr>
+                <th class="text-left">Ημέρα \ Ώρα</th>
+                <template x-for="(p,pi) in schedule.periods" :key="pi">
+                  <th :class="nowInfo().period===pi+1 ? 'bg-amber-100 text-amber-800' : ''">
+                    <span x-text="(pi+1)+'η'"></span><br>
+                    <span class="font-normal text-slate-500" x-text="p.start+'–'+p.end"></span>
+                  </th>
+                </template>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="d in days" :key="d">
+                <tr>
+                  <th :class="nowInfo().day===d ? 'text-amber-700' : ''" x-text="d"></th>
+                  <template x-for="(p,pi) in schedule.periods" :key="pi">
+                    <td class="sched-cell"
+                        :class="cellClass(d, pi+1)"
+                        :draggable="!!cellEntry(d, pi+1)"
+                        @dragstart="cellDragStart(d, pi+1, $event)"
+                        @dragover.prevent="$event.currentTarget.classList.add('drag-over')"
+                        @dragleave="$event.currentTarget.classList.remove('drag-over')"
+                        @drop.prevent="cellDrop(d, pi+1, $event)"
+                        @click="openCell(d, pi+1)">
+                      <div class="cell-inner" x-show="cellEntry(d, pi+1)">
+                        <span class="cell-title" x-text="cellEntry(d, pi+1)?.title"></span>
+                        <span class="cell-sub" x-text="cellEntry(d, pi+1)?.url ? '🔗 συνδεδεμένο' : ''"></span>
+                      </div>
+                    </td>
+                  </template>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <p x-show="!(schedule.tmimata||[]).length" class="text-sm text-slate-500 mt-2">Δεν υπάρχουν τμήματα — πρόσθεσε τμήμα παραπάνω ή ανέβασε Excel ωραρίου.</p>
+        <p class="text-xs text-slate-400 mt-2" x-show="schedule.updated">Τελευταία ενημέρωση: <span x-text="schedule.updated"></span> · Οι μαθητές βλέπουν αυτόματα το ενεργό μάθημα της ώρας τους στο /docs/.</p>
         <p x-show="error" x-text="error" class="text-red-600 text-sm mt-3"></p>
         <p x-show="notice" x-text="notice" class="text-emerald-700 text-sm mt-3"></p>
+      </div>
+
+      <!-- Popover ενεργειών κελιού -->
+      <div x-show="cellMenu" x-cloak class="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" @click.self="cellMenu=null">
+        <div class="bg-white rounded-2xl shadow-xl p-5 max-w-md w-full">
+          <h3 class="font-bold text-base mb-1">
+            <span x-text="cellMenu?.day"></span> · <span x-text="cellMenu?.period + 'η ώρα'"></span> · <span x-text="gridTmima"></span>
+          </h3>
+          <p class="text-xs text-slate-500 mb-3" x-text="cellMenu?.entry ? cellMenu.entry.title : 'Κενό κελί'"></p>
+          <div class="grid grid-cols-2 gap-2 text-sm mb-2">
+            <button @click="cellEdit()" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-2 font-semibold col-span-2">✏️ Επεξεργασία κελιού</button>
+            <button x-show="cellMenu?.entry" @click="cellActivate()" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 font-semibold">▶ Ενεργό τώρα</button>
+            <button x-show="cellMenu?.entry" @click="cellBroadcast()" class="bg-sky-600 hover:bg-sky-700 text-white rounded-lg px-3 py-2 font-semibold">📡 Μετάδοση</button>
+            <a x-show="cellMenu?.entry?.url" :href="cellMenu?.entry?.url" target="_blank" class="bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-2 font-semibold text-center">👁 Μετάβαση</a>
+            <button x-show="cellMenu?.entry" @click="cellClear()" class="bg-red-100 hover:bg-red-200 text-red-700 rounded-lg px-3 py-2 font-semibold">🗑 Καθαρισμός</button>
+          </div>
+          <!-- Inline φόρμα επεξεργασίας -->
+          <div x-show="cellEditing" x-cloak class="border-t border-slate-200 pt-3 space-y-2 text-sm">
+            <label class="block text-xs">Ημερήσιο μάθημα (συμπληρώνει τίτλο & link)
+              <select @change="pickLessonForCell($event.target.value)" class="w-full mt-1 border border-slate-300 rounded-lg px-2 py-1.5">
+                <option value="">— ή γράψε ελεύθερα παρακάτω —</option>
+                <template x-for="l in lessons" :key="l.url"><option :value="l.url" x-text="l.class_label + ' · ' + l.title"></option></template>
+              </select>
+            </label>
+            <label class="block text-xs">Τίτλος μαθήματος
+              <input x-model="cellForm.title" class="w-full mt-1 border border-slate-300 rounded-lg px-2 py-1.5">
+            </label>
+            <label class="block text-xs">URL (προαιρετικό)
+              <input x-model="cellForm.url" class="mono w-full mt-1 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
+            </label>
+            <button @click="saveCell()" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 font-semibold w-full">💾 Αποθήκευση κελιού</button>
+          </div>
+          <button @click="cellMenu=null" class="mt-3 text-xs text-slate-400 hover:text-slate-600 underline">Κλείσιμο</button>
+        </div>
       </div>
     </section>
     <!-- ============ TAB: ΕΝΕΡΓΟ ΜΑΘΗΜΑ ============ -->
@@ -246,7 +418,220 @@
         <p x-show="error" x-text="error" class="text-red-600 text-sm mt-3"></p>
         <p x-show="notice" x-text="notice" class="text-emerald-700 text-sm mt-3"></p>
       </div>
+
+      <!-- 📡 Μετάδοση μαθήματος σε όλους -->
+      <div class="bg-white rounded-xl shadow-sm p-5 max-w-2xl mt-4">
+        <h2 class="font-bold text-lg mb-2">📡 Μετάδοση μαθήματος (banner στους μαθητές)</h2>
+        <p class="text-sm text-slate-500 mb-4">Στέλνει διακριτικό banner «Ο καθηγητής προβάλλει…» σε όλες τις σελίδες /docs/ των μαθητών, με link απευθείας στο μάθημα.</p>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <label class="text-sm">Στόχος
+            <select x-model="bcForm.tmima" class="w-full mt-1 border border-slate-300 rounded-lg px-3 py-2">
+              <option value="">📢 Όλα τα τμήματα</option>
+              <template x-for="t in schedule.tmimata || []" :key="t.name"><option :value="t.name" x-text="'Τμήμα ' + t.name"></option></template>
+            </select>
+          </label>
+          <label class="text-sm">Διάρκεια (λεπτά)
+            <input type="number" x-model.number="bcForm.minutes" min="1" max="180" class="w-full mt-1 border border-slate-300 rounded-lg px-3 py-2">
+          </label>
+          <label class="text-sm sm:col-span-2">Μάθημα
+            <select x-model="bcForm.lessonUrl" class="w-full mt-1 border border-slate-300 rounded-lg px-3 py-2">
+              <option value="">— διάλεξε ημερήσιο μάθημα —</option>
+              <template x-for="l in lessons" :key="l.url"><option :value="l.url" x-text="l.class_label + ' · ' + l.title"></option></template>
+            </select>
+          </label>
+          <label class="text-sm sm:col-span-2">Μήνυμα (προαιρετικό)
+            <input x-model="bcForm.message" placeholder="π.χ. Ανοίξτε τη δραστηριότητα 2" class="w-full mt-1 border border-slate-300 rounded-lg px-3 py-2">
+          </label>
+        </div>
+        <div class="flex gap-2 mt-4 items-center flex-wrap">
+          <button @click="setBroadcast(false)" class="bg-sky-600 hover:bg-sky-700 text-white rounded-lg px-5 py-2 text-sm font-bold">📡 Έναρξη μετάδοσης</button>
+          <button @click="setBroadcast(true)" class="bg-slate-200 hover:bg-slate-300 rounded-lg px-4 py-2 text-sm">⏹ Διακοπή</button>
+          <span x-show="broadcast && broadcast.until*1000 > Date.now()" class="text-xs bg-sky-50 text-sky-700 border border-sky-200 rounded-lg px-3 py-1.5">
+            Σε εξέλιξη: <b x-text="broadcast?.title"></b> → <span x-text="broadcast?.tmima || 'όλα τα τμήματα'"></span>
+          </span>
+        </div>
+      </div>
     </section>
+
+    <!-- ============ TAB: ΑΡΧΕΙΑ (γενικός file browser) ============ -->
+    <section x-show="tab==='files'" x-cloak>
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h2 class="font-bold text-lg">📂 Αρχεία εκπαιδευτικού υλικού (docs/)</h2>
+          <div class="flex gap-2 text-sm">
+            <button @click="fsMkdir()" class="bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1.5 font-semibold">＋ Φάκελος</button>
+            <label class="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 font-semibold cursor-pointer">
+              ⬆️ Ανέβασμα εδώ
+              <input type="file" class="hidden" @change="fsUpload($event)">
+            </label>
+          </div>
+        </div>
+        <!-- Breadcrumbs -->
+        <div class="flex items-center gap-1 flex-wrap text-sm mb-3 bg-slate-50 rounded-lg px-3 py-2">
+          <button @click="fsOpen('')" class="text-indigo-600 hover:underline font-semibold">📚 docs</button>
+          <template x-for="(crumb, i) in fsCrumbs()" :key="i">
+            <span class="flex items-center gap-1">
+              <span class="text-slate-300">/</span>
+              <button @click="fsOpen(crumb.path)" class="text-indigo-600 hover:underline" x-text="crumb.name"></button>
+            </span>
+          </template>
+          <span class="flex-1"></span>
+          <a :href="fs.view_url" target="_blank" class="text-xs text-slate-500 hover:text-indigo-600">👁 Προβολή στο site</a>
+          <button x-show="fs.lesson_key" @click="openLessonByKey(fs.lesson_key)" class="text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded px-2 py-1 font-semibold">🧙 Άνοιγμα στον Wizard</button>
+        </div>
+        <!-- Λίστα φακέλων/αρχείων -->
+        <div class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-sm">
+          <template x-for="d in fs.dirs" :key="'d:'+d.name">
+            <div class="flex items-center gap-2 px-3 py-2 hover:bg-indigo-50 cursor-pointer" @click="fsOpen(joinPath(fs.path, d.name))">
+              <span>📁</span>
+              <span class="font-semibold flex-1" x-text="d.name"></span>
+              <span class="text-xs text-slate-400" x-text="d.children + ' στοιχεία'"></span>
+              <span x-show="isLessonDir(joinPath(fs.path, d.name))" class="text-[.65rem] bg-indigo-100 text-indigo-700 rounded-full px-2 py-0.5">ημερήσιο μάθημα</span>
+            </div>
+          </template>
+          <template x-for="f in fs.files" :key="'f:'+f.name">
+            <div class="flex items-center gap-2 px-3 py-2 hover:bg-slate-50">
+              <span x-text="fileIcon(f.name)"></span>
+              <button @click="f.editable ? fsEdit(f) : null" :class="f.editable ? 'text-indigo-700 hover:underline font-semibold' : ''" class="mono flex-1 text-left text-xs" x-text="f.name"></button>
+              <span class="text-xs text-slate-400" x-text="fmtSize(f.size)"></span>
+              <a :href="'/docs/' + joinPath(fs.path, f.name)" target="_blank" class="text-xs bg-slate-100 hover:bg-slate-200 rounded px-2 py-1" title="Προβολή">👁</a>
+              <button x-show="f.editable" @click="fsEdit(f)" class="text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded px-2 py-1" title="Επεξεργασία">✏️</button>
+              <button @click="fsDelete(f)" class="text-xs text-red-400 hover:text-red-600 px-1" title="Διαγραφή (με backup)">🗑</button>
+            </div>
+          </template>
+          <p x-show="!fs.dirs.length && !fs.files.length" class="px-3 py-4 text-slate-400 text-xs">Κενός φάκελος.</p>
+        </div>
+        <p x-show="error" x-text="error" class="text-red-600 text-sm mt-3"></p>
+        <p x-show="notice" x-text="notice" class="text-emerald-700 text-sm mt-3"></p>
+      </div>
+
+      <!-- Editor αρχείου -->
+      <div x-show="fsEditor" x-cloak class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" @click.self="fsEditor=null">
+        <div class="bg-white rounded-2xl shadow-xl p-5 w-full max-w-4xl max-h-[90vh] flex flex-col">
+          <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
+            <h3 class="font-bold text-sm mono" x-text="fsEditor?.path"></h3>
+            <div class="flex gap-2">
+              <a :href="fsEditor?.view_url" target="_blank" class="bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold">👁 Προβολή</a>
+              <button @click="fsSave()" :disabled="fsSaving" class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg px-4 py-1.5 text-xs font-bold" x-text="fsSaving ? 'Αποθήκευση…' : '💾 Αποθήκευση'"></button>
+              <button @click="fsEditor=null" class="bg-slate-200 hover:bg-slate-300 rounded-lg px-3 py-1.5 text-xs">✕</button>
+            </div>
+          </div>
+          <textarea x-model="fsEditor.content" class="mono flex-1 min-h-[50vh] w-full border border-slate-300 rounded-lg p-3 text-xs leading-relaxed"></textarea>
+          <p class="text-[.65rem] text-slate-400 mt-1">Κρατιέται αυτόματο backup πριν από κάθε αποθήκευση · το site ξαναχτίζεται αυτόματα.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TAB: ΒΙΒΛΙΑ ============ -->
+    <section x-show="tab==='books'" x-cloak>
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <h2 class="font-bold text-lg mb-2">📖 Βιβλιοθήκη βιβλίων</h2>
+        <p class="text-sm text-slate-500 mb-4">
+          Ανέβασε τα σχολικά βιβλία (PDF). Δημοσιεύονται στο <a href="/docs/vivliothiki/" target="_blank" class="text-indigo-600 underline">/docs/vivliothiki/</a>
+          και μπορείς να βάζεις μέσα στα μαθήματα links που ανοίγουν <b>συγκεκριμένη σελίδα</b> (<span class="mono">#page=N</span>).
+        </p>
+        <!-- Upload βιβλίου -->
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm items-end">
+          <label class="text-xs">Τίτλος βιβλίου
+            <input x-model="bookForm.title" placeholder="Πληροφορική Γ' Γυμνασίου" class="w-full mt-1 border border-slate-300 rounded-lg px-2 py-1.5">
+          </label>
+          <label class="text-xs">Slug (greeklish, κενό=από το αρχείο)
+            <input x-model="bookForm.slug" placeholder="pliroforiki-g-gym" class="mono w-full mt-1 border border-slate-300 rounded-lg px-2 py-1.5">
+          </label>
+          <label class="text-xs">Τάξη
+            <select x-model="bookForm.class_slug" class="w-full mt-1 border border-slate-300 rounded-lg px-2 py-1.5">
+              <option value="">— γενικό —</option>
+              {% for c in classes %}<option value="{{ c.slug }}">{{ c.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <label class="inline-flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-2 font-semibold cursor-pointer text-xs">
+            ⬆️ Ανέβασμα PDF
+            <input type="file" accept=".pdf" class="hidden" @change="uploadBook($event)">
+          </label>
+        </div>
+        <!-- Λίστα βιβλίων -->
+        <div class="grid sm:grid-cols-2 gap-3">
+          <template x-for="b in books" :key="b.slug">
+            <div class="border border-slate-200 rounded-xl p-4 flex flex-col gap-2">
+              <div class="font-bold text-sm">📕 <span x-text="b.title"></span></div>
+              <div class="text-xs text-slate-500">
+                <span x-show="b.class_slug" x-text="classLabel(b.class_slug) + ' · '"></span>
+                <span x-show="b.pages" x-text="b.pages + ' σελίδες · '"></span>
+                <span x-text="fmtSize(b.size)"></span>
+              </div>
+              <div class="mono text-[.65rem] text-slate-400 break-all" x-text="b.file + '#page=N'"></div>
+              <div class="flex gap-2 flex-wrap mt-auto pt-1">
+                <a :href="b.file" target="_blank" class="bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold">👁 Άνοιγμα</a>
+                <button @click="openBookLink(b)" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 text-xs font-semibold">🔗 Link σε μάθημα</button>
+                <button @click="deleteBook(b)" class="bg-red-100 hover:bg-red-200 text-red-700 rounded-lg px-3 py-1.5 text-xs">🗑</button>
+              </div>
+            </div>
+          </template>
+        </div>
+        <p x-show="!books.length" class="text-sm text-slate-400 mt-2">Δεν έχουν ανέβει βιβλία ακόμη.</p>
+        <p x-show="error" x-text="error" class="text-red-600 text-sm mt-3"></p>
+        <p x-show="notice" x-text="notice" class="text-emerald-700 text-sm mt-3"></p>
+      </div>
+      <!-- Modal link βιβλίου -->
+      <div x-show="bookLink" x-cloak class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" @click.self="bookLink=null">
+        <div class="bg-white rounded-2xl shadow-xl p-5 max-w-md w-full text-sm">
+          <h3 class="font-bold text-base mb-3">🔗 Link βιβλίου σε μάθημα — <span x-text="bookLink?.title"></span></h3>
+          <label class="block text-xs mb-2">Μάθημα
+            <select x-model="bookLinkForm.lesson_key" class="w-full mt-1 border border-slate-300 rounded-lg px-2 py-1.5">
+              <option value="">— διάλεξε —</option>
+              <template x-for="l in lessons" :key="l.url"><option :value="lessonKey(l)" x-text="l.class_label + ' · ' + l.title"></option></template>
+            </select>
+          </label>
+          <label class="block text-xs mb-3">Σελίδα βιβλίου
+            <input type="number" x-model.number="bookLinkForm.page" min="1" :max="bookLink?.pages || 9999" class="w-full mt-1 border border-slate-300 rounded-lg px-2 py-1.5">
+          </label>
+          <div class="flex gap-2">
+            <button @click="insertBookLink()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 font-semibold">Εισαγωγή στο μάθημα</button>
+            <button @click="copyBookLink()" class="bg-slate-100 hover:bg-slate-200 rounded-lg px-4 py-2">📋 Αντιγραφή markdown</button>
+          </div>
+          <p class="text-[.65rem] text-slate-400 mt-2">Μορφή: <span class="mono">[📖 Τίτλος, σελ. Ν](…pdf#page=Ν){target=_blank}</span> — το #page=N είναι το πρότυπο των PDF viewers όλων των browsers.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Modal tags -->
+  <div x-show="tagModal" x-cloak class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" @click.self="tagModal=null">
+    <div class="bg-white rounded-2xl shadow-xl p-5 max-w-md w-full text-sm">
+      <h3 class="font-bold text-base mb-1">🏷 Tags μαθήματος</h3>
+      <p class="text-xs text-slate-500 mb-3" x-text="tagModal?.title"></p>
+      <input x-model="tagInput" placeholder="π.χ. αναδρομή, python, επανάληψη (χωρισμένα με κόμμα)"
+             @keydown.enter="saveTags()" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+      <div class="flex flex-wrap gap-1 mt-2">
+        <template x-for="t in allTags()" :key="t">
+          <button @click="addTagSuggestion(t)" class="bg-slate-100 hover:bg-indigo-100 rounded-full px-2 py-0.5 text-[.65rem]" x-text="'#'+t"></button>
+        </template>
+      </div>
+      <div class="flex gap-2 mt-4 justify-end">
+        <button @click="tagModal=null" class="bg-slate-200 hover:bg-slate-300 rounded-lg px-4 py-2">Άκυρο</button>
+        <button @click="saveTags()" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-5 py-2 font-semibold">💾 Αποθήκευση</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal γρήγορης ενεργοποίησης/μετάδοσης από κάρτα -->
+  <div x-show="quickModal" x-cloak class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" @click.self="quickModal=null">
+    <div class="bg-white rounded-2xl shadow-xl p-5 max-w-md w-full text-sm">
+      <h3 class="font-bold text-base mb-1" x-text="quickModal?.mode==='active' ? '▶ Ενεργό μάθημα τώρα' : '📡 Μετάδοση μαθήματος'"></h3>
+      <p class="text-xs text-slate-500 mb-3" x-text="quickModal?.lesson?.title"></p>
+      <label class="block text-xs mb-2">Τμήμα
+        <select x-model="quickForm.tmima" class="w-full mt-1 border border-slate-300 rounded-lg px-2 py-1.5">
+          <template x-if="quickModal?.mode==='broadcast'"><option value="">📢 Όλα τα τμήματα</option></template>
+          <template x-for="t in schedule.tmimata || []" :key="t.name"><option :value="t.name" x-text="t.name"></option></template>
+        </select>
+      </label>
+      <label class="block text-xs mb-3">Διάρκεια (λεπτά)
+        <input type="number" x-model.number="quickForm.minutes" min="1" max="180" class="w-full mt-1 border border-slate-300 rounded-lg px-2 py-1.5">
+      </label>
+      <button @click="runQuick()" class="w-full text-white rounded-lg px-4 py-2 font-bold"
+              :class="quickModal?.mode==='active' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-sky-600 hover:bg-sky-700'"
+              x-text="quickModal?.mode==='active' ? '▶ Ενεργοποίηση' : '📡 Έναρξη μετάδοσης'"></button>
+    </div>
   </div>
 
   <!-- Modal νέου μαθήματος -->
@@ -286,5 +671,6 @@
 </footer>
 
 <script src="static/wizard.js"></script>
+<script src="/assets/portal-nav.js" defer></script>
 </body>
 </html>

@@ -143,15 +143,67 @@
     });
   }
 
+  /** 📡 Banner μετάδοσης καθηγητή («Ο καθηγητής προβάλλει…») σε όλες τις σελίδες. */
+  function renderBroadcast(data) {
+    var bc = data && data.broadcast;
+    var old = document.getElementById('teacher-broadcast');
+    var dismissed = '';
+    try { dismissed = sessionStorage.getItem('bc-dismissed') || ''; } catch (e) {}
+    if (!bc || !bc.until || Date.now() / 1000 >= bc.until ||
+        String(bc.until) === dismissed ||
+        (bc.tmima && getTmima() && bc.tmima !== getTmima())) {
+      if (old) old.remove();
+      return;
+    }
+    if (old) old.remove();
+    var bar = document.createElement('div');
+    bar.id = 'teacher-broadcast';
+    bar.className = 'teacher-broadcast';
+    var label = document.createElement('span');
+    label.className = 'teacher-broadcast__label';
+    label.textContent = '📡 Ο καθηγητής προβάλλει:';
+    bar.appendChild(label);
+    if (bc.url) {
+      var a = document.createElement('a');
+      a.href = bc.url;
+      a.textContent = bc.title;
+      bar.appendChild(a);
+    } else {
+      var b = document.createElement('strong');
+      b.textContent = bc.title;
+      bar.appendChild(b);
+    }
+    if (bc.message) {
+      var msg = document.createElement('span');
+      msg.className = 'teacher-broadcast__msg';
+      msg.textContent = ' — ' + bc.message;
+      bar.appendChild(msg);
+    }
+    var x = document.createElement('button');
+    x.className = 'teacher-broadcast__close';
+    x.title = 'Απόκρυψη για αυτή τη συνεδρία';
+    x.textContent = '✕';
+    x.addEventListener('click', function () {
+      try { sessionStorage.setItem('bc-dismissed', String(bc.until)); } catch (e) {}
+      bar.remove();
+    });
+    bar.appendChild(x);
+    document.body.appendChild(bar);
+  }
+
   function apply() {
     fetchSchedule().then(function (data) {
       buildPicker(data);
       renderWidget();
+      renderBroadcast(data);
       filterNavByClass(data);
     });
-    // Ανανέωση κάθε λεπτό (αλλαγή ώρας / override καθηγητή)
+    // Ανανέωση κάθε λεπτό (αλλαγή ώρας / override καθηγητή / μετάδοση)
     if (!window.__tmataTimer) {
-      window.__tmataTimer = setInterval(function () { cache = null; renderWidget(); }, 60000);
+      window.__tmataTimer = setInterval(function () {
+        cache = null;
+        fetchSchedule().then(function (data) { renderWidget(); renderBroadcast(data); });
+      }, 60000);
     }
   }
 

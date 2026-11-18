@@ -42,7 +42,12 @@ BACKUP_DIR = BASE_DIR / "backups"
 DATA_DIR = BASE_DIR / "data"
 SCHEDULE_JSON = DATA_DIR / "schedule.json"
 OVERRIDES_JSON = DATA_DIR / "active-overrides.json"
+BROADCAST_JSON = DATA_DIR / "broadcast.json"
+BOOKS_JSON = DATA_DIR / "books.json"
 TEMPLATE_XLSX = DATA_DIR / "orari-protypo.xlsx"
+LIBRARY_DIR = DOCS_DIR / "vivliothiki"
+
+DAYS = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή"]
 
 TEACHER_CODE = "teacher2026"
 COOKIE_NAME = "lessonwizard_teacher"
@@ -72,6 +77,10 @@ PHASE_TYPES = {
 UPLOAD_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".pdf",
                ".html", ".mp4", ".webm", ".mp3", ".ogg", ".pptx", ".odp", ".zip"}
 UPLOAD_MAX = 40 * 1024 * 1024                        # 40 MB ανά αρχείο
+# Γενικός file browser: επιπλέον τύποι για υλικό μαθημάτων (md/css/js/data).
+FS_UPLOAD_EXTS = UPLOAD_EXTS | {".md", ".txt", ".css", ".js", ".json", ".csv",
+                                ".docx", ".odt", ".xlsx", ".ipynb", ".py"}
+NAME_RE = re.compile(r"^[^/\\\x00-\x1f]+$")          # όνομα αρχείου/φακέλου χωρίς διαδρομές
 
 NAV_BEGIN = "# BEGIN AUTO-NAV MATHIMATA"
 NAV_END = "# END AUTO-NAV MATHIMATA"
@@ -212,6 +221,60 @@ def backup_file(path: Path) -> None:
     shutil.copy2(path, BACKUP_DIR / f"{stamp}__{rel}.bak")
 
 
+def fm_meta(fm: str) -> dict:
+    """Ελαφρύ διάβασμα μεταδεδομένων front-matter (tags/favorite/unit/book).
+
+    Δεν απαιτεί PyYAML — καλύπτει τις μορφές που γράφει το wizard:
+      tags: [a, b]  ή  tags:\n    - a\n    - b
+      favorite: true
+    """
+    meta: dict = {"tags": [], "favorite": False}
+    m = re.search(r"^tags:\s*\[(.*?)\]\s*$", fm, re.MULTILINE)
+    if m:
+        meta["tags"] = [t.strip().strip("'\"") for t in m.group(1).split(",") if t.strip()]
+    else:
+        m = re.search(r"^tags:\s*\n((?:\s+-\s+.+\n?)+)", fm, re.MULTILINE)
+        if m:
+            meta["tags"] = [x.strip().lstrip("-").strip().strip("'\"")
+                            for x in m.group(1).strip().splitlines() if x.strip()]
+    m = re.search(r"^favorite:\s*(true|yes|1)\s*$", fm, re.MULTILINE | re.IGNORECASE)
+    meta["favorite"] = bool(m)
+    m = re.search(r"^\s+unit:\s*['\"]?(.*?)['\"]?\s*$", fm, re.MULTILINE)
+    if m:
+        meta["unit"] = m.group(1).strip()
+    m = re.search(r"^\s+book_pages:\s*['\"]?(.*?)['\"]?\s*$", fm, re.MULTILINE)
+    if m:
+        meta["book_pages"] = m.group(1).strip()
+    return meta
+
+
+def set_fm_meta(fm: str, tags: list[str] | None, favorite: bool | None) -> str:
+    """Γράφει/αντικαθιστά τα tags & favorite στο front-matter (χωρίς YAML lib)."""
+    lines = fm.splitlines()
+    out: list[str] = []
+    skip_block = False
+    for ln in lines:
+        if skip_block:
+            if re.match(r"^\s+-\s+", ln):
+                continue                          # γραμμές παλιάς λίστας tags
+            skip_block = False
+        if re.match(r"^tags:", ln):
+            if not re.match(r"^tags:\s*\[", ln):
+                skip_block = True                 # block-style λίστα → αφαίρεση
+            continue
+        if re.match(r"^favorite:", ln):
+            continue
+        out.append(ln)
+    if tags is not None:
+        clean = [re.sub(r"[\[\],#'\"\n]", "", str(t)).strip() for t in tags]
+        clean = [t for t in clean if t][:12]
+        if clean:
+            out.append("tags: [" + ", ".join(clean) + "]")
+    if favorite:
+        out.append("favorite: true")
+    return "\n".join(out).strip("\n")
+
+
 def list_all_lessons() -> list[dict]:
     """Όλα τα ημερήσια μαθήματα (φάκελοι με index.md κάτω από mathimata/)."""
     out = []
@@ -238,6 +301,7 @@ def list_all_lessons() -> list[dict]:
                 total = sum(p["duration"] for p in parsed["phases"])
                 files = [p.name for p in sorted(les_dir.iterdir())
                          if p.is_file() and p.name != "index.md"]
+                meta = fm_meta(parsed["front_matter"])
                 out.append({
                     "class_slug": cls_dir.name,
                     "class_label": CLASS_LABELS[cls_dir.name],
@@ -247,6 +311,10 @@ def list_all_lessons() -> list[dict]:
                     "phases": len(parsed["phases"]),
                     "duration": total,
                     "files": files,
+                    "tags": meta["tags"],
+                    "favorite": meta["favorite"],
+                    "unit": meta.get("unit", ""),
+                    "book_pages": meta.get("book_pages", ""),
                     "url": f"/docs/mathimata/{cls_dir.name}/{subj_dir.name}/{les_dir.name}/",
                 })
     return out
@@ -264,8 +332,10 @@ def rebuild_nav() -> None:
     # Ο δείκτης BEGIN πρέπει να ξεκινά στην αρχή της γραμμής του (όχι μετά τα
     # κενά indent της προηγούμενης χρήσης — θα διπλασιάζονταν σε κάθε rebuild).
     i = text.rfind("\n", 0, i) + 1
-    lines = ["  " + NAV_BEGIN + " (διαχειρίζεται το Lesson Wizard — μην επεξεργάζεστε χειροκίνητα)",
-             "  - Μαθήματα:"]
+    lines = ["  " + NAV_BEGIN + " (διαχειρίζεται το Lesson Wizard — μην επεξεργάζεστε χειροκίνητα)"]
+    if LIBRARY_DIR.is_dir() and any(LIBRARY_DIR.glob("*.pdf")):
+        lines.append("  - 📖 Βιβλιοθήκη: vivliothiki/index.md")
+    lines.append("  - Μαθήματα:")
     lessons = list_all_lessons()
     by_class: dict[str, dict[str, list]] = {}
     for les in lessons:
@@ -521,6 +591,30 @@ def api_lessons(request: Request):
             "phase_types": PHASE_TYPES}
 
 
+@app.post("/api/meta/{class_slug}/{subject}/{lesson}")
+async def api_set_meta(class_slug: str, subject: str, lesson: str, request: Request):
+    """Tags & ⭐ αγαπημένο στο front-matter του μαθήματος (χωρίς αλλαγή φάσεων)."""
+    require_teacher(request)
+    d = lesson_dir(class_slug, subject, lesson)
+    idx = d / "index.md"
+    if not idx.is_file():
+        raise HTTPException(404, "Το μάθημα δεν βρέθηκε.")
+    body = await request.json()
+    text = idx.read_text(encoding="utf-8")
+    parsed = parse_lesson(text)
+    tags = body.get("tags")
+    favorite = body.get("favorite")
+    if tags is not None and not isinstance(tags, list):
+        raise HTTPException(400, "Μη έγκυρα tags.")
+    new_fm = set_fm_meta(parsed["front_matter"], tags,
+                         bool(favorite) if favorite is not None else fm_meta(parsed["front_matter"])["favorite"])
+    parsed["front_matter"] = new_fm
+    backup_file(idx)
+    idx.write_text(render_lesson(parsed), encoding="utf-8")
+    meta = fm_meta(new_fm)
+    return {"ok": True, "tags": meta["tags"], "favorite": meta["favorite"]}
+
+
 @app.get("/api/lesson/{class_slug}/{subject}/{lesson}")
 def api_get_lesson(class_slug: str, subject: str, lesson: str, request: Request):
     require_teacher(request)
@@ -631,7 +725,9 @@ def api_schedule_public():
     overrides = load_json(OVERRIDES_JSON, {})
     now = time.time()
     active = {k: v for k, v in overrides.items() if v.get("until", 0) > now}
-    return {**data, "overrides": active}
+    bc = load_json(BROADCAST_JSON, {})
+    broadcast = bc if bc.get("until", 0) > now else None
+    return {**data, "overrides": active, "broadcast": broadcast}
 
 
 @app.get("/api/schedule/template")
@@ -694,3 +790,423 @@ async def api_set_active(request: Request):
                             "until": time.time() + max(5, min(minutes, 180)) * 60}
     save_json(OVERRIDES_JSON, overrides)
     return {"ok": True, "overrides": overrides}
+
+
+@app.post("/api/broadcast")
+async def api_broadcast(request: Request):
+    """📡 Μετάδοση μαθήματος: banner σε ΟΛΟΥΣ τους μαθητές (ή επιλεγμένο τμήμα)."""
+    require_teacher(request)
+    body = await request.json()
+    if body.get("clear"):
+        save_json(BROADCAST_JSON, {})
+        return {"ok": True, "broadcast": None}
+    title = str(body.get("title", "")).strip()
+    url = str(body.get("url", "")).strip()
+    if not title:
+        raise HTTPException(400, "Δώσε τίτλο μαθήματος για μετάδοση.")
+    minutes = max(1, min(int(body.get("minutes", 45)), 180))
+    bc = {"title": title, "url": url,
+          "message": str(body.get("message", "")).strip()[:200],
+          "tmima": str(body.get("tmima", "")).strip(),   # κενό = όλα τα τμήματα
+          "until": time.time() + minutes * 60}
+    save_json(BROADCAST_JSON, bc)
+    return {"ok": True, "broadcast": bc}
+
+
+# ---------------------------------------------------------------------------
+# Routes — πλέγμα ωραρίου (edit / drag & drop χωρίς Excel)
+# ---------------------------------------------------------------------------
+def _validate_cell(body: dict) -> tuple[str, str, str]:
+    tmima = str(body.get("tmima", "")).strip()
+    day = str(body.get("day", "")).strip()
+    period = str(body.get("period", "")).strip()
+    data = load_json(SCHEDULE_JSON, {"tmimata": [], "periods": [], "timetable": {}})
+    if tmima not in {t["name"] for t in data["tmimata"]}:
+        raise HTTPException(400, "Άγνωστο τμήμα.")
+    if day not in DAYS:
+        raise HTTPException(400, "Άγνωστη ημέρα.")
+    if not period.isdigit() or not (1 <= int(period) <= len(data["periods"])):
+        raise HTTPException(400, "Άγνωστη διδακτική ώρα.")
+    return tmima, day, period
+
+
+@app.post("/api/schedule/cell")
+async def api_schedule_cell(request: Request):
+    """Επεξεργασία/καθαρισμός ενός κελιού του πλέγματος ωραρίου."""
+    require_teacher(request)
+    body = await request.json()
+    tmima, day, period = _validate_cell(body)
+    data = load_json(SCHEDULE_JSON, {"tmimata": [], "periods": [], "timetable": {}})
+    tt = data.setdefault("timetable", {}).setdefault(tmima, {}).setdefault(day, {})
+    if body.get("clear"):
+        tt.pop(period, None)
+    else:
+        title = str(body.get("title", "")).strip()
+        if not title:
+            raise HTTPException(400, "Δώσε μάθημα για το κελί.")
+        tt[period] = {"title": title, "url": str(body.get("url", "")).strip()}
+    data["updated"] = datetime.now().isoformat(timespec="seconds")
+    backup_file(SCHEDULE_JSON)
+    save_json(SCHEDULE_JSON, data)
+    return {"ok": True, "schedule": data}
+
+
+@app.post("/api/schedule/tmima")
+async def api_schedule_tmima(request: Request):
+    """Προσθήκη/αφαίρεση τμήματος απευθείας από το UI (χωρίς Excel)."""
+    require_teacher(request)
+    body = await request.json()
+    name = str(body.get("name", "")).strip()[:20]
+    cls = str(body.get("class_slug", "")).strip()
+    if not name or not NAME_RE.match(name):
+        raise HTTPException(400, "Μη έγκυρο όνομα τμήματος.")
+    data = load_json(SCHEDULE_JSON, {"tmimata": [], "periods": [], "timetable": {}})
+    names = {t["name"] for t in data["tmimata"]}
+    if body.get("remove"):
+        data["tmimata"] = [t for t in data["tmimata"] if t["name"] != name]
+        data.get("timetable", {}).pop(name, None)
+    else:
+        if cls not in CLASS_SLUGS:
+            raise HTTPException(400, "Μη έγκυρη τάξη.")
+        if name in names:
+            raise HTTPException(409, "Το τμήμα υπάρχει ήδη.")
+        data["tmimata"].append({"name": name, "class_slug": cls})
+    data["updated"] = datetime.now().isoformat(timespec="seconds")
+    backup_file(SCHEDULE_JSON)
+    save_json(SCHEDULE_JSON, data)
+    return {"ok": True, "schedule": data}
+
+
+@app.post("/api/schedule/periods")
+async def api_schedule_periods(request: Request):
+    """Ενημέρωση ζωνών διδακτικών ωρών από το UI."""
+    require_teacher(request)
+    body = await request.json()
+    periods = body.get("periods", [])
+    if not isinstance(periods, list) or not (1 <= len(periods) <= 10):
+        raise HTTPException(400, "Δώσε 1–10 διδακτικές ώρες.")
+    clean = []
+    for p in periods:
+        s, e = _hhmm(p.get("start", "")), _hhmm(p.get("end", ""))
+        if not re.match(r"^\d{2}:\d{2}$", s) or not re.match(r"^\d{2}:\d{2}$", e) or s >= e:
+            raise HTTPException(400, f"Μη έγκυρη ζώνη ώρας: {s}–{e}")
+        clean.append({"start": s, "end": e})
+    data = load_json(SCHEDULE_JSON, {"tmimata": [], "periods": [], "timetable": {}})
+    old_n = len(data.get("periods", []))
+    data["periods"] = clean
+    if len(clean) < old_n:                        # καθάρισμα κελιών εκτός νέων ωρών
+        for tm in data.get("timetable", {}).values():
+            for day in tm.values():
+                for k in list(day.keys()):
+                    if k.isdigit() and int(k) > len(clean):
+                        day.pop(k)
+    data["updated"] = datetime.now().isoformat(timespec="seconds")
+    backup_file(SCHEDULE_JSON)
+    save_json(SCHEDULE_JSON, data)
+    return {"ok": True, "schedule": data}
+
+
+# ---------------------------------------------------------------------------
+# Routes — γενικός file browser του docs/ (μαθήματα, φάκελοι, υλικό)
+# ---------------------------------------------------------------------------
+def fs_path(rel: str) -> Path:
+    """Αυστηρή επαλήθευση: η διαδρομή μένει εντός docs/ (όχι κρυφά αρχεία).
+
+    Δέχεται ΜΟΝΟ σχετικές διαδρομές — απόλυτες (/etc/…) απορρίπτονται, γιατί
+    το pathlib θα αγνοούσε το DOCS_DIR prefix.
+    """
+    rel = (rel or "").strip()
+    if (rel.startswith("/") or ".." in rel.strip("/").split("/")
+            or "\\" in rel or "\x00" in rel):
+        raise HTTPException(400, "Μη έγκυρη διαδρομή.")
+    rel = rel.strip("/")
+    base = DOCS_DIR.resolve()
+    p = (base / rel).resolve()
+    if p != base and base not in p.parents:
+        raise HTTPException(400, "Μη έγκυρη διαδρομή.")
+    for part in p.relative_to(base).parts:
+        if part.startswith("."):
+            raise HTTPException(403, "Κρυφά αρχεία δεν επιτρέπονται.")
+    return p
+
+
+FS_EDITABLE_EXTS = {".md", ".txt", ".css", ".js", ".json", ".csv", ".html", ".py"}
+FS_EDIT_MAX = 2 * 1024 * 1024                        # 2 MB ανά αρχείο κειμένου
+
+
+@app.get("/api/fs/list")
+def api_fs_list(request: Request, path: str = ""):
+    require_teacher(request)
+    d = fs_path(path)
+    if not d.is_dir():
+        raise HTTPException(404, "Ο φάκελος δεν βρέθηκε.")
+    dirs, files = [], []
+    for p in sorted(d.iterdir(), key=lambda x: (x.is_file(), x.name.lower())):
+        if p.name.startswith("."):
+            continue
+        if p.is_dir():
+            dirs.append({"name": p.name,
+                         "children": sum(1 for c in p.iterdir() if not c.name.startswith("."))})
+        elif p.is_file():
+            st = p.stat()
+            files.append({"name": p.name, "size": st.st_size,
+                          "mtime": int(st.st_mtime),
+                          "editable": p.suffix.lower() in FS_EDITABLE_EXTS and st.st_size <= FS_EDIT_MAX})
+    rel = d.relative_to(DOCS_DIR.resolve()).as_posix()
+    rel = "" if rel == "." else rel
+    # Αν ο φάκελος είναι ημερήσιο μάθημα (index.md με φάσεις) → άνοιγμα στον visual editor
+    lesson_key = None
+    idx = d / "index.md"
+    parts = PurePosixPath(rel).parts
+    if len(parts) == 4 and parts[0] == "mathimata" and idx.is_file():
+        if parse_lesson(idx.read_text(encoding="utf-8", errors="ignore"))["phases"]:
+            lesson_key = "/".join(parts[1:])
+    return {"path": rel, "dirs": dirs, "files": files,
+            "view_url": f"/docs/{rel}/" if rel else "/docs/",
+            "lesson_key": lesson_key}
+
+
+@app.get("/api/fs/read")
+def api_fs_read(request: Request, path: str):
+    require_teacher(request)
+    p = fs_path(path)
+    if not p.is_file():
+        raise HTTPException(404, "Το αρχείο δεν βρέθηκε.")
+    if p.suffix.lower() not in FS_EDITABLE_EXTS:
+        raise HTTPException(400, "Ο τύπος αρχείου δεν υποστηρίζει επεξεργασία κειμένου.")
+    if p.stat().st_size > FS_EDIT_MAX:
+        raise HTTPException(413, "Το αρχείο είναι πολύ μεγάλο για επεξεργασία (>2 MB).")
+    return {"path": path, "content": p.read_text(encoding="utf-8", errors="replace"),
+            "view_url": "/docs/" + p.relative_to(DOCS_DIR.resolve()).as_posix()}
+
+
+@app.post("/api/fs/save")
+async def api_fs_save(request: Request):
+    require_teacher(request)
+    body = await request.json()
+    p = fs_path(str(body.get("path", "")))
+    if not p.is_file() or p.suffix.lower() not in FS_EDITABLE_EXTS:
+        raise HTTPException(400, "Μη επεξεργάσιμο αρχείο.")
+    content = str(body.get("content", ""))
+    if len(content.encode("utf-8")) > FS_EDIT_MAX:
+        raise HTTPException(413, "Πολύ μεγάλο περιεχόμενο (>2 MB).")
+    backup_file(p)
+    p.write_text(content, encoding="utf-8")
+    if p.name == "index.md" and "mathimata" in p.parts:
+        rebuild_nav()
+    return {"ok": True}
+
+
+@app.post("/api/fs/upload")
+async def api_fs_upload(request: Request, path: str = "", file: UploadFile = File(...)):
+    require_teacher(request)
+    d = fs_path(path)
+    if not d.is_dir():
+        raise HTTPException(404, "Ο φάκελος δεν βρέθηκε.")
+    name = PurePosixPath(file.filename or "").name
+    if not name or name.startswith(".") or not NAME_RE.match(name):
+        raise HTTPException(400, "Μη έγκυρο όνομα αρχείου.")
+    ext = PurePosixPath(name).suffix.lower()
+    if ext not in FS_UPLOAD_EXTS:
+        raise HTTPException(400, f"Μη επιτρεπτός τύπος αρχείου ({ext}).")
+    content = await file.read()
+    if len(content) > UPLOAD_MAX:
+        raise HTTPException(413, "Το αρχείο ξεπερνά τα 40 MB.")
+    dest = d / name
+    if dest.exists():
+        backup_file(dest)
+    dest.write_bytes(content)
+    return {"ok": True, "name": name, "size": len(content)}
+
+
+@app.post("/api/fs/mkdir")
+async def api_fs_mkdir(request: Request):
+    require_teacher(request)
+    body = await request.json()
+    parent = fs_path(str(body.get("path", "")))
+    name = str(body.get("name", "")).strip()
+    if not name or name.startswith(".") or not NAME_RE.match(name):
+        raise HTTPException(400, "Μη έγκυρο όνομα φακέλου.")
+    if not parent.is_dir():
+        raise HTTPException(404, "Ο γονικός φάκελος δεν βρέθηκε.")
+    target = parent / name
+    if target.exists():
+        raise HTTPException(409, "Υπάρχει ήδη φάκελος/αρχείο με αυτό το όνομα.")
+    target.mkdir()
+    return {"ok": True}
+
+
+@app.delete("/api/fs/delete")
+def api_fs_delete(request: Request, path: str):
+    require_teacher(request)
+    p = fs_path(path)
+    if p == DOCS_DIR.resolve() or not p.is_file():
+        raise HTTPException(400, "Επιτρέπεται μόνο διαγραφή αρχείων (όχι φακέλων).")
+    backup_file(p)
+    p.unlink()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Routes — 📖 Βιβλιοθήκη βιβλίων (PDF στο docs/vivliothiki/, links με #page=N)
+# ---------------------------------------------------------------------------
+def rebuild_library_page() -> None:
+    """Παράγει το vivliothiki/index.md από τα metadata των βιβλίων."""
+    books = load_json(BOOKS_JSON, [])
+    LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "---",
+        "title: '📖 Βιβλιοθήκη Βιβλίων'",
+        "---",
+        "",
+        "# 📖 Βιβλιοθήκη Βιβλίων",
+        "",
+        "Τα σχολικά βιβλία (PDF) που χρησιμοποιούμε στα μαθήματα. Κάθε σύνδεσμος",
+        "«σελ. Ν» ανοίγει το βιβλίο **κατευθείαν στη σελίδα Ν** (`#page=N`).",
+        "",
+        '!!! tip "Πώς μπαίνει link σε συγκεκριμένη σελίδα μέσα σε μάθημα"',
+        "    Από το [Lesson Wizard → Βιβλία](/lesson-wizard/){target=_blank} πάτα",
+        "    **🔗 Link σε μάθημα**, ή γράψε απευθείας markdown:",
+        "    `[📖 Βιβλίο, σελ. 10](/docs/vivliothiki/ΟΝΟΜΑ.pdf#page=10){target=_blank}`",
+        "",
+    ]
+    if not books:
+        lines.append("*Δεν έχουν ανέβει βιβλία ακόμη — ο καθηγητής τα προσθέτει από το Lesson Wizard → 📖 Βιβλία.*")
+    for b in books:
+        cls_label = CLASS_LABELS.get(b.get("class_slug", ""), "")
+        meta_bits = [x for x in (cls_label, b.get("subject", ""),
+                                 (str(b["pages"]) + " σελίδες") if b.get("pages") else "") if x]
+        lines += [
+            f"## {b['title']}",
+            "",
+            (" · ".join(meta_bits) + "  ") if meta_bits else "",
+            f"[📕 Άνοιγμα βιβλίου]({b['file']}){{target=_blank}} · "
+            f"[Σελ. 1]({b['file']}#page=1){{target=_blank}}",
+            "",
+            f'<object data="{b["file"]}#page=1" type="application/pdf" width="100%" height="520px">',
+            f'<p>📄 <a href="{b["file"]}" target="_blank">Λήψη/Άνοιγμα PDF</a></p>',
+            "</object>",
+            "",
+        ]
+    idx = LIBRARY_DIR / "index.md"
+    new_md = "\n".join(lines) + "\n"
+    if not idx.exists() or idx.read_text(encoding="utf-8") != new_md:
+        backup_file(idx)
+        idx.write_text(new_md, encoding="utf-8")
+
+
+@app.get("/api/books")
+def api_books(request: Request):
+    require_teacher(request)
+    return {"books": load_json(BOOKS_JSON, []), "classes": CLASS_GROUPS}
+
+
+@app.post("/api/books/upload")
+async def api_books_upload(request: Request, file: UploadFile = File(...),
+                           title: str = Form(""), slug: str = Form(""),
+                           class_slug: str = Form(""), subject: str = Form("")):
+    require_teacher(request)
+    name = PurePosixPath(file.filename or "").name
+    if not name.lower().endswith(".pdf"):
+        raise HTTPException(400, "Απαιτείται αρχείο PDF.")
+    slug = (slug or PurePosixPath(name).stem).strip().lower()
+    slug = re.sub(r"[^a-z0-9-]+", "-", slug).strip("-")
+    if not SLUG_RE.match(slug):
+        raise HTTPException(400, "Μη έγκυρο slug βιβλίου (πεζά λατινικά/greeklish).")
+    content = await file.read()
+    if len(content) > 100 * 1024 * 1024:
+        raise HTTPException(413, "Το βιβλίο ξεπερνά τα 100 MB.")
+    pages = 0
+    try:
+        import io
+        from pypdf import PdfReader
+        pages = len(PdfReader(io.BytesIO(content)).pages)
+    except Exception:
+        pass                                       # μη αναγνώσιμο PDF → χωρίς πλήθος σελίδων
+    LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
+    dest = LIBRARY_DIR / f"{slug}.pdf"
+    if dest.exists():
+        backup_file(dest)
+    dest.write_bytes(content)
+    books = load_json(BOOKS_JSON, [])
+    entry = {"slug": slug, "title": title.strip() or slug,
+             "file": f"/docs/vivliothiki/{slug}.pdf",
+             "class_slug": class_slug if class_slug in CLASS_SLUGS else "",
+             "subject": subject.strip(), "pages": pages,
+             "size": len(content),
+             "added": datetime.now().isoformat(timespec="seconds")}
+    books = [b for b in books if b["slug"] != slug] + [entry]
+    save_json(BOOKS_JSON, books)
+    rebuild_library_page()
+    rebuild_nav()
+    return {"ok": True, "book": entry}
+
+
+@app.delete("/api/books/{slug}")
+def api_books_delete(slug: str, request: Request):
+    require_teacher(request)
+    if not SLUG_RE.match(slug):
+        raise HTTPException(400, "Μη έγκυρο slug.")
+    books = load_json(BOOKS_JSON, [])
+    if slug not in {b["slug"] for b in books}:
+        raise HTTPException(404, "Το βιβλίο δεν βρέθηκε.")
+    pdf = LIBRARY_DIR / f"{slug}.pdf"
+    if pdf.is_file():
+        backup_file(pdf)
+        pdf.unlink()
+    save_json(BOOKS_JSON, [b for b in books if b["slug"] != slug])
+    rebuild_library_page()
+    rebuild_nav()
+    return {"ok": True}
+
+
+@app.post("/api/books/link")
+async def api_books_link(request: Request):
+    """Εισαγωγή link βιβλίου με #page=N στο τέλος της κεφαλίδας ενός μαθήματος."""
+    require_teacher(request)
+    body = await request.json()
+    slug = str(body.get("slug", "")).strip()
+    page = int(body.get("page", 1))
+    key = str(body.get("lesson_key", "")).split("/")
+    if len(key) != 3:
+        raise HTTPException(400, "Δώσε μάθημα (τάξη/μάθημα/φάκελος).")
+    d = lesson_dir(*key)
+    idx = d / "index.md"
+    if not idx.is_file():
+        raise HTTPException(404, "Το μάθημα δεν βρέθηκε.")
+    book = next((b for b in load_json(BOOKS_JSON, []) if b["slug"] == slug), None)
+    if not book:
+        raise HTTPException(404, "Το βιβλίο δεν βρέθηκε.")
+    max_p = book.get("pages") or 10000
+    if not (1 <= page <= max_p):
+        raise HTTPException(400, f"Η σελίδα πρέπει να είναι 1–{max_p}.")
+    parsed = parse_lesson(idx.read_text(encoding="utf-8"))
+    link = f"[📖 {book['title']}, σελ. {page}]({book['file']}#page={page}){{target=_blank}}"
+    if link in parsed["header"]:
+        return {"ok": True, "link": link, "already": True}
+    parsed["header"] = parsed["header"].rstrip() + "\n\n" + link
+    backup_file(idx)
+    idx.write_text(render_lesson(parsed), encoding="utf-8")
+    return {"ok": True, "link": link}
+
+
+@app.post("/api/schedule/move")
+async def api_schedule_move(request: Request):
+    """Drag & drop κελιού: μετακίνηση (ή αντιγραφή με copy=true)."""
+    require_teacher(request)
+    body = await request.json()
+    src = body.get("from", {}) or {}
+    dst = body.get("to", {}) or {}
+    s_tm, s_day, s_per = _validate_cell(src)
+    d_tm, d_day, d_per = _validate_cell(dst)
+    data = load_json(SCHEDULE_JSON, {"tmimata": [], "periods": [], "timetable": {}})
+    entry = data["timetable"].get(s_tm, {}).get(s_day, {}).get(s_per)
+    if not entry:
+        raise HTTPException(400, "Το κελί προέλευσης είναι κενό.")
+    data["timetable"].setdefault(d_tm, {}).setdefault(d_day, {})[d_per] = dict(entry)
+    if not body.get("copy"):
+        data["timetable"][s_tm][s_day].pop(s_per, None)
+    data["updated"] = datetime.now().isoformat(timespec="seconds")
+    backup_file(SCHEDULE_JSON)
+    save_json(SCHEDULE_JSON, data)
+    return {"ok": True, "schedule": data}

@@ -233,3 +233,59 @@
 @media screen and (max-width: 44.9375em) {
   .tmima-picker select { max-width: 6.5rem; }
 }
+
+/* ---------- 📡 Μετάδοση μαθήματος (broadcast banner) ---------- */
+.teacher-broadcast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: 1rem; z-index: 60; max-width: min(92vw, 46rem);
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  background: linear-gradient(135deg, #1a237e, #0277bd); color: #fff;
+  border-radius: .7rem; padding: .6rem 1rem; font-size: .82rem;
+  box-shadow: 0 6px 24px rgba(2, 60, 120, .45);
+  animation: bc-in .35s ease-out;
+}
+@keyframes bc-in { from { opacity: 0; transform: translate(-50%, 1rem); } to { opacity: 1; transform: translate(-50%, 0); } }
+.teacher-broadcast__label { opacity: .85; font-weight: 600; white-space: nowrap; }
+.teacher-broadcast a { color: #ffe082; font-weight: 700; text-decoration: underline; }
+.teacher-broadcast__msg { opacity: .9; }
+.teacher-broadcast__close {
+  margin-left: auto; background: rgba(255,255,255,.15); border: none; color: #fff;
+  border-radius: 50%; width: 1.5rem; height: 1.5rem; cursor: pointer; line-height: 1;
+}
+.teacher-broadcast__close:hover { background: rgba(255,255,255,.3); }
+
+/* ---------- 🏷 Lesson chips (tags & αγαπημένο στη σελίδα μαθήματος) ---------- */
+.lesson-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .4rem 0 .8rem; }
+.lesson-chip {
+  font-size: .64rem; font-weight: 600; border-radius: 1rem; padding: .15rem .6rem;
+  background: rgba(63,81,181,.1); color: #3f51b5; border: 1px solid rgba(63,81,181,.25);
+}
+.lesson-chip--fav { background: rgba(255,179,0,.15); color: #b28704; border-color: rgba(255,179,0,.4); }
+[data-md-color-scheme="slate"] .lesson-chip { background: rgba(121,134,203,.15); color: #9fa8da; }
+[data-md-color-scheme="slate"] .lesson-chip--fav { color: #ffd54f; }
+
+/* ---------- 🎞 Reveal.js slides (mkdocs-extras.js) ---------- */
+.slides-launch {
+  display: inline-flex; align-items: center; gap: .4rem; cursor: pointer;
+  background: #3f51b5; color: #fff; border: none; border-radius: .4rem;
+  padding: .5rem 1.1rem; font-size: .8rem; font-weight: 700; margin: .4rem 0;
+}
+.slides-launch:hover { background: #303f9f; }
+.slides-overlay {
+  position: fixed; inset: 0; z-index: 90; background: #111;
+  display: flex; flex-direction: column;
+}
+.slides-overlay .reveal { flex: 1; min-height: 0; }
+.slides-close {
+  position: absolute; top: .6rem; right: .8rem; z-index: 95;
+  background: rgba(255,255,255,.15); color: #fff; border: none; border-radius: .4rem;
+  padding: .4rem .9rem; cursor: pointer; font-size: .8rem;
+}
+.slides-close:hover { background: rgba(255,255,255,.3); }
+
+/* ---------- Mermaid (τοπικό render — mermaid-init.js) ---------- */
+.mermaid, pre.mmd-local { text-align: center; margin: 1em 0; }
+pre.mmd-local[data-processed] {
+  background: none; border: none; padding: .4em 0; overflow-x: auto;
+}
+.mermaid svg, pre.mmd-local svg { max-width: 100%; height: auto; }

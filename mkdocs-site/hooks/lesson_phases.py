@@ -114,6 +114,16 @@ def on_page_markdown(markdown: str, *, page, config, files, **kwargs):
 
 
 def on_page_content(html: str, *, page, config, files, **kwargs):
+    # --- Chips tags/αγαπημένου (front-matter) για το mkdocs-extras.js ---
+    tags = page.meta.get("tags") or []
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+    favorite = bool(page.meta.get("favorite"))
+    if tags or favorite:
+        import json as _json
+        payload = _json.dumps({"tags": tags, "favorite": favorite}, ensure_ascii=False)
+        html += f'\n<script>window.__lessonMeta = {payload};</script>'
+
     notes_md = page.meta.pop("_teacher_notes_md", None)
     if not notes_md:
         return html
