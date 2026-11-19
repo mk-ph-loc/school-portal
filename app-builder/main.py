@@ -33,6 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
+from common.lessons import list_lessons_flat
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -509,23 +510,11 @@ def delete_app(app_id: str, request: Request):
 # API — MkDocs Embed Generator (snippet + άμεση εισαγωγή σε μάθημα)
 # ---------------------------------------------------------------------------
 def list_lessons() -> list[dict]:
-    """Όλα τα .md μαθήματα του mkdocs-site/docs/ (εκτός assets/teachers)."""
-    lessons = []
-    for p in sorted(DOCS_DIR.rglob("*.md")):
-        rel = p.relative_to(DOCS_DIR).as_posix()
-        if rel.startswith(("assets/", "teachers/", "_paradeigma/teachers/")):
-            continue  # assets: όχι μαθήματα· teachers: προστατευμένη περιοχή Basic Auth
-        # Πρώτη επικεφαλίδα # ως φιλικός τίτλος (αλλιώς το όνομα αρχείου)
-        label = rel
-        try:
-            for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
-                if line.startswith("# "):
-                    label = f"{rel} — {line[2:].strip()}"
-                    break
-        except OSError:
-            pass
-        lessons.append({"path": rel, "label": label})
-    return lessons
+    """Όλα τα .md μαθήματα του mkdocs-site/docs/ (εκτός assets/teachers).
+
+    common.lessons.list_lessons_flat — single source of truth με bridge/h5p.
+    """
+    return list_lessons_flat(DOCS_DIR)
 
 
 @app.get("/api/lessons")

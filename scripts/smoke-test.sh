@@ -6,6 +6,10 @@
 set -uo pipefail
 
 TEACHER_USER="${TEACHER_USER:-teacher}"
+# Ενιαίος κωδικός: env TEACHER_PASS → data/portal.env (install.sh) → default.
+if [[ -z "${TEACHER_PASS:-}" && -r /opt/school-portal/data/portal.env ]]; then
+    TEACHER_PASS="$(sed -n 's/^TEACHER_PASS=//p' /opt/school-portal/data/portal.env | head -1)"
+fi
 TEACHER_PASS="${TEACHER_PASS:-teacher2026}"
 BASE="http://127.0.0.1"
 PASS=0; FAIL=0

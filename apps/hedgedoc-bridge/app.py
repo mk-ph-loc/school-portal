@@ -34,6 +34,8 @@ from fastapi.templating import Jinja2Templates
 from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
 from common.classes import CLASS_GROUPS, CLASS_SLUGS, CLASS_LABELS
 from common.db import connect_ro
+from common.fs import backup_beside, backup_history
+from common.lessons import list_lessons_grouped
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -108,14 +110,10 @@ def trigger_rebuild() -> None:
 
 
 def backup_file(target: Path) -> str:
-    """Αντίγραφο ασφαλείας .bak δίπλα στο αρχείο + ιστορικό στο backups/."""
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    bak = target.with_name(target.name + ".bak")
-    shutil.copy2(target, bak)                    # πάντα το πιο πρόσφατο .bak
+    """Αντίγραφο ασφαλείας .bak δίπλα στο αρχείο + ιστορικό στο backups/ (common.fs)."""
+    bak = backup_beside(target)                  # πάντα το πιο πρόσφατο .bak
     fix_md_permissions(bak)
-    hist_dir = BACKUP_DIR / target.relative_to(DOCS_DIR).parent
-    hist_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(target, hist_dir / f"{target.stem}.{stamp}.md.bak")
+    backup_history(target, BACKUP_DIR, relative_to=DOCS_DIR, mirror_tree=True)
     return bak.name
 
 
@@ -281,28 +279,11 @@ def fetch_note(ref: str) -> dict:
 
 
 def list_lessons() -> list[dict]:
-    """Όλα τα .md μαθήματα ανά τάξη (Α'-Γ' Γυμνασίου, Α'-Γ' Λυκείου)."""
-    groups = []
-    for c in CLASS_GROUPS:
-        lessons = []
-        # Νέα δομή: mathimata/<τάξη>/· το παλιό υλικό ζει στο _paradeigma/<τάξη>/
-        class_dir = DOCS_DIR / "mathimata" / c["slug"]
-        if not class_dir.is_dir():
-            class_dir = DOCS_DIR / "_paradeigma" / c["slug"]
-        if class_dir.is_dir():
-            for p in sorted(class_dir.rglob("*.md")):
-                rel = p.relative_to(DOCS_DIR).as_posix()
-                label = p.name
-                try:
-                    for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
-                        if line.startswith("# "):
-                            label = line[2:].strip()
-                            break
-                except OSError:
-                    pass
-                lessons.append({"path": rel, "label": f"{p.name} — {label}"})
-        groups.append({**c, "lessons": lessons})
-    return groups
+    """Όλα τα .md μαθήματα ανά τάξη (Α'-Γ' Γυμνασίου, Α'-Γ' Λυκείου).
+
+    mathimata/ + _paradeigma/ fallback — common.lessons (single source of truth).
+    """
+    return list_lessons_grouped(DOCS_DIR)
 
 
 def validate_lesson_path(lesson: str) -> Path:

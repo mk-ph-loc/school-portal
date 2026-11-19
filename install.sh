@@ -998,6 +998,31 @@ systemctl restart nginx
 ok "Ο Nginx τρέχει στη θύρα 80."
 
 # ---------------------------------------------------------------------------
+# 8β. ΕΝΙΑΙΟΣ κωδικός καθηγητή — data/portal.env (Βήμα 2 εκκρεμότητα 2)
+#     Το common/auth.py διαβάζει TEACHER_PASS από env ή από αυτό το αρχείο·
+#     τα systemd units το φορτώνουν με EnvironmentFile=. Έτσι ο ίδιος κωδικός
+#     ισχύει για Basic Auth, ΟΛΑ τα apps και το dashboard (assets/teacher-code.js).
+# ---------------------------------------------------------------------------
+PORTAL_ENV="${PORTAL_DIR}/data/portal.env"
+mkdir -p "${PORTAL_DIR}/data"
+if [[ ! -f "${PORTAL_ENV}" ]] || [[ "${TEACHER_PASS}" != "teacher2026" ]] \
+   || ! grep -q '^TEACHER_PASS=' "${PORTAL_ENV}"; then
+    printf 'TEACHER_PASS=%s\n' "${TEACHER_PASS}" > "${PORTAL_ENV}"
+    chown root:www-data "${PORTAL_ENV}"
+    chmod 640 "${PORTAL_ENV}"
+    ok "Ενιαίος κωδικός καθηγητή → data/portal.env (apps + Basic Auth)."
+else
+    # Χωρίς ρητό TEACHER_PASS, σεβόμαστε τον ήδη αποθηκευμένο κωδικό.
+    TEACHER_PASS="$(sed -n 's/^TEACHER_PASS=//p' "${PORTAL_ENV}" | head -1)"
+    ok "Ενιαίος κωδικός καθηγητή υπάρχει ήδη (data/portal.env)."
+fi
+# Dashboard JS: ίδιος κωδικός με τα apps (UX gate — ΟΧΙ μηχανισμός ασφαλείας).
+printf '// Παράγεται από το install.sh — ίδιος κωδικός με common/auth.py (data/portal.env).\nconst TEACHER_CODE = %s;\n' \
+    "$(printf '%s' "${TEACHER_PASS}" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" \
+    > "${PORTAL_DIR}/dashboard/assets/teacher-code.js"
+chmod 644 "${PORTAL_DIR}/dashboard/assets/teacher-code.js"
+
+# ---------------------------------------------------------------------------
 # 9. systemd services
 # ---------------------------------------------------------------------------
 log "Εγκατάσταση systemd υπηρεσιών…"

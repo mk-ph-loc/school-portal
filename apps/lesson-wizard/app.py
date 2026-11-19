@@ -16,7 +16,6 @@ Lesson Wizard — Οπτικός επεξεργαστής ημερήσιων μ�
 from __future__ import annotations
 
 import re
-import shutil
 import time
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -28,6 +27,7 @@ from fastapi.templating import Jinja2Templates
 
 from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
 from common.classes import CLASS_GROUPS, CLASS_SLUGS, CLASS_LABELS, SLUG_RE
+from common.fs import backup_history
 from common.lessons import (PHASE_TYPES, FM_RE, parse_lesson, render_lesson,
                             fm_meta, set_fm_meta, valid_lesson_path,
                             list_all_lessons as _list_all_lessons)
@@ -101,12 +101,8 @@ def list_all_lessons() -> list[dict]:
 
 
 def backup_file(path: Path) -> None:
-    if not path.exists():
-        return
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    rel = path.relative_to(PORTAL_DIR).as_posix().replace("/", "__")
-    shutil.copy2(path, BACKUP_DIR / f"{stamp}__{rel}.bak")
+    """Ιστορικό .bak στο backups/ πριν από κάθε εγγραφή (common.fs)."""
+    backup_history(path, BACKUP_DIR, relative_to=PORTAL_DIR)
 
 
 # fm_meta/set_fm_meta/list_all_lessons: common.lessons (βλ. imports & wrappers)

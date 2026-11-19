@@ -35,7 +35,6 @@ import subprocess
 import time
 import uuid
 import zipfile
-from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 import requests
@@ -48,6 +47,8 @@ from pydantic import BaseModel, Field
 from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
 from common.classes import CLASS_GROUPS, CLASS_SLUGS, CLASS_LABELS
 from common.db import connect
+from common.fs import backup_beside, backup_history
+from common.lessons import list_lessons_grouped
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -1284,28 +1285,9 @@ def api_export(request: Request, aid: str):
 def list_lessons() -> list[dict]:
     """Όλα τα .md μαθήματα ανά τάξη (όπως στο apps/hedgedoc-bridge).
 
-    Νέα δομή: mathimata/<τάξη>/· το παλιό υλικό ζει στο _paradeigma/<τάξη>/.
+    mathimata/ + _paradeigma/ fallback — common.lessons (single source of truth).
     """
-    groups = []
-    for c in CLASS_GROUPS:
-        lessons = []
-        class_dir = DOCS_DIR / "mathimata" / c["slug"]
-        if not class_dir.is_dir():
-            class_dir = DOCS_DIR / "_paradeigma" / c["slug"]
-        if class_dir.is_dir():
-            for p in sorted(class_dir.rglob("*.md")):
-                rel = p.relative_to(DOCS_DIR).as_posix()
-                label = p.name
-                try:
-                    for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
-                        if line.startswith("# "):
-                            label = line[2:].strip()
-                            break
-                except OSError:
-                    pass
-                lessons.append({"path": rel, "label": f"{p.name} — {label}"})
-        groups.append({**c, "lessons": lessons})
-    return groups
+    return list_lessons_grouped(DOCS_DIR)
 
 
 @app.get("/api/lessons")
@@ -1357,12 +1339,9 @@ def api_embed(request: Request, aid: str, body: EmbedRequest):
     marker = f"/h5p-studio/play/{aid}/"
     if marker in text:
         raise HTTPException(409, "Η δραστηριότητα είναι ήδη ενσωματωμένη σε αυτό το μάθημα.")
-    # Backup: .bak δίπλα + ιστορικό στο backups/ (όπως το md-publish bridge)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    shutil.copy2(target, target.with_name(target.name + ".bak"))
-    hist = BACKUP_DIR / target.relative_to(DOCS_DIR).parent
-    hist.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(target, hist / f"{target.stem}.{stamp}.md.bak")
+    # Backup: .bak δίπλα + ιστορικό στο backups/ (όπως το md-publish bridge — common.fs)
+    backup_beside(target)
+    backup_history(target, BACKUP_DIR, relative_to=DOCS_DIR, mirror_tree=True)
     heading = body.heading.strip() or f"🎮 Διαδραστική Άσκηση: {row['title']}"
     height = max(200, min(2000, body.height))
     section = (f"\n\n## {heading}\n\n"

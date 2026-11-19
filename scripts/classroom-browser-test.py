@@ -19,6 +19,9 @@ import urllib.request
 
 import websocket
 
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+
 CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9345
 BASE = "http://127.0.0.1"
@@ -189,7 +192,7 @@ def main() -> int:
         cdps.append(teacher)
         teacher.send("Page.enable"); teacher.send("Runtime.enable")
         wait_for(teacher, f"!!({alpine(teacher)})", timeout=30)
-        teacher.evaluate(f"(()=>{{const a={alpine(teacher)};a.joinRole='teacher';a.joinCode='teacher2026';a.joinName='Καθηγητής UI';a.join()}})()")
+        teacher.evaluate(f"(()=>{{const a={alpine(teacher)};a.joinRole='teacher';a.joinCode='{TEACHER_CODE}';a.joinName='Καθηγητής UI';a.join()}})()")
         ok = wait_for(teacher, f"{alpine(teacher)}.role==='teacher' && {alpine(teacher)}.wsOk", timeout=15)
         check("Είσοδος καθηγητή από το UI", bool(ok))
         roster_ok = wait_for(teacher, f"{alpine(teacher)}.roster.some(c=>c.role==='guest')", timeout=15)

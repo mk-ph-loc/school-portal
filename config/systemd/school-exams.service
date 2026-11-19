@@ -14,6 +14,8 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=HOME=/opt/school-portal/exams-app
 # Κοινό πακέτο common/ (auth, classes, lessons, db, schedule) στη ρίζα της πύλης
 Environment=PYTHONPATH=/opt/school-portal
+# Ενιαίος κωδικός καθηγητή (install.sh → data/portal.env· το common/auth.py τον διαβάζει και μόνο του)
+EnvironmentFile=-/opt/school-portal/data/portal.env
 ExecStart=/opt/school-portal/venv/bin/uvicorn main:app \
     --host 127.0.0.1 --port 8004 \
     --root-path /exams --proxy-headers --forwarded-allow-ips 127.0.0.1 \

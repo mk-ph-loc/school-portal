@@ -3,6 +3,9 @@
 import json, shutil, subprocess, sys, time, urllib.request
 import websocket
 
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+
 CHROME = shutil.which("chromium")
 PORT = 9334  # διαφορετική θύρα από το browser-test.py
 BASE = "http://127.0.0.1"
@@ -135,11 +138,11 @@ try:
     cdp.send("Page.navigate", {"url": f"{BASE}/share/"})
     got = wait_for(cdp, "document.querySelector('input[type=password]') && document.body.innerText.length > 50", timeout=40)
     check("Φόρμα login εμφανίζεται", bool(got))
-    login = cdp.evaluate("""(async () => {
-        const r = await fetch('/share/api/login', {method:'POST', body: JSON.stringify({username:'admin', password:'teacher2026'})});
+    login = cdp.evaluate(f"""(async () => {{
+        const r = await fetch('/share/api/login', {{method:'POST', body: JSON.stringify({{username:'admin', password:{json.dumps(TEACHER_CODE)}}})}});
         return r.status;
-    })()""")
-    check("Login admin/teacher2026 μέσω nginx", login == 200, f"HTTP {login}")
+    }})()""")
+    check("Login admin/κοινός κωδικός μέσω nginx", login == 200, f"HTTP {login}")
 
     print("\n=== 5. Dashboard — 4 νέες κάρτες ===")
     cdp.send("Page.navigate", {"url": f"{BASE}/"})

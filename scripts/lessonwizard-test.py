@@ -24,6 +24,9 @@ import urllib.request
 
 import websocket
 
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+
 CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9334
 BASE = "http://127.0.0.1"
@@ -101,7 +104,7 @@ def main() -> int:
     check("wizard healthz", st == 200)
     st, _, _ = http_json("/lesson-wizard/api/lessons")
     check("api/lessons χωρίς cookie → 401", st == 401)
-    st, hdrs, _ = http_json("/lesson-wizard/api/login", {"code": "teacher2026"})
+    st, hdrs, _ = http_json("/lesson-wizard/api/login", {"code": TEACHER_CODE})
     cookie = ""
     for h in hdrs.get_all("Set-Cookie") or []:
         if h.startswith("lessonwizard_teacher="):

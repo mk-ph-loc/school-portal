@@ -9,6 +9,8 @@
 *.key
 .htpasswd
 .school-htpasswd
+data/portal.env
+dashboard/assets/teacher-code.js
 
 # --- Python virtual environment ---
 venv/

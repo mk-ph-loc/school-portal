@@ -139,7 +139,9 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 > ⚠️ Ο κωδικός στο dashboard είναι client-side και **δεν αποτελεί μηχανισμό ασφαλείας**.
 > Η ουσιαστική προστασία εφαρμόζεται στον Nginx (`/etc/nginx/.school-htpasswd`).
 
-Αλλαγή κωδικού Basic Auth:
+Αλλαγή κωδικού (ΕΝΙΑΙΟΣ για Basic Auth + ΟΛΑ τα apps + dashboard — γράφεται στο
+`data/portal.env`, τα units το φορτώνουν με `EnvironmentFile=`, τα tests το
+διαβάζουν μέσω `scripts/lib.py`):
 ```bash
 sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/install.sh --no-deps
 ```
@@ -150,11 +152,12 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 /opt/school-portal/
 ├── common/                 # 🧩 Κοινό πακέτο Python (Βήμα 2 architecture review)
 │   ├── auth.py             # TeacherAuth: HMAC cookies καθηγητή (legacy + payload),
-│   │                       # TEACHER_CODE/COOKIE_MAX_AGE — ίδιο μοτίβο σε ΟΛΑ τα apps
+│   │                       # TEACHER_CODE (env TEACHER_PASS → data/portal.env → default)
 │   ├── classes.py          # οι 6 τάξεις (slug/label) + teachers area + greek_slug()
 │   ├── lessons.py          # parse/render φάσεων, front-matter tags/favorite,
-│   │                       # κατάλογος μαθημάτων (Lesson Wizard & Classroom Hub)
+│   │                       # κατάλογος μαθημάτων + list_lessons_grouped/flat (dropdowns)
 │   ├── db.py               # SQLite connect (WAL/Row/FK), read-only connect, migrations
+│   ├── fs.py               # backup_history/backup_beside (.bak πριν από κάθε εγγραφή)
 │   └── schedule.py         # ωράριο Excel→JSON, HH:MM, deadlines ±offset, JSON helpers
 │   # Τα apps το βρίσκουν μέσω Environment=PYTHONPATH=/opt/school-portal στα units.
 │   # Τα δεδομένα (DB, .cookie-secret, schedule.json) μένουν στους φακέλους των apps.
@@ -184,9 +187,11 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   ├── data/               # schedule.json, active-overrides.json, πρότυπο xlsx
 │   └── backups/            # .bak πριν από κάθε εγγραφή
 ├── apps/classroom-hub/     # 🏫 Ζωντανή Τάξη (/classroom/, FastAPI + WS @8014)
-│   ├── app.py              # παρουσία guest/μαθητή/καθηγητή (heartbeat), εντολές
-│   │                       # τάξης, poll/quiz, timers ωραρίου ±offset, γεγονότα,
-│   │                       # chat/forum, ενιαίο Excel ρυθμίσεων (12 καρτέλες)
+│   ├── app.py              # wiring: FastAPI+lifespan, mounts, join/config-public
+│   ├── state.py            # κοινό state (CONFIG/CLIENTS/ACTIVE_*), auth cookies
+│   ├── store.py            # SQLite schema+queries (chat/forum/polls/quiz/mutes)
+│   ├── presence.py         # παρουσία/roster/broadcast, housekeeping, WS /ws
+│   ├── routers/            # commands·polls·quizzes·timers·chat_forum·config_xlsx·catalog
 │   ├── templates/index.html   # shell: μόνιμο μενού ανά ρόλο + iframe εφαρμογών
 │   ├── static/classroom.js    # Alpine: dock⇄float εργαλειοθήκες, WS, confetti
 │   └── data/               # classroom.db, config.json, rythmiseis-protypo.xlsx

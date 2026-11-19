@@ -14,10 +14,14 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import time
 import urllib.request
 
 import websocket
+
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
 
 CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9335  # διαφορετική θύρα από τα υπόλοιπα browser tests
@@ -94,7 +98,7 @@ def main():
         return 1
 
     # --- Προετοιμασία μέσω API: καθαρισμός παλιών δοκιμών & νέες δραστηριότητες ---
-    _, hdrs = api("teacher/login", {"password": "teacher2026"})
+    _, hdrs = api("teacher/login", {"password": TEACHER_CODE})
     cookie = hdrs.get("Set-Cookie", "").split(";")[0]
     acts, _ = api("teacher/activities", cookie=cookie)
     for a in acts["activities"]:
@@ -213,12 +217,12 @@ def main():
         })()""")
         err = wait_for(cdp, "!document.getElementById('login-error').hidden")
         check("Λανθασμένος κωδικός → μήνυμα σφάλματος", bool(err))
-        cdp.evaluate("""(() => {
-            document.getElementById('login-pass').value='teacher2026';
-            document.getElementById('login-form').dispatchEvent(new Event('submit',{cancelable:true}));
-        })()""")
+        cdp.evaluate(f"""(() => {{
+            document.getElementById('login-pass').value={json.dumps(TEACHER_CODE)};
+            document.getElementById('login-form').dispatchEvent(new Event('submit',{{cancelable:true}}));
+        }})()""")
         got = wait_for(cdp, "!document.getElementById('teacher-app').hidden && document.getElementById('activities-list').innerHTML.includes('BROWSER TEST')")
-        check("Login teacher2026 → λίστα δραστηριοτήτων", bool(got))
+        check("Login καθηγητή → λίστα δραστηριοτήτων", bool(got))
 
         subs = wait_for(cdp, f"""(async () => {{
             const r = await fetch(window.EXAMS_BASE.replace(/teacher\\/$/,'')+'api/teacher/activities/{test_act["id"]}/submissions');

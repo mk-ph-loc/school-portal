@@ -21,6 +21,9 @@ import urllib.request
 
 import websocket
 
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+
 CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9333
 BASE = "http://127.0.0.1"
@@ -212,10 +215,10 @@ def main() -> int:
             const el=document.querySelector('[x-data]');
             const app=el._x_dataStack ? el._x_dataStack[0] : null;
             if(!app) return 'no-alpine';
-            app.password='teacher2026'; app.unlock();
+            app.password=TEACHER_CODE; app.unlock();
             return app.unlocked;
         })()""")
-        check("Ξεκλείδωμα με teacher2026", unlocked is True, str(unlocked))
+        check("Ξεκλείδωμα με τον κοινό κωδικό καθηγητή", unlocked is True, str(unlocked))
 
     except Exception as exc:
         print(f"\n\033[0;31m✗ Σφάλμα ελέγχου: {exc}\033[0m")

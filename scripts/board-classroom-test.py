@@ -24,6 +24,9 @@ import urllib.request
 
 import websocket
 
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+
 CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9381
 BASE = "https://127.0.0.1"
@@ -163,7 +166,7 @@ def main():
         teacher.send("Page.navigate", {"url": f"{BASE}/classroom/"})
         ok = wait_for(teacher, f"!!({A}) && !!window.Alpine", timeout=30)
         check("Το shell της Ζωντανής Τάξης φορτώνει", bool(ok))
-        teacher.ev(f"(()=>{{const a={A};a.joinRole='teacher';a.joinCode='teacher2026';a.joinName='Δοκιμή Πίνακα';a.join();return true}})()")
+        teacher.ev(f"(()=>{{const a={A};a.joinRole='teacher';a.joinCode='{TEACHER_CODE}';a.joinName='Δοκιμή Πίνακα';a.join();return true}})()")
         role = wait_for(teacher, f"{A}.role==='teacher'", timeout=15)
         check("Είσοδος καθηγητή", bool(role))
         opened = teacher.ev(f"(()=>{{const a={A};const m=a.menu.find(x=>x.url==='/board/');if(m)a.openMenu(m);return !!m}})()")

@@ -22,6 +22,9 @@ import urllib.request
 
 import websocket
 
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+
 CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9345
 BASE = "http://127.0.0.1"
@@ -146,7 +149,7 @@ def main() -> int:
 
         cdp.evaluate("""(() => {
             const st=Alpine.$data(document.querySelector('[x-data]'));
-            st.password='teacher2026'; st.unlock(); return true;
+            st.password=TEACHER_CODE; st.unlock(); return true;
         })()""")
         time.sleep(0.5)
         n = cdp.evaluate("document.querySelectorAll('#custom-apps a[href=\"/apps/t/\"]').length")

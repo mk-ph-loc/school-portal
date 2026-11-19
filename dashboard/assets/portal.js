@@ -5,7 +5,9 @@
  * πύλη χρηστικότητας (UX), ΟΧΙ μηχανισμό ασφαλείας. Η πραγματική προστασία των
  * περιοχών /pandoc/ και /docs/teachers/ εφαρμόζεται στον Nginx με HTTP Basic Auth.
  */
-const TEACHER_CODE = 'teacher2026';
+/* Ο κωδικός φορτώνεται από το assets/teacher-code.js (παράγεται από το
+ * install.sh — ίδιος με τα apps/common.auth). Fallback μόνο για dev χωρίς install. */
+const TEACHER_CODE_FALLBACK = 'teacher2026';
 const STORAGE_KEY = 'schoolPortal.teacher';
 
 function portal() {
@@ -96,7 +98,8 @@ function portal() {
     },
 
     unlock() {
-      if (this.password === TEACHER_CODE) {
+      const code = (typeof TEACHER_CODE !== 'undefined') ? TEACHER_CODE : TEACHER_CODE_FALLBACK;
+      if (this.password === code) {
         this.unlocked = true;
         this.modal = false;
         this.error = '';

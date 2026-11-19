@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .classes import CLASS_LABELS, CLASS_SLUGS, SLUG_RE
+from .classes import CLASS_GROUPS, CLASS_LABELS, CLASS_SLUGS, SLUG_RE
 
 # Τύποι διδακτικών φάσεων (παλέτα του visual editor)
 PHASE_TYPES = {
@@ -232,3 +232,58 @@ def lessons_catalog(math_dir: Path) -> list[dict]:
                     "favorite": meta["favorite"],
                     "url": f"/docs/mathimata/{parts[0]}/{parts[1]}/{parts[2]}/"})
     return out
+
+
+def _first_heading(path: Path, fallback: str) -> str:
+    """Πρώτη επικεφαλίδα «# …» του .md ως φιλικός τίτλος (αλλιώς fallback)."""
+    try:
+        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if line.startswith("# "):
+                return line[2:].strip()
+    except OSError:
+        pass
+    return fallback
+
+
+def list_lessons_grouped(docs_dir: Path) -> list[dict]:
+    """Όλα τα .md μαθήματα ΟΜΑΔΟΠΟΙΗΜΕΝΑ ανά τάξη (dropdowns bridge/h5p).
+
+    Νέα δομή: mathimata/<τάξη>/· αν δεν υπάρχει, το παλιό υλικό ζει στο
+    _paradeigma/<τάξη>/ (fallback ανά τάξη — single source of truth, Β1/Β2).
+    Επιστρέφει [{slug, label, lessons: [{path, label}]}] με paths σχετικά
+    στο docs_dir — ίδια με αυτά που δέχονται οι validators των apps.
+    """
+    docs_dir = Path(docs_dir)
+    groups = []
+    for c in CLASS_GROUPS:
+        lessons = []
+        class_dir = docs_dir / "mathimata" / c["slug"]
+        if not class_dir.is_dir():
+            class_dir = docs_dir / "_paradeigma" / c["slug"]
+        if class_dir.is_dir():
+            for p in sorted(class_dir.rglob("*.md")):
+                rel = p.relative_to(docs_dir).as_posix()
+                label = _first_heading(p, p.name)
+                lessons.append({"path": rel, "label": f"{p.name} — {label}"})
+        groups.append({**c, "lessons": lessons})
+    return groups
+
+
+def list_lessons_flat(docs_dir: Path) -> list[dict]:
+    """Επίπεδη λίστα ΟΛΩΝ των .md του docs/ (app-builder), εκτός assets/teachers.
+
+    Label: «<rel-path> — <πρώτη επικεφαλίδα>» (αλλιώς σκέτο το rel-path).
+    Οι προστατευμένες περιοχές καθηγητών εξαιρούνται σε ΟΠΟΙΟδήποτε βάθος.
+    """
+    docs_dir = Path(docs_dir)
+    lessons = []
+    for p in sorted(docs_dir.rglob("*.md")):
+        rel = p.relative_to(docs_dir).as_posix()
+        if rel.startswith(("assets/", "teachers/", "_paradeigma/teachers/")):
+            continue  # assets: όχι μαθήματα· teachers: προστατευμένη περιοχή Basic Auth
+        label = rel
+        heading = _first_heading(p, "")
+        if heading:
+            label = f"{rel} — {heading}"
+        lessons.append({"path": rel, "label": label})
+    return lessons

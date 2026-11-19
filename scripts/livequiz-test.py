@@ -16,6 +16,9 @@ import http.cookiejar
 
 from websocket import create_connection
 
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+
 BASE = "http://127.0.0.1/live-quiz/"
 WS_BASE = "ws://127.0.0.1/live-quiz/ws/"
 FAILED = 0
@@ -69,7 +72,7 @@ def main():
     check("API χωρίς login → 401", code == 401)
     code, _ = teacher.call("api/teacher/login", {"password": "λάθος"})
     check("Λάθος κωδικός → 401", code == 401)
-    code, _ = teacher.call("api/teacher/login", {"password": "teacher2026"})
+    code, _ = teacher.call("api/teacher/login", {"password": TEACHER_CODE})
     check("Σωστός κωδικός → 200 + cookie", code == 200 and teacher.cookie("livequiz_teacher"))
 
     print("[2] Δημιουργία κουίζ & εισαγωγές")

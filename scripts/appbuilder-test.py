@@ -20,6 +20,9 @@ import uuid
 import zipfile
 from pathlib import Path
 
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+
 BASE = "http://127.0.0.1/app-builder/"
 PORTAL = Path("/opt/school-portal")
 FAILED = 0
@@ -86,7 +89,7 @@ def main():
     check("GET /api/list χωρίς login → 401", code == 401, str(code))
     code, body = t.call("api/login", {"password": "wrong"})
     check("Λάθος κωδικός → 401", code == 401, str(code))
-    code, body = t.call("api/login", {"password": "teacher2026"})
+    code, body = t.call("api/login", {"password": TEACHER_CODE})
     check("Σωστός κωδικός → 200 + HMAC cookie", code == 200 and
           any(c.name == "appbuilder_teacher" for c in t.jar))
     code, page = get_url(BASE)

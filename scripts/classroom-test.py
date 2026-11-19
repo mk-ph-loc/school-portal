@@ -18,6 +18,9 @@ import http.cookiejar
 
 from websocket import create_connection
 
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+
 BASE = "http://127.0.0.1/classroom/"
 WS_URL = "ws://127.0.0.1/classroom/ws"
 FAILED = 0
@@ -100,7 +103,7 @@ def main():
     check("Roster χωρίς login → 401", code == 401)
     code, _ = teacher.call("api/join", {"role": "teacher", "code": "λάθος"})
     check("Λάθος κωδικός καθηγητή → 403", code == 403)
-    code, r = teacher.call("api/join", {"role": "teacher", "code": "teacher2026", "name": "Κος Παπαδόπουλος"})
+    code, r = teacher.call("api/join", {"role": "teacher", "code": TEACHER_CODE, "name": "Κος Παπαδόπουλος"})
     check("Καθηγητής → 200 + HMAC cookies", code == 200 and r["identity"]["role"] == "teacher")
     code, r = student.call("api/join", {"role": "student", "name": "Μαρία", "tmima": "Γ1"})
     check("Μαθητής (όνομα+τμήμα) → 200", code == 200 and r["identity"]["name"] == "Μαρία")

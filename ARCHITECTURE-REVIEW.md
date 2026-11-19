@@ -2,6 +2,7 @@
 
 > **Ημερομηνία review:** 19 Νοεμβρίου 2026
 > **Κατάσταση:** Βήμα 1 (bug fixes) ✅ · Βήμα 2 (κοινό πακέτο `common/`) ✅ — commit `2e0f814`, pushed στο origin/main
+> · Task 3 (classroom-hub → APIRouters) ✅ + εκκρεμότητες Βήματος 2 (ενιαίος κωδικός, backup/list_lessons) ✅ — 19/11/2026, εκκρεμεί commit
 > **Σκοπός αρχείου:** αρχειακή καταγραφή του review + αυτόνομος οδηγός για τα επόμενα tasks
 > (κάθε ενότητα «Task» μπορεί να δοθεί αυτούσια ως prompt σε νέα συνομιλία).
 
@@ -87,15 +88,22 @@ livequiz ✓ · smoke 73/73 ✓ (όλα τα services active με τον νέο 
 ### ⚠️ Εκκρεμότητες Βήματος 2
 1. ~~Git commit~~ ✅ Έγινε: commit `2e0f814` (31 αρχεία, +1126/−801), pushed στο
    `origin/main` (github.com/mk-ph-loc/school-portal) στις 19/11/2026.
-2. **Ενιαίος κωδικός από env**: το `common/auth.py` έχει ακόμα hardcoded
-   `TEACHER_CODE = "teacher2026"`. Το `TEACHER_PASS` του install.sh αλλάζει μόνο το
-   Basic Auth, ΟΧΙ τα apps. Θέλει: `TEACHER_CODE = os.environ.get("TEACHER_PASS", "teacher2026")`
-   + `Environment=TEACHER_PASS=…` στα units (ή κοινό `data/portal.env` με `EnvironmentFile=`)
-   + ενημέρωση dashboard JS/tests ώστε να διαβάζουν τον ίδιο κωδικό.
-3. **Υπόλοιπα duplications που ΔΕΝ μπήκαν στο common ακόμα**:
-   - `backup_file()` — 3 παραλλαγές (lesson-wizard: μόνο backups/· bridge/h5p: .bak δίπλα + ιστορικό). Ενοποίηση σε `common/lessons.py` ή νέο `common/fs.py`.
-   - `list_lessons()` των bridge/h5p/app-builder (grouped ανά τάξη με `_paradeigma` fallback) — παραλλαγές της `common.lessons`.
-   - Excel template generation (`make_template_xlsx`) classroom/wizard — μοιράζονται styling helpers.
+2. ~~**Ενιαίος κωδικός από env**~~ ✅ Έγινε μαζί με το Task 3 (19/11/2026):
+   `common/auth.py` → `_load_teacher_code()`: env `TEACHER_PASS` →
+   `data/portal.env` (0640 root:www-data, εκτός git — το γράφει το install.sh
+   βήμα 8β) → default `teacher2026`. Όλα τα Python units πήραν
+   `EnvironmentFile=-/opt/school-portal/data/portal.env`. Το dashboard διαβάζει
+   `assets/teacher-code.js` (παράγεται από το install.sh, ίδιος κωδικός·
+   παραμένει UX gate, ΟΧΙ ασφάλεια). Tests: `scripts/lib.py` re-exportάρει το
+   `common.auth.TEACHER_CODE`· όλα τα e2e/browser scripts + smoke-test.sh το
+   χρησιμοποιούν αντί για hardcoded `teacher2026`.
+3. **Υπόλοιπα duplications**:
+   - ~~`backup_file()`~~ ✅ Νέο `common/fs.py` (`backup_history` flat ή
+     mirror-tree + `backup_beside`)· lesson-wizard/bridge/h5p καλούν αυτό.
+   - ~~`list_lessons()` των bridge/h5p/app-builder~~ ✅ Στο `common/lessons.py`:
+     `list_lessons_grouped()` (mathimata/ + _paradeigma fallback ανά τάξη) &
+     `list_lessons_flat()` (όλο το docs/, εκτός assets/teachers) — ίδια outputs.
+   - Excel template generation (`make_template_xlsx`) classroom/wizard — μοιράζονται styling helpers. **(Ακόμα ανοιχτό)**
 
 ---
 
@@ -108,29 +116,39 @@ livequiz ✓ · smoke 73/73 ✓ (όλα τα services active με τον νέο 
 ### Task 3 — Διάσπαση μονόλιθων σε APIRouters
 **Στόχος:** συντηρησιμότητα, ΟΧΙ αλλαγή αρχιτεκτονικής deployment (ίδια services/ports).
 
-- `apps/classroom-hub/app.py` (~2.000 γραμμές, ~70 routes, 6 domains) →
+- ~~`apps/classroom-hub/app.py` (~2.000 γραμμές)~~ ✅ **Έγινε 19/11/2026** (μαζί με
+  τις εκκρεμότητες 2 & 3 του Βήματος 2 — βλ. §3):
   ```
   apps/classroom-hub/
-    app.py            # wiring: FastAPI, lifespan, mounts (~100 γραμμές)
-    store.py          # SQLite schema + queries (ή common.db)
-    presence.py       # Client, CLIENTS, broadcast, roster, housekeeping
+    app.py            # wiring: FastAPI+lifespan, mounts, σελίδα/join/config-public (181 γρ.)
+    state.py          # CONFIG/CLIENTS/ACTIVE_*/EVENTS_FIRED + auth/ident cookies (202 γρ.)
+    store.py          # SQLite schema + queries: announcements/mutes/bulk_ids (171 γρ.)
+    presence.py       # Client, broadcast, roster, housekeeping, hub_socket /ws (247 γρ.)
     routers/
-      commands.py     # announce/random-pick/navigate (+ visible_announcements)
-      polls.py        # cmd_poll + CRUD + bulk + ws vote
-      quizzes.py      # cmd_quiz + CRUD + results + ws submit
-      timers.py       # timers + schedule anchors + events
-      chat_forum.py   # chat history/mutes/forum (REST+WS)
-      config_xlsx.py  # template generation + upload (~450 γραμμές Excel)
-      catalog.py      # lessons-catalog (καλεί common.lessons)
+      commands.py     # announce/random-pick/navigate + διαχείριση ανακοινώσεων
+      polls.py        # cmd_poll + CRUD + bulk + ws_poll_vote
+      quizzes.py      # cmd_quiz + CRUD + results + ws_quiz_submit
+      timers.py       # timers + schedule anchors + events (fire_event)
+      chat_forum.py   # chat history/mutes/forum REST + ws_chat/ws_forum_post + roster
+      config_xlsx.py  # template generation + parser + upload (457 γρ. Excel)
+      catalog.py      # lessons-catalog + announce-links (common.lessons)
   ```
-  Προσοχή: το WS handler (`hub_socket`) dispatchάρει σε poll/quiz/chat/forum —
-  κράτα το στο `presence.py` ή `app.py` και κάνε import τους handlers από τα routers.
-  Το global `CONFIG`/`CLIENTS`/`ACTIVE_*` state θέλει ένα module (π.χ. `state.py`)
-  για αποφυγή κυκλικών imports.
+  Συμβάσεις που κρατήθηκαν: ίδια 48 routes/methods (diff πριν/μετά = κενό),
+  ο WS handler μένει στο `presence.py` και καλεί τους handlers των routers με
+  ΤΕΜΠΕΛΙΚΑ imports (routers→presence μόνο, χωρίς κυκλικά)· όλο το κοινό state
+  στο `state.py` (`import state`, ΟΧΙ `from state import CONFIG` — το upload
+  αντικαθιστά το dict). Lifespan αντί `@app.on_event` (μέρος του Task 4 για
+  classroom). Το `app.parse_config_xlsx` παραμένει ως alias για το e2e test.
+  **Επαλήθευση:** classroom-test 69✓ · classroom-browser 28✓ · board-classroom 13✓ ·
+  h5p 54/54 · lessonwizard 62/62 · livequiz ✓ · weblab ✓ · appbuilder ✓ (+browser 15✓) ·
+  exams-browser 18✓ · custom-apps 25✓ · browser 16✓ · smoke 73/73.
+  ⚠️ Προϋπάρχον (ΟΧΙ από το refactor): το `tools-browser-test.py` αποτυγχάνει στα
+  checks του παλιού vanilla πίνακα (`redraw`/`.tbtn`) γιατί το /board/ είναι πλέον
+  Excalidraw — ίδιο failure και με τον pre-refactor κώδικα· θέλει ενημέρωση του test.
 - `h5p-studio/main.py` (~1.700 γραμμές) → 4 routers: editor/library, player/import-export,
-  AI wizard, MkDocs embed.
-- `apps/lesson-wizard/app.py` → lessons, schedule, fs-browser, books.
-- **Αποδοχή:** όλα τα e2e tests πράσινα χωρίς αλλαγές στα API contracts.
+  AI wizard, MkDocs embed. **(Εκκρεμεί)**
+- `apps/lesson-wizard/app.py` → lessons, schedule, fs-browser, books. **(Εκκρεμεί)**
+- **Αποδοχή:** όλα τα e2e tests πράσινα χωρίς αλλαγές στα API contracts. ✅ για classroom-hub.
 
 ### Task 4 — Αξιοπιστία (μικρό, μπορεί μαζί με Task 3)
 - **Nav single-owner στο mkdocs.yml**: σήμερα γράφουν 2 writers με διαφορετική λογική —

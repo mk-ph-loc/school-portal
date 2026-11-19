@@ -21,6 +21,9 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+
 BASE = "http://127.0.0.1/h5p-studio"
 PORTAL = Path("/opt/school-portal")
 PASS = 0
@@ -113,7 +116,7 @@ def main() -> int:
     check("healthz → 200", code == 200 and d.get("status") == "ok")
     code, _ = anon.json("api/login", {"password": "λάθος"})
     check("Λάθος κωδικός → 401", code == 401)
-    code, _ = t.json("api/login", {"password": "teacher2026"})
+    code, _ = t.json("api/login", {"password": TEACHER_CODE})
     check("Σωστός κωδικός → 200 + cookie", code == 200 and "h5pstudio_teacher" in t.cookie)
     code, _ = anon.json("api/activities", {"type": "multichoice", "title": "x", "data": {}})
     check("Δημιουργία χωρίς login → 401", code == 401)

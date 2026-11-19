@@ -22,6 +22,9 @@ import urllib.request
 
 import websocket
 
+sys.path.insert(0, "/opt/school-portal/scripts")
+from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+
 CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9347
 BASE = "http://127.0.0.1"
@@ -107,7 +110,7 @@ def main() -> int:
         print("\n=== 1. Dashboard — κάρτα στη Ζώνη Καθηγητών ===")
         cdp.send("Page.navigate", {"url": f"{BASE}/"})
         wait_for(cdp, "typeof Alpine !== 'undefined' && document.querySelector('[x-data]')")
-        cdp.evaluate("(()=>{const st=Alpine.$data(document.querySelector('[x-data]'));st.password='teacher2026';st.unlock();})()")
+        cdp.evaluate("(()=>{const st=Alpine.$data(document.querySelector('[x-data]'));st.password=TEACHER_CODE;st.unlock();})()")
         time.sleep(0.6)
         card = cdp.evaluate("""(()=>{
             const a=document.querySelector('#kathigites a[href="/app-builder/"]');
@@ -123,10 +126,10 @@ def main() -> int:
         wait_for(cdp, "typeof Alpine !== 'undefined' && !!document.querySelector('[x-data]')")
         gate = cdp.evaluate("!!document.querySelector('input[type=password]')")
         check("Πύλη κωδικού εμφανίζεται", bool(gate))
-        cdp.evaluate("""(()=>{
+        cdp.evaluate(f"""(()=>{{
             const st=Alpine.$data(document.querySelector('[x-data]'));
-            st.password='teacher2026'; st.login();
-        })()""")
+            st.password={json.dumps(TEACHER_CODE)}; st.login();
+        }})()""")
         got = wait_for(cdp, "Alpine.$data(document.querySelector('[x-data]')).loggedIn === true")
         check("Login επιτυχής", bool(got))
         got = wait_for(cdp, "Alpine.$data(document.querySelector('[x-data]')).apps.length >= 1")

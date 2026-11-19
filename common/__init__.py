@@ -5,10 +5,13 @@ common — Κοινόχρηστος κώδικας της Ψηφιακής Πύ�
 
   * common.auth     — HMAC teacher cookies (login/logout/require_teacher),
                       ταυτότητα σύνδεσης (Classroom Hub) & κοινές σταθερές.
+                      TEACHER_CODE: env TEACHER_PASS → data/portal.env → default.
   * common.classes  — οι 6 τάξεις του mkdocs-site (slug/label) + greeklish slug.
   * common.lessons  — parsing/render ημερήσιων μαθημάτων (φάσεις, front-matter,
-                      tags/favorite) & κατάλογος από το docs/mathimata/.
+                      tags/favorite) & κατάλογος από το docs/mathimata/·
+                      list_lessons_grouped/flat (dropdowns bridge/h5p/builder).
   * common.db       — SQLite connections (WAL, Row factory) & ήπιες migrations.
+  * common.fs       — αντίγραφα ασφαλείας (.bak δίπλα + ιστορικό backups/).
   * common.schedule — ωράριο σχολείου: Excel → JSON, HH:MM normalization,
                       deadlines διδακτικών ωρών ±offset, JSON helpers.
 

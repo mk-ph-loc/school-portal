@@ -23,6 +23,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import os
 import secrets
 import time
 from pathlib import Path
@@ -32,8 +33,31 @@ from fastapi import HTTPException, Request, Response
 # ---------------------------------------------------------------------------
 # Κοινές σταθερές αυθεντικοποίησης (ίδιες σε όλη την πύλη)
 # ---------------------------------------------------------------------------
-TEACHER_CODE = "teacher2026"                 # ίδιος κωδικός με όλη την πύλη
-COOKIE_MAX_AGE = 8 * 3600                    # μία σχολική ημέρα
+def _load_teacher_code() -> str:
+    """ΕΝΙΑΙΟΣ κωδικός καθηγητή για ΟΛΑ τα apps + Basic Auth.
+
+    Προτεραιότητα: env TEACHER_PASS → data/portal.env (το γράφει το install.sh,
+    0640 root:www-data, εκτός git) → default 'teacher2026'. Έτσι ο κωδικός
+    αλλάζει ΜΟΝΟ από το install.sh και τον διαβάζουν ίδια apps/tests/dashboard.
+    """
+    code = os.environ.get("TEACHER_PASS", "").strip()
+    if code:
+        return code
+    env_file = Path(__file__).resolve().parent.parent / "data" / "portal.env"
+    try:
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("TEACHER_PASS="):
+                val = line.split("=", 1)[1].strip().strip("'\"")
+                if val:
+                    return val
+    except OSError:
+        pass
+    return "teacher2026"
+
+
+TEACHER_CODE = _load_teacher_code()            # ίδιος κωδικός με όλη την πύλη
+COOKIE_MAX_AGE = 8 * 3600                      # μία σχολική ημέρα
 
 
 def secret_key(app_dir: Path) -> bytes:
