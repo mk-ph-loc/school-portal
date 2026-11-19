@@ -194,10 +194,69 @@ def init_db() -> None:
             total INTEGER NOT NULL, answers TEXT NOT NULL,
             UNIQUE (quiz_id, uid)
         );
+        CREATE TABLE IF NOT EXISTS announcements (
+            id TEXT PRIMARY KEY, ts REAL NOT NULL, kind TEXT NOT NULL,
+            text TEXT NOT NULL, audience TEXT NOT NULL DEFAULT 'all',
+            tmima TEXT NOT NULL DEFAULT '', target_uid TEXT NOT NULL DEFAULT '',
+            target_name TEXT NOT NULL DEFAULT '', links TEXT NOT NULL DEFAULT '[]'
+        );
+        CREATE TABLE IF NOT EXISTS chat_mutes (
+            uid TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '',
+            until_ts REAL NOT NULL, by_name TEXT NOT NULL DEFAULT ''
+        );
         """)
+        # --- Ήπιες migrations για υπάρχουσες βάσεις (νέες στήλες lifecycle) ---
+        for table, col, ddl in (
+            ("polls", "auto_close", "INTEGER NOT NULL DEFAULT 0"),
+            ("polls", "ends_at", "REAL NOT NULL DEFAULT 0"),
+            ("quizzes", "auto_close", "INTEGER NOT NULL DEFAULT 0"),
+            ("quizzes", "ends_at", "REAL NOT NULL DEFAULT 0"),
+        ):
+            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if col not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
 
 
 init_db()
+
+
+def recent_announcements(limit: int = 20) -> list[dict]:
+    """Τελευταίες ανακοινώσεις από τη SQLite (επιβιώνουν restart)."""
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM announcements ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+    out = []
+    for r in reversed(rows):
+        d = dict(r)
+        try:
+            d["links"] = json.loads(d.get("links") or "[]")
+        except ValueError:
+            d["links"] = []
+        out.append(d)
+    return out
+
+
+def store_announcement(msg: dict) -> None:
+    with db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO announcements "
+            "(id, ts, kind, text, audience, tmima, target_uid, target_name, links) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (msg["id"], msg["ts"], msg["kind"], msg["text"], msg.get("audience", "all"),
+             msg.get("tmima", ""), msg.get("target_uid", ""), msg.get("target_name", ""),
+             json.dumps(msg.get("links", []), ensure_ascii=False)))
+
+
+def active_mute(uid: str) -> dict | None:
+    """Ενεργή σιωπή (mute) για τον uid — ληγμένες καθαρίζονται τεμπέλικα."""
+    with db() as conn:
+        row = conn.execute("SELECT * FROM chat_mutes WHERE uid=?", (uid,)).fetchone()
+        if not row:
+            return None
+        if row["until_ts"] <= time.time():
+            conn.execute("DELETE FROM chat_mutes WHERE uid=?", (uid,))
+            return None
+        return dict(row)
 
 
 
@@ -229,6 +288,8 @@ DEFAULT_CONFIG: dict = {
          "order": 4, "guest": False, "student": True, "teacher": True},
         {"id": "voitheia", "title": "Βοήθεια", "icon": "❓", "url": "#help",
          "order": 5, "guest": True, "student": True, "teacher": True},
+        {"id": "manage", "title": "Διαχείριση", "icon": "🗄️", "url": "#manage",
+         "order": 6, "guest": False, "student": False, "teacher": True},
     ],
     "toolbars": [
         {"id": "roster", "title": "👥 Συνδεδεμένοι", "mode": "dock", "x": 20, "y": 90,
@@ -247,6 +308,7 @@ DEFAULT_CONFIG: dict = {
                     "colors": GUEST_COLORS},
     "timers": [],       # ορίζονται από Excel ή ζωντανά από τον καθηγητή
     "events": [],       # γεγονότα τέλους ημέρας/ώρας από Excel
+    "announce_links": [],  # διαμορφώσιμοι σύνδεσμοι για τη σύνθετη ανακοίνωση
     "messages": [],     # πρότυπα ανακοινώσεων/συγχαρητηρίων/βραβείων
     "polls_bank": [],   # έτοιμες δημοσκοπήσεις
     "quizzes_bank": [], # τράπεζα quiz για γρήγορη αποστολή
@@ -263,6 +325,13 @@ def load_config() -> dict:
             for k, v in saved.items():
                 if v not in (None, [], {}, ""):
                     cfg[k] = v
+            # Νέα built-in panels προστίθενται αυτόματα σε παλαιότερα uploads
+            # (π.χ. 🗄️ Διαχείριση) — δεν χάνονται οι ρυθμίσεις του χρήστη.
+            known = {m["id"] for m in cfg["menu"]}
+            for m in DEFAULT_CONFIG["menu"]:
+                if m["id"] not in known:
+                    cfg["menu"].append(dict(m))
+            cfg["menu"].sort(key=lambda m: m.get("order", 99))
         except (OSError, ValueError):
             pass
     # Αν δεν υπάρχει δικό μας ωράριο, δανειζόμαστε του Lesson Wizard (ίδιο JSON)
@@ -320,10 +389,10 @@ class Client:
 
 
 CLIENTS: dict[int, Client] = {}                         # key = id(ws)
-ANNOUNCEMENTS: list[dict] = []                          # τελευταίες ανακοινώσεις (μνήμη)
 ACTIVE_TIMERS: dict[str, dict] = {}                     # id → {label, ends_at, audience, tmima}
 ACTIVE_POLLS: dict[str, dict] = {}                      # id → κατάσταση poll
 ACTIVE_QUIZZES: dict[str, dict] = {}                    # id → κατάσταση quiz
+# Οι ανακοινώσεις αποθηκεύονται ΜΟΝΙΜΑ στη SQLite (πίνακας announcements).
 
 
 async def send_json(ws: WebSocket, payload: dict) -> None:
@@ -471,7 +540,8 @@ def api_config_public(request: Request):
                          for q in CONFIG["quizzes_bank"]] if role == "teacher" else [],
         "timers_cfg": CONFIG["timers"] if role == "teacher" else [],
         "events_cfg": CONFIG["events"] if role == "teacher" else [],
-        "announcements": ANNOUNCEMENTS[-20:],
+        "announce_links": CONFIG.get("announce_links", []) if role == "teacher" else [],
+        "announcements": recent_announcements(20),
         "server_now": time.time(),
     }
 
@@ -501,12 +571,13 @@ async def cmd_announce(request: Request):
         raise HTTPException(400, "Γράψε το μήνυμα.")
     aud, tmima = _audience(body)
     target_uid = str(body.get("target_uid", ""))
+    links = clean_links(body.get("links"))
     msg = {"id": secrets.token_hex(6), "kind": kind, "text": text,
            "ts": time.time(), "audience": aud, "tmima": tmima,
            "target_uid": target_uid,
-           "target_name": next((c.name for c in CLIENTS.values() if c.uid == target_uid), "")}
-    ANNOUNCEMENTS.append(msg)
-    del ANNOUNCEMENTS[:-50]
+           "target_name": next((c.name for c in CLIENTS.values() if c.uid == target_uid), ""),
+           "links": links}
+    store_announcement(msg)
     payload = {"type": "announcement", **msg}
     if target_uid:
         await send_to_uid(target_uid, payload)          # προσωπικό (π.χ. βραβείο)
@@ -514,7 +585,26 @@ async def cmd_announce(request: Request):
         sent = 1
     else:
         sent = await broadcast(payload, audience=aud, tmima=tmima)
+    # Σύνθετη ανακοίνωση: προαιρετική άμεση μετάβαση στον 1ο σύνδεσμο
+    if links and body.get("navigate") and not target_uid:
+        nav_aud = "students" if aud == "all" else aud   # ποτέ δεν σπρώχνουμε άλλον καθηγητή
+        await broadcast({"type": "navigate", "url": links[0]["url"],
+                         "title": links[0]["title"] or text[:80], "ts": time.time()},
+                        audience=nav_aud, tmima=tmima)
     return {"ok": True, "sent": sent, "announcement": msg}
+
+
+def clean_links(raw) -> list[dict]:
+    """Σύνδεσμοι σύνθετης ανακοίνωσης: [{title, url}] — μόνο σχετικά URLs πύλης."""
+    out = []
+    for l in raw or []:
+        if not isinstance(l, dict):
+            continue
+        url = str(l.get("url", "")).strip()
+        if not url.startswith("/") or url.startswith("//"):
+            continue
+        out.append({"title": str(l.get("title", "")).strip()[:80] or url, "url": url[:300]})
+    return out[:8]
 
 
 @app.post("/api/cmd/random-pick")
@@ -567,17 +657,40 @@ async def cmd_poll(request: Request):
     aud, tmima = _audience(body)
     pid = secrets.token_hex(6)
     show = 1 if body.get("show_results", True) else 0
+    auto = 1 if body.get("auto_close", True) else 0
+    dur = float(body.get("duration_sec", 0) or 0)
+    ends = time.time() + dur if dur > 0 else 0.0
     with db() as conn:
-        conn.execute("INSERT INTO polls VALUES (?,?,?,?,?,?,0)",
+        conn.execute("INSERT INTO polls (id, ts, question, options, show_results, audience,"
+                     " closed, auto_close, ends_at) VALUES (?,?,?,?,?,?,0,?,?)",
                      (pid, time.time(), question, json.dumps(options, ensure_ascii=False),
-                      show, f"{aud}|{tmima}"))
+                      show, f"{aud}|{tmima}", auto, ends))
     ACTIVE_POLLS[pid] = {"id": pid, "question": question, "options": options,
                          "show_results": bool(show), "audience": aud, "tmima": tmima,
-                         "closed": False}
+                         "closed": False, "auto_close": bool(auto), "ends_at": ends}
     await broadcast({"type": "poll", "id": pid, "question": question, "options": options,
                      "show_results": bool(show), "ts": time.time()},
                     audience=aud, tmima=tmima)
     return {"ok": True, "id": pid}
+
+
+def eligible_uids(audience: str, tmima: str) -> set[str]:
+    """Μοναδικοί uid των συνδεδεμένων που ανήκουν στο κοινό (χωρίς καθηγητές)."""
+    return {c.uid for c in CLIENTS.values()
+            if c.role != "teacher" and audience_match(c, audience, tmima)}
+
+
+async def close_poll_internal(pid: str) -> dict | None:
+    """Κλείσιμο poll (χειροκίνητο ή αυτόματο) — όλοι βλέπουν το τελικό αποτέλεσμα."""
+    poll = ACTIVE_POLLS.pop(pid, None)
+    with db() as conn:
+        conn.execute("UPDATE polls SET closed=1 WHERE id=?", (pid,))
+        try:
+            res = poll_results(conn, pid)
+        except HTTPException:
+            return None
+    await broadcast({**res, "closed": True})
+    return res
 
 
 
@@ -598,11 +711,9 @@ def poll_results(conn: sqlite3.Connection, pid: str) -> dict:
 @app.post("/api/cmd/poll/{pid}/close")
 async def cmd_poll_close(pid: str, request: Request):
     require_teacher(request)
-    with db() as conn:
-        conn.execute("UPDATE polls SET closed=1 WHERE id=?", (pid,))
-        res = poll_results(conn, pid)
-    ACTIVE_POLLS.pop(pid, None)
-    await broadcast({**res, "closed": True})            # στο κλείσιμο όλοι βλέπουν το τελικό αποτέλεσμα
+    res = await close_poll_internal(pid)                # στο κλείσιμο όλοι βλέπουν το τελικό αποτέλεσμα
+    if res is None:
+        raise HTTPException(404, "Η δημοσκόπηση δεν βρέθηκε.")
     return {"ok": True, "results": res}
 
 
@@ -610,8 +721,94 @@ async def cmd_poll_close(pid: str, request: Request):
 def api_polls(request: Request):
     require_teacher(request)
     with db() as conn:
-        rows = conn.execute("SELECT id FROM polls ORDER BY ts DESC LIMIT 30").fetchall()
-        return {"polls": [poll_results(conn, r["id"]) for r in rows]}
+        rows = conn.execute("SELECT id FROM polls ORDER BY ts DESC LIMIT 100").fetchall()
+        out = []
+        for r in rows:
+            res = poll_results(conn, r["id"])
+            voters = conn.execute(
+                "SELECT uid, choice FROM poll_votes WHERE poll_id=?", (r["id"],)).fetchall()
+            res["voters"] = [dict(v) for v in voters]
+            out.append(res)
+        return {"polls": out}
+
+
+@app.put("/api/polls/{pid}")
+async def api_poll_update(pid: str, request: Request):
+    """✏️ Επεξεργασία δημοσκόπησης (ερώτηση/επιλογές/ορατότητα αποτελεσμάτων)."""
+    require_teacher(request)
+    body = await request.json()
+    with db() as conn:
+        row = conn.execute("SELECT * FROM polls WHERE id=?", (pid,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Η δημοσκόπηση δεν βρέθηκε.")
+        question = str(body.get("question", row["question"])).strip()[:300] or row["question"]
+        options = ([str(o).strip()[:120] for o in body["options"] if str(o).strip()]
+                   if "options" in body else json.loads(row["options"]))
+        if len(options) < 2:
+            raise HTTPException(400, "Χρειάζονται τουλάχιστον 2 επιλογές.")
+        show = 1 if body.get("show_results", bool(row["show_results"])) else 0
+        conn.execute("UPDATE polls SET question=?, options=?, show_results=? WHERE id=?",
+                     (question, json.dumps(options, ensure_ascii=False), show, pid))
+    if pid in ACTIVE_POLLS:                             # ζωντανή ενημέρωση ενεργού poll
+        ACTIVE_POLLS[pid].update(question=question, options=options, show_results=bool(show))
+        await broadcast({"type": "poll", "id": pid, "question": question, "options": options,
+                         "show_results": bool(show), "ts": row["ts"], "updated": True},
+                        audience=ACTIVE_POLLS[pid]["audience"], tmima=ACTIVE_POLLS[pid]["tmima"])
+    await broadcast({"type": "poll_updated", "id": pid}, audience="teachers")
+    return {"ok": True}
+
+
+@app.delete("/api/polls/{pid}")
+async def api_poll_delete(pid: str, request: Request):
+    require_teacher(request)
+    with db() as conn:
+        conn.execute("DELETE FROM poll_votes WHERE poll_id=?", (pid,))
+        conn.execute("DELETE FROM polls WHERE id=?", (pid,))
+    ACTIVE_POLLS.pop(pid, None)
+    await broadcast({"type": "poll_deleted", "id": pid})
+    return {"ok": True}
+
+
+@app.post("/api/polls/bulk")
+async def api_polls_bulk(request: Request):
+    """Μαζικές ενέργειες: {action: close|delete, ids: [...] | all: true, older_than_days: N}."""
+    require_teacher(request)
+    body = await request.json()
+    action = str(body.get("action", ""))
+    if action not in ("close", "delete"):
+        raise HTTPException(400, "action: close | delete.")
+    ids = _bulk_ids("polls", body)
+    n = 0
+    for pid in ids:
+        if action == "close":
+            if await close_poll_internal(pid) is not None:
+                n += 1
+        else:
+            with db() as conn:
+                conn.execute("DELETE FROM poll_votes WHERE poll_id=?", (pid,))
+                cur = conn.execute("DELETE FROM polls WHERE id=?", (pid,))
+                n += cur.rowcount
+            ACTIVE_POLLS.pop(pid, None)
+            await broadcast({"type": "poll_deleted", "id": pid})
+    return {"ok": True, "affected": n}
+
+
+def _bulk_ids(table: str, body: dict) -> list[str]:
+    """Κοινή λογική επιλογής ids για bulk (ρητή λίστα / όλα / παλαιότερα των N ημερών)."""
+    if table not in ("polls", "quizzes", "announcements"):
+        raise HTTPException(400, "Άγνωστος πίνακας.")
+    with db() as conn:
+        if body.get("ids"):
+            return [str(i) for i in body["ids"]][:500]
+        days = float(body.get("older_than_days", 0) or 0)
+        if days > 0:
+            cutoff = time.time() - days * 86400
+            rows = conn.execute(f"SELECT id FROM {table} WHERE ts < ?", (cutoff,)).fetchall()
+        elif body.get("all"):
+            rows = conn.execute(f"SELECT id FROM {table}").fetchall()
+        else:
+            raise HTTPException(400, "Δώσε ids, all=true ή older_than_days.")
+        return [r["id"] for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -646,12 +843,17 @@ async def cmd_quiz(request: Request):
         questions = clean_questions(body.get("questions"))
     aud, tmima = _audience(body)
     qid = secrets.token_hex(6)
+    auto = 1 if body.get("auto_close", True) else 0
+    dur = float(body.get("duration_sec", 0) or 0)
+    ends = time.time() + dur if dur > 0 else 0.0
     with db() as conn:
-        conn.execute("INSERT INTO quizzes VALUES (?,?,?,?,?,0)",
+        conn.execute("INSERT INTO quizzes (id, ts, title, questions, audience, closed,"
+                     " auto_close, ends_at) VALUES (?,?,?,?,?,0,?,?)",
                      (qid, time.time(), title, json.dumps(questions, ensure_ascii=False),
-                      f"{aud}|{tmima}"))
+                      f"{aud}|{tmima}", auto, ends))
     ACTIVE_QUIZZES[qid] = {"id": qid, "title": title, "questions": questions,
-                           "audience": aud, "tmima": tmima, "closed": False}
+                           "audience": aud, "tmima": tmima, "closed": False,
+                           "auto_close": bool(auto), "ends_at": ends}
     # Στους πελάτες ΔΕΝ στέλνουμε το correct — η βαθμολόγηση γίνεται στον server.
     public_qs = [{"text": q["text"], "options": q["options"]} for q in questions]
     await broadcast({"type": "quiz", "id": qid, "title": title, "questions": public_qs,
@@ -664,25 +866,125 @@ async def cmd_quiz(request: Request):
 def api_quizzes(request: Request):
     require_teacher(request)
     with db() as conn:
-        rows = conn.execute("SELECT id, ts, title, closed FROM quizzes ORDER BY ts DESC LIMIT 30").fetchall()
+        rows = conn.execute("SELECT id, ts, title, closed FROM quizzes ORDER BY ts DESC LIMIT 100").fetchall()
         out = []
         for r in rows:
             results = conn.execute(
-                "SELECT name, tmima, score, total, ts FROM quiz_results "
+                "SELECT id, uid, name, tmima, score, total, ts FROM quiz_results "
                 "WHERE quiz_id=? ORDER BY score DESC, ts ASC", (r["id"],)).fetchall()
             out.append({"id": r["id"], "ts": r["ts"], "title": r["title"],
                         "closed": bool(r["closed"]), "results": [dict(x) for x in results]})
         return {"quizzes": out}
 
 
+async def close_quiz_internal(qid: str) -> bool:
+    """Κλείσιμο quiz (χειροκίνητο ή αυτόματο όταν υποβάλουν όλοι)."""
+    with db() as conn:
+        cur = conn.execute("UPDATE quizzes SET closed=1 WHERE id=?", (qid,))
+        if not cur.rowcount:
+            return False
+    ACTIVE_QUIZZES.pop(qid, None)
+    await broadcast({"type": "quiz_closed", "id": qid})
+    return True
+
+
 @app.post("/api/cmd/quiz/{qid}/close")
 async def cmd_quiz_close(qid: str, request: Request):
     require_teacher(request)
-    with db() as conn:
-        conn.execute("UPDATE quizzes SET closed=1 WHERE id=?", (qid,))
-    ACTIVE_QUIZZES.pop(qid, None)
-    await broadcast({"type": "quiz_closed", "id": qid})
+    if not await close_quiz_internal(qid):
+        raise HTTPException(404, "Το quiz δεν βρέθηκε.")
     return {"ok": True}
+
+
+@app.put("/api/quizzes/{qid}")
+async def api_quiz_update(qid: str, request: Request):
+    """✏️ Επεξεργασία quiz (τίτλος· ερωτήσεις μόνο όσο δεν έχει αποτελέσματα)."""
+    require_teacher(request)
+    body = await request.json()
+    with db() as conn:
+        row = conn.execute("SELECT * FROM quizzes WHERE id=?", (qid,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Το quiz δεν βρέθηκε.")
+        title = str(body.get("title", row["title"])).strip()[:120] or row["title"]
+        questions = json.loads(row["questions"])
+        if "questions" in body:
+            n = conn.execute("SELECT COUNT(*) n FROM quiz_results WHERE quiz_id=?", (qid,)).fetchone()["n"]
+            if n:
+                raise HTTPException(400, "Το quiz έχει ήδη αποτελέσματα — οι ερωτήσεις δεν αλλάζουν (μόνο ο τίτλος).")
+            questions = clean_questions(body["questions"])
+        conn.execute("UPDATE quizzes SET title=?, questions=? WHERE id=?",
+                     (title, json.dumps(questions, ensure_ascii=False), qid))
+    if qid in ACTIVE_QUIZZES:
+        ACTIVE_QUIZZES[qid].update(title=title, questions=questions)
+        public_qs = [{"text": q["text"], "options": q["options"]} for q in questions]
+        await broadcast({"type": "quiz", "id": qid, "title": title, "questions": public_qs,
+                         "ts": row["ts"], "updated": True},
+                        audience=ACTIVE_QUIZZES[qid]["audience"], tmima=ACTIVE_QUIZZES[qid]["tmima"])
+    await broadcast({"type": "quiz_updated", "id": qid}, audience="teachers")
+    return {"ok": True}
+
+
+@app.delete("/api/quizzes/{qid}")
+async def api_quiz_delete(qid: str, request: Request):
+    require_teacher(request)
+    with db() as conn:
+        conn.execute("DELETE FROM quiz_results WHERE quiz_id=?", (qid,))
+        conn.execute("DELETE FROM quizzes WHERE id=?", (qid,))
+    ACTIVE_QUIZZES.pop(qid, None)
+    await broadcast({"type": "quiz_deleted", "id": qid})
+    return {"ok": True}
+
+
+@app.post("/api/quizzes/bulk")
+async def api_quizzes_bulk(request: Request):
+    """Μαζικές ενέργειες: {action: close|delete, ids | all | older_than_days}."""
+    require_teacher(request)
+    body = await request.json()
+    action = str(body.get("action", ""))
+    if action not in ("close", "delete"):
+        raise HTTPException(400, "action: close | delete.")
+    ids = _bulk_ids("quizzes", body)
+    n = 0
+    for qid in ids:
+        if action == "close":
+            if await close_quiz_internal(qid):
+                n += 1
+        else:
+            with db() as conn:
+                conn.execute("DELETE FROM quiz_results WHERE quiz_id=?", (qid,))
+                cur = conn.execute("DELETE FROM quizzes WHERE id=?", (qid,))
+                n += cur.rowcount
+            ACTIVE_QUIZZES.pop(qid, None)
+            await broadcast({"type": "quiz_deleted", "id": qid})
+    return {"ok": True, "affected": n}
+
+
+@app.delete("/api/quiz-results/{rid}")
+def api_quiz_result_delete(rid: int, request: Request):
+    """Διαγραφή μεμονωμένου αποτελέσματος μαθητή (π.χ. άκυρη υποβολή)."""
+    require_teacher(request)
+    with db() as conn:
+        cur = conn.execute("DELETE FROM quiz_results WHERE id=?", (rid,))
+        if not cur.rowcount:
+            raise HTTPException(404, "Το αποτέλεσμα δεν βρέθηκε.")
+    return {"ok": True}
+
+
+@app.post("/api/quiz-results/bulk-delete")
+async def api_quiz_results_bulk_delete(request: Request):
+    """Μαζική διαγραφή αποτελεσμάτων: {ids: [...]} ή {quiz_id, all: true}."""
+    require_teacher(request)
+    body = await request.json()
+    with db() as conn:
+        if body.get("ids"):
+            ids = [int(i) for i in body["ids"]][:500]
+            qmarks = ",".join("?" * len(ids)) or "NULL"
+            cur = conn.execute(f"DELETE FROM quiz_results WHERE id IN ({qmarks})", ids)
+        elif body.get("quiz_id") and body.get("all"):
+            cur = conn.execute("DELETE FROM quiz_results WHERE quiz_id=?", (str(body["quiz_id"]),))
+        else:
+            raise HTTPException(400, "Δώσε ids ή quiz_id με all=true.")
+        return {"ok": True, "affected": cur.rowcount}
 
 
 # ---------------------------------------------------------------------------
@@ -785,9 +1087,9 @@ async def fire_event(kind: str, text: str, audience: str = "all", tmima: str = "
                      url: str = "") -> None:
     msg = {"id": secrets.token_hex(6), "kind": kind, "text": text,
            "ts": time.time(), "audience": audience, "tmima": tmima,
-           "target_uid": "", "target_name": ""}
-    ANNOUNCEMENTS.append(msg)
-    del ANNOUNCEMENTS[:-50]
+           "target_uid": "", "target_name": "",
+           "links": [{"title": text[:80], "url": url}] if url else []}
+    store_announcement(msg)
     await broadcast({"type": "announcement", **msg}, audience=audience, tmima=tmima)
     if url:
         await broadcast({"type": "navigate", "url": url, "title": text[:80],
@@ -821,6 +1123,13 @@ async def housekeeping() -> None:
                         await broadcast(payload, audience="teachers")
                     else:
                         await broadcast(payload, audience=t["audience"], tmima=t["tmima"])
+            # 2β) λήξη polls/quizzes με χρονικό όριο (προαιρετικό duration_sec)
+            for pid, p in list(ACTIVE_POLLS.items()):
+                if p.get("ends_at") and now >= p["ends_at"]:
+                    await close_poll_internal(pid)
+            for qid, q in list(ACTIVE_QUIZZES.items()):
+                if q.get("ends_at") and now >= q["ends_at"]:
+                    await close_quiz_internal(qid)
             # 3) γεγονότα Excel (μία φορά ανά ημέρα & id, μόνο καθημερινές ή ορισμένες ημέρες)
             today = datetime.now().strftime("%Y-%m-%d")
             weekday = datetime.now().weekday()
@@ -867,6 +1176,13 @@ async def ws_poll_vote(c: Client, pid: str, choice: int) -> None:
     if res["show_results"]:
         await broadcast(res, audience=poll["audience"], tmima=poll["tmima"])
     await broadcast(res, audience="teachers")           # ο καθηγητής βλέπει ΠΑΝΤΑ
+    # 🔚 Αυτόματο κλείσιμο όταν έχουν ψηφίσει ΟΛΟΙ οι συνδεδεμένοι του κοινού
+    if poll.get("auto_close"):
+        with db() as conn:
+            voted = {v["uid"] for v in conn.execute(
+                "SELECT uid FROM poll_votes WHERE poll_id=?", (pid,))}
+        if eligible_uids(poll["audience"], poll["tmima"]) <= voted:
+            await close_poll_internal(pid)
 
 
 async def ws_quiz_submit(c: Client, qid: str, answers: list) -> None:
@@ -897,6 +1213,12 @@ async def ws_quiz_submit(c: Client, qid: str, answers: list) -> None:
                            "recorded": recorded,
                            "note": "Το αποτέλεσμά σου καταγράφηκε." if recorded
                                    else "Εξάσκηση επισκέπτη — δεν καταγράφεται."})
+    # 🔚 Αυτόματο κλείσιμο όταν έχουν υποβάλει ΟΛΟΙ οι συνδεδεμένοι του κοινού.
+    # Οι guests δεν καταγράφονται στη βάση → παρακολουθούνται σε μνήμη ανά quiz.
+    submitted = quiz.setdefault("submitted", set())
+    submitted.add(c.uid)
+    if quiz.get("auto_close") and eligible_uids(quiz["audience"], quiz["tmima"]) <= submitted:
+        await close_quiz_internal(qid)
 
 
 
@@ -912,19 +1234,35 @@ async def hub_socket(ws: WebSocket):
     await ws.accept()
     c = Client(ws, ident)
     CLIENTS[id(ws)] = c
-    # αρχική κατάσταση: timers/polls/quizzes σε εξέλιξη + πρόσφατες ανακοινώσεις
+    # αρχική κατάσταση: timers/polls/quizzes σε εξέλιξη + πρόσφατες ανακοινώσεις.
+    # Poll/quiz εμφανίζονται ΞΑΝΑ μόνο αν ο χρήστης ΔΕΝ έχει ήδη απαντήσει —
+    # αλλιώς κάθε reconnect ξανάνοιγε τα modals ακόμα και μετά την υποβολή.
+    with db() as conn:
+        voted_polls = {r["poll_id"] for r in conn.execute(
+            "SELECT poll_id FROM poll_votes WHERE uid=?", (c.uid,))}
+        done_quizzes = {r["quiz_id"] for r in conn.execute(
+            "SELECT quiz_id FROM quiz_results WHERE uid=?", (c.uid,))}
+    pending_polls, pending_quizzes = [], []
+    if c.role != "teacher":
+        pending_polls = [p for p in ACTIVE_POLLS.values()
+                         if audience_match(c, p["audience"], p["tmima"])
+                         and p["id"] not in voted_polls]
+        pending_quizzes = [{"id": q["id"], "title": q["title"],
+                            "questions": [{"text": x["text"], "options": x["options"]}
+                                          for x in q["questions"]]}
+                           for q in ACTIVE_QUIZZES.values()
+                           if audience_match(c, q["audience"], q["tmima"])
+                           and q["id"] not in done_quizzes
+                           and c.uid not in q.get("submitted", set())]
+    mute = active_mute(c.uid)
     await send_json(ws, {"type": "welcome", "identity": c.public(),
                          "server_now": time.time(),
-                         "announcements": ANNOUNCEMENTS[-20:],
+                         "announcements": recent_announcements(20),
+                         "muted_until": mute["until_ts"] if mute else 0,
                          "timers": [t for t in ACTIVE_TIMERS.values()
                                     if t["visibility"] == "public" or c.role == "teacher"],
-                         "polls": [p for p in ACTIVE_POLLS.values()
-                                   if audience_match(c, p["audience"], p["tmima"])],
-                         "quizzes": [{"id": q["id"], "title": q["title"],
-                                      "questions": [{"text": x["text"], "options": x["options"]}
-                                                    for x in q["questions"]]}
-                                     for q in ACTIVE_QUIZZES.values()
-                                     if audience_match(c, q["audience"], q["tmima"])]})
+                         "polls": pending_polls,
+                         "quizzes": pending_quizzes})
     await push_roster()
     try:
         while True:
@@ -939,6 +1277,11 @@ async def hub_socket(ws: WebSocket):
                 await send_json(ws, {"type": "pong", "server_now": time.time()})
             elif mtype == "chat":
                 if c.role == "guest" and not CONFIG["access"].get("guest_chat", True):
+                    continue
+                mute = active_mute(c.uid)               # 🔇 σιωπή από τον καθηγητή
+                if mute and c.role != "teacher":
+                    await send_json(ws, {"type": "muted", "until_ts": mute["until_ts"],
+                                         "by": mute["by_name"]})
                     continue
                 text = str(msg.get("text", "")).strip()[:500]
                 if not text:
@@ -957,6 +1300,11 @@ async def hub_socket(ws: WebSocket):
             elif mtype == "quiz_submit":
                 await ws_quiz_submit(c, str(msg.get("id", "")), msg.get("answers", []))
             elif mtype == "forum_post" and (c.role != "guest" or CONFIG["access"].get("guest_forum")):
+                mute = active_mute(c.uid)               # η σιωπή ισχύει και στο forum
+                if mute and c.role != "teacher":
+                    await send_json(ws, {"type": "muted", "until_ts": mute["until_ts"],
+                                         "by": mute["by_name"]})
+                    continue
                 tid = int(msg.get("thread_id", 0))
                 text = str(msg.get("text", "")).strip()[:2000]
                 if not text:
@@ -984,12 +1332,159 @@ async def hub_socket(ws: WebSocket):
 # REST — chat ιστορικό, forum νήματα, roster (καθηγητής)
 # ---------------------------------------------------------------------------
 @app.get("/api/chat/history")
-def api_chat_history(request: Request):
+def api_chat_history(request: Request, limit: int = 100, before_id: int = 0):
     if not identity_from(request):
         raise HTTPException(401, "Συνδέσου πρώτα.")
+    limit = max(1, min(int(limit), 500))
     with db() as conn:
-        rows = conn.execute("SELECT * FROM chat ORDER BY id DESC LIMIT 100").fetchall()
+        if before_id > 0:
+            rows = conn.execute("SELECT * FROM chat WHERE id < ? ORDER BY id DESC LIMIT ?",
+                                (before_id, limit)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM chat ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
     return {"messages": [dict(r) for r in reversed(rows)]}
+
+
+@app.delete("/api/chat/messages/{mid}")
+async def api_chat_delete(mid: int, request: Request):
+    """🗑 Διαγραφή ανάρμοστου μηνύματος — αφαιρείται ζωντανά από όλους."""
+    require_teacher(request)
+    with db() as conn:
+        cur = conn.execute("DELETE FROM chat WHERE id=?", (mid,))
+        if not cur.rowcount:
+            raise HTTPException(404, "Το μήνυμα δεν βρέθηκε.")
+    await broadcast({"type": "chat_deleted", "ids": [mid]})
+    return {"ok": True}
+
+
+@app.post("/api/chat/bulk")
+async def api_chat_bulk(request: Request):
+    """Μαζικός καθαρισμός chat: {ids: [...]} ή {clear_all: true} ή {older_than_days: N}."""
+    require_teacher(request)
+    body = await request.json()
+    with db() as conn:
+        if body.get("ids"):
+            ids = [int(i) for i in body["ids"]][:1000]
+            qmarks = ",".join("?" * len(ids)) or "NULL"
+            rows = conn.execute(f"SELECT id FROM chat WHERE id IN ({qmarks})", ids).fetchall()
+            conn.execute(f"DELETE FROM chat WHERE id IN ({qmarks})", ids)
+        elif body.get("clear_all"):
+            rows = conn.execute("SELECT id FROM chat").fetchall()
+            conn.execute("DELETE FROM chat")
+        elif float(body.get("older_than_days", 0) or 0) > 0:
+            cutoff = time.time() - float(body["older_than_days"]) * 86400
+            rows = conn.execute("SELECT id FROM chat WHERE ts < ?", (cutoff,)).fetchall()
+            conn.execute("DELETE FROM chat WHERE ts < ?", (cutoff,))
+        else:
+            raise HTTPException(400, "Δώσε ids, clear_all=true ή older_than_days.")
+        deleted = [r["id"] for r in rows]
+    if deleted:
+        await broadcast({"type": "chat_deleted", "ids": deleted})
+    return {"ok": True, "affected": len(deleted)}
+
+
+# ---------------------------------------------------------------------------
+# 🔇 Chat moderation — σιωπή (mute) ανά χρήστη, μόνο καθηγητής
+# ---------------------------------------------------------------------------
+@app.get("/api/mutes")
+def api_mutes(request: Request):
+    require_teacher(request)
+    now = time.time()
+    with db() as conn:
+        conn.execute("DELETE FROM chat_mutes WHERE until_ts <= ?", (now,))
+        rows = conn.execute("SELECT * FROM chat_mutes ORDER BY until_ts").fetchall()
+    return {"mutes": [dict(r) for r in rows]}
+
+
+@app.post("/api/mutes")
+async def api_mute_set(request: Request):
+    """🔇 Σιωπή: {uid, minutes} (0 ή αρνητικό = άρση). Ισχύει για chat & forum."""
+    require_teacher(request)
+    ident = identity_from(request)
+    body = await request.json()
+    uid = str(body.get("uid", "")).strip()
+    if not uid:
+        raise HTTPException(400, "Χρειάζεται uid χρήστη.")
+    minutes = float(body.get("minutes", 15))
+    target = next((c for c in CLIENTS.values() if c.uid == uid), None)
+    if target and target.role == "teacher":
+        raise HTTPException(400, "Δεν επιβάλλεται σιωπή σε καθηγητή.")
+    name = str(body.get("name", "") or (target.name if target else ""))[:40]
+    by_name = ident["name"] if ident else "Καθηγητής"
+    if minutes <= 0:
+        with db() as conn:
+            conn.execute("DELETE FROM chat_mutes WHERE uid=?", (uid,))
+        await send_to_uid(uid, {"type": "unmuted"})
+        await broadcast({"type": "mute_changed", "uid": uid, "until_ts": 0}, audience="teachers")
+        return {"ok": True, "muted": False}
+    until = time.time() + min(minutes, 24 * 60) * 60
+    with db() as conn:
+        conn.execute("INSERT OR REPLACE INTO chat_mutes (uid, name, until_ts, by_name) VALUES (?,?,?,?)",
+                     (uid, name, until, by_name))
+    await send_to_uid(uid, {"type": "muted", "until_ts": until, "by": by_name})
+    await broadcast({"type": "mute_changed", "uid": uid, "name": name, "until_ts": until},
+                    audience="teachers")
+    return {"ok": True, "muted": True, "until_ts": until}
+
+
+# ---------------------------------------------------------------------------
+# 🗄️ Διαχείριση ανακοινώσεων (μόνιμη αποθήκευση + edit/delete/bulk)
+# ---------------------------------------------------------------------------
+@app.get("/api/announcements")
+def api_announcements(request: Request, limit: int = 100):
+    require_teacher(request)
+    return {"announcements": recent_announcements(max(1, min(int(limit), 500)))}
+
+
+@app.put("/api/announcements/{aid}")
+async def api_announcement_update(aid: str, request: Request):
+    """✏️ Επεξεργασία κειμένου/kind/συνδέσμων — ενημερώνεται ζωντανά σε όλους."""
+    require_teacher(request)
+    body = await request.json()
+    with db() as conn:
+        row = conn.execute("SELECT * FROM announcements WHERE id=?", (aid,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Η ανακοίνωση δεν βρέθηκε.")
+        kind = str(body.get("kind", row["kind"]))
+        if kind not in ("announce", "congrats", "award"):
+            raise HTTPException(400, "kind: announce | congrats | award.")
+        text = str(body.get("text", row["text"])).strip()[:500] or row["text"]
+        links = clean_links(body["links"]) if "links" in body else json.loads(row["links"] or "[]")
+        conn.execute("UPDATE announcements SET kind=?, text=?, links=? WHERE id=?",
+                     (kind, text, json.dumps(links, ensure_ascii=False), aid))
+    msg = {"id": aid, "ts": row["ts"], "kind": kind, "text": text,
+           "audience": row["audience"], "tmima": row["tmima"],
+           "target_uid": row["target_uid"], "target_name": row["target_name"], "links": links}
+    await broadcast({"type": "announcement_updated", **msg})
+    return {"ok": True, "announcement": msg}
+
+
+@app.delete("/api/announcements/{aid}")
+async def api_announcement_delete(aid: str, request: Request):
+    require_teacher(request)
+    with db() as conn:
+        cur = conn.execute("DELETE FROM announcements WHERE id=?", (aid,))
+        if not cur.rowcount:
+            raise HTTPException(404, "Η ανακοίνωση δεν βρέθηκε.")
+    await broadcast({"type": "announcement_deleted", "id": aid})
+    return {"ok": True}
+
+
+@app.post("/api/announcements/bulk")
+async def api_announcements_bulk(request: Request):
+    """Μαζική διαγραφή: {ids | all | older_than_days}."""
+    require_teacher(request)
+    body = await request.json()
+    if str(body.get("action", "delete")) != "delete":
+        raise HTTPException(400, "Για ανακοινώσεις υποστηρίζεται μόνο action=delete.")
+    ids = _bulk_ids("announcements", body)
+    n = 0
+    with db() as conn:
+        for aid in ids:
+            n += conn.execute("DELETE FROM announcements WHERE id=?", (aid,)).rowcount
+    if ids:
+        await broadcast({"type": "announcements_bulk_deleted", "ids": ids})
+    return {"ok": True, "affected": n}
 
 
 @app.get("/api/forum/threads")
@@ -1072,6 +1567,81 @@ async def api_forum_delete(tid: int, request: Request):
 def api_roster(request: Request):
     require_teacher(request)
     return roster_payload()
+
+
+# ---------------------------------------------------------------------------
+# 📚 Κατάλογος μαθημάτων & σύνδεσμοι για τη ΣΥΝΘΕΤΗ ανακοίνωση
+# ---------------------------------------------------------------------------
+FM_TAGS_INLINE = re.compile(r"^tags:\s*\[(.*?)\]\s*$", re.MULTILINE)
+FM_TAGS_BLOCK = re.compile(r"^tags:\s*\n((?:\s+-\s+.+\n?)+)", re.MULTILINE)
+FM_FAV = re.compile(r"^favorite:\s*(true|yes|1)\s*$", re.MULTILINE | re.IGNORECASE)
+FM_RE_LOCAL = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
+CLASS_LABELS_LOCAL = {"gymnasio-a": "Α' Γυμνασίου", "gymnasio-b": "Β' Γυμνασίου",
+                      "gymnasio-g": "Γ' Γυμνασίου", "lykeio-a": "Α' Λυκείου",
+                      "lykeio-b": "Β' Λυκείου", "lykeio-g": "Γ' Λυκείου"}
+
+
+@app.get("/api/lessons-catalog")
+def api_lessons_catalog(request: Request):
+    """Read-only κατάλογος μαθημάτων (τίτλος/tags/favorite/τάξη) από τα front-matter
+    του mkdocs-site — ίδια ελαφριά λογική με το Lesson Wizard, χωρίς εξαρτήσεις."""
+    require_teacher(request)
+    math_dir = PORTAL_DIR / "mkdocs-site" / "docs" / "mathimata"
+    out = []
+    if math_dir.is_dir():
+        for idx in sorted(math_dir.glob("*/*/*/index.md")):
+            parts = idx.relative_to(math_dir).parts
+            if len(parts) != 4 or parts[0] not in CLASS_LABELS_LOCAL:
+                continue
+            try:
+                text = idx.read_text(encoding="utf-8", errors="ignore")[:8000]
+            except OSError:
+                continue
+            fm_m = FM_RE_LOCAL.match(text)
+            fm = fm_m.group(1) if fm_m else ""
+            tags = []
+            m = FM_TAGS_INLINE.search(fm)
+            if m:
+                tags = [t.strip().strip("'\"") for t in m.group(1).split(",") if t.strip()]
+            else:
+                m = FM_TAGS_BLOCK.search(fm)
+                if m:
+                    tags = [x.strip().lstrip("-").strip().strip("'\"")
+                            for x in m.group(1).strip().splitlines() if x.strip()]
+            hm = re.search(r"^# (.+)$", text, re.MULTILINE)
+            title = hm.group(1).strip() if hm else parts[2]
+            out.append({"title": title[:120], "class_slug": parts[0],
+                        "class_label": CLASS_LABELS_LOCAL[parts[0]], "subject": parts[1],
+                        "lesson": parts[2], "tags": tags,
+                        "favorite": bool(FM_FAV.search(fm)),
+                        "url": f"/docs/mathimata/{parts[0]}/{parts[1]}/{parts[2]}/"})
+    return {"lessons": out,
+            "apps": [{"title": m["title"], "url": m["url"]}
+                     for m in CONFIG["menu"] if m["url"].startswith("/")],
+            "custom_links": CONFIG.get("announce_links", [])}
+
+
+@app.post("/api/announce-links")
+async def api_announce_links(request: Request):
+    """Διαμορφώσιμοι σύνδεσμοι ανακοινώσεων: {action: add|remove, title, url}."""
+    require_teacher(request)
+    body = await request.json()
+    links = list(CONFIG.get("announce_links", []))
+    action = str(body.get("action", "add"))
+    if action == "add":
+        new = clean_links([{"title": body.get("title", ""), "url": body.get("url", "")}])
+        if not new:
+            raise HTTPException(400, "Δώσε σχετικό URL πύλης (π.χ. /docs/…).")
+        if not any(l["url"] == new[0]["url"] for l in links):
+            links.append(new[0])
+    elif action == "remove":
+        url = str(body.get("url", ""))
+        links = [l for l in links if l["url"] != url]
+    else:
+        raise HTTPException(400, "action: add | remove.")
+    CONFIG["announce_links"] = links[:30]
+    save_config(CONFIG)
+    return {"ok": True, "links": CONFIG["announce_links"]}
 
 
 
@@ -1158,6 +1728,9 @@ def make_template_xlsx() -> None:
         "• Ώρες σε 24ωρη μορφή HH:MM (π.χ. 08:15). Offset σε λεπτά: -5 = πέντε λεπτά ΝΩΡΙΤΕΡΑ.",
         "• URL εφαρμογών: σχετικά με την πύλη (π.χ. /docs/, /live-quiz/, /apps/my-app/).",
         "• Τα αποτελέσματα quiz καταγράφονται ΜΟΝΟ για μαθητές· οι guests κάνουν εξάσκηση.",
+        "• Poll/quiz: από το UI υπάρχει 🔚 αυτόματο κλείσιμο όταν απαντήσουν όλοι + χρονικό όριο.",
+        "• Ανακοινώσεις/polls/quiz/chat αποθηκεύονται μόνιμα — διαχείριση (edit/delete/bulk)",
+        "     από το μενού «🗄️ Διαχείριση» του καθηγητή (προστίθεται αυτόματα και σε παλιά uploads).",
     ]
     for r in rows:
         ws.append([r])
@@ -1196,7 +1769,8 @@ def make_template_xlsx() -> None:
                 ["chat", "Chat", "💬", "#chat", 3, "ΝΑΙ", "ΝΑΙ", "ΝΑΙ"],
                 ["forum", "Forum", "🗂️", "#forum", 4, "ΟΧΙ", "ΝΑΙ", "ΝΑΙ"],
                 ["voitheia", "Βοήθεια", "❓", "#help", 5, "ΝΑΙ", "ΝΑΙ", "ΝΑΙ"],
-                ["live-quiz", "Live Quiz", "🎮", "/live-quiz/", 6, "ΝΑΙ", "ΝΑΙ", "ΝΑΙ"]]:
+                ["manage", "Διαχείριση", "🗄️", "#manage", 6, "ΟΧΙ", "ΟΧΙ", "ΝΑΙ"],
+                ["live-quiz", "Live Quiz", "🎮", "/live-quiz/", 7, "ΝΑΙ", "ΝΑΙ", "ΝΑΙ"]]:
         ws.append(row)
 
     # --- 6. Εργαλειοθήκες (μωβ) ----------------------------------------------

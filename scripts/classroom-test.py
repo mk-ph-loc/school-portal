@@ -311,6 +311,127 @@ def main():
     code, pubs = student.call("api/config/public")
     check("Μαθητής: μενού ΜΕ Forum", any(m["id"] == "forum" for m in pubs["menu"]))
 
+    print("[9β] Μόνιμες ανακοινώσεις + διαχείριση (edit/delete/bulk)")
+    code, r = teacher.call("api/announcements?limit=50")
+    anns = r.get("announcements", [])
+    check("Ανακοινώσεις αποθηκευμένες στη SQLite", code == 200 and any(a["text"] == "Ξεκινάμε!" for a in anns))
+    aid = next(a["id"] for a in anns if a["text"] == "Ξεκινάμε!")
+    code, r = teacher.call(f"api/announcements/{aid}", {"text": "Ξεκινάμε τώρα!", "kind": "announce"}, method="PUT")
+    m = student.recv(["announcement_updated"])
+    check("Edit ανακοίνωσης → ζωντανή ενημέρωση σε όλους", code == 200 and m["text"] == "Ξεκινάμε τώρα!")
+    guest.recv(["announcement_updated"]); teacher.recv(["announcement_updated"])
+    # σύνθετη ανακοίνωση με συνδέσμους + άμεση μετάβαση
+    code, r = teacher.call("api/cmd/announce", {
+        "kind": "announce", "text": "Δείτε το μάθημα", "audience": "students",
+        "links": [{"title": "Αναδρομή", "url": "/docs/mathimata/gymnasio-g/pliroforiki/"},
+                  {"title": "bad", "url": "https://evil.example"}], "navigate": True})
+    adv_id = r["announcement"]["id"]
+    check("Σύνθετη: κρατιέται μόνο ο έγκυρος σχετικός σύνδεσμος",
+          code == 200 and len(r["announcement"]["links"]) == 1)
+    m = student.recv(["announcement"])
+    check("Μαθητής έλαβε σύνθετη ανακοίνωση με links", m["id"] == adv_id and m["links"][0]["title"] == "Αναδρομή")
+    m = student.recv(["navigate"])
+    check("Άμεση μετάβαση στον 1ο σύνδεσμο", m["url"] == "/docs/mathimata/gymnasio-g/pliroforiki/")
+    guest.recv(["announcement"]); guest.recv(["navigate"])
+    # Ο καθηγητής ΔΕΝ λαμβάνει announce/navigate με audience=students (σωστό).
+    code, cat = teacher.call("api/lessons-catalog")
+    check("Κατάλογος μαθημάτων (tags/favorite) για τη σύνθετη",
+          code == 200 and len(cat["lessons"]) >= 3
+          and all("tags" in l and "favorite" in l for l in cat["lessons"]))
+    code, r = teacher.call("api/announce-links", {"action": "add", "title": "Εργασίες", "url": "/exams/"})
+    check("Διαμορφώσιμος σύνδεσμος αποθηκεύεται", code == 200 and any(l["url"] == "/exams/" for l in r["links"]))
+    teacher.call("api/announce-links", {"action": "remove", "url": "/exams/"})
+    code, r = teacher.call(f"api/announcements/{adv_id}", method="DELETE")
+    m = student.recv(["announcement_deleted"])
+    check("Delete ανακοίνωσης → αφαίρεση παντού", code == 200 and m["id"] == adv_id)
+    guest.recv(["announcement_deleted"]); teacher.recv(["announcement_deleted"])
+    code, r = teacher.call("api/announcements/bulk", {"action": "delete", "ids": [aid]})
+    check("Bulk διαγραφή ανακοινώσεων", code == 200 and r["affected"] == 1)
+    student.recv(["announcements_bulk_deleted"]); guest.recv(["announcements_bulk_deleted"])
+    teacher.recv(["announcements_bulk_deleted"])
+
+    print("[9γ] Poll/Quiz lifecycle — auto-close & όχι επανεμφάνιση μετά την απάντηση")
+    code, r = teacher.call("api/cmd/poll", {"question": "Auto-close poll;", "options": ["Ναι", "Όχι"],
+                                            "audience": "role:student", "auto_close": True})
+    apid = r["id"]
+    student.recv(["poll"])
+    student.send({"type": "poll_vote", "id": apid, "choice": 0})
+    student.recv(["poll_voted"])
+    # Πρώτα έρχεται το ζωντανό αποτέλεσμα (closed=False) και μετά το τελικό
+    # του αυτόματου κλεισίματος (closed=True) — διαβάζουμε μέχρι το closed.
+    closed_seen = False
+    for _ in range(3):
+        m = student.recv(["poll_results"], timeout=10)
+        if m.get("closed"):
+            closed_seen = True
+            break
+    check("Poll έκλεισε ΜΟΝΟ του όταν ψήφισαν όλοι οι eligible", closed_seen)
+    teacher.recv(["poll_results"]); teacher.recv(["poll_results"])
+    # reconnect του μαθητή: το welcome ΔΕΝ πρέπει να ξαναστείλει το απαντημένο poll
+    student.close(); student.connect()
+    w = student.recv(["welcome"])
+    check("Reconnect: κανένα απαντημένο poll στο welcome", all(p["id"] != apid for p in w["polls"]))
+    check("Reconnect: κανένα υποβεβλημένο quiz στο welcome", len(w["quizzes"]) == 0)
+    # χρονικό όριο poll
+    code, r = teacher.call("api/cmd/poll", {"question": "Με όριο;", "options": ["Α", "Β"],
+                                            "audience": "guests", "auto_close": False, "duration_sec": 5})
+    tpid = r["id"]
+    guest.recv(["poll"])
+    m = guest.recv(["poll_results"], timeout=12)
+    check("Poll με duration_sec έκλεισε αυτόματα στη λήξη", m["id"] == tpid and m["closed"] is True)
+    teacher.recv(["poll_results"])
+    # edit & bulk polls
+    code, _ = teacher.call(f"api/polls/{tpid}", {"question": "Με όριο — διορθωμένο"}, method="PUT")
+    check("Edit δημοσκόπησης", code == 200)
+    teacher.recv(["poll_updated"])
+    code, r = teacher.call("api/polls/bulk", {"action": "delete", "ids": [apid, tpid]})
+    check("Bulk διαγραφή polls (+ψήφοι)", code == 200 and r["affected"] == 2)
+    student.recv(["poll_deleted"]); student.recv(["poll_deleted"])
+    guest.recv(["poll_deleted"]); guest.recv(["poll_deleted"])
+    teacher.recv(["poll_deleted"]); teacher.recv(["poll_deleted"])
+    # quiz edit (τίτλος) & διαγραφή αποτελέσματος & bulk delete
+    code, qs = teacher.call("api/quizzes")
+    last_q = qs["quizzes"][0]
+    code, _ = teacher.call(f"api/quizzes/{last_q['id']}", {"title": "Quiz — νέο όνομα"}, method="PUT")
+    check("Edit τίτλου quiz", code == 200)
+    teacher.recv(["quiz_updated"])
+    rid = last_q["results"][0]["id"]
+    code, _ = teacher.call(f"api/quiz-results/{rid}", method="DELETE")
+    check("Διαγραφή μεμονωμένου αποτελέσματος", code == 200)
+    code, r = teacher.call("api/quizzes/bulk", {"action": "delete", "ids": [last_q["id"]]})
+    check("Bulk διαγραφή quiz (+αποτελέσματα)", code == 200 and r["affected"] == 1)
+    student.recv(["quiz_deleted"]); guest.recv(["quiz_deleted"]); teacher.recv(["quiz_deleted"])
+
+    print("[9δ] Chat moderation — σιωπή & διαγραφή μηνυμάτων")
+    suid = next(c["uid"] for c in teacher.last_roster["clients"] if c["name"] == "Μαρία")
+    code, r = teacher.call("api/mutes", {"uid": suid, "minutes": 5})
+    m = student.recv(["muted"])
+    check("Σιωπή μαθητή → προσωπική ειδοποίηση", code == 200 and r["muted"] and m["until_ts"] > time.time())
+    teacher.recv(["mute_changed"])
+    student.send({"type": "chat", "text": "Δεν πρέπει να περάσει"})
+    m = student.recv(["muted"], timeout=8)
+    check("Muted μήνυμα μπλοκάρεται στον server", m["until_ts"] > time.time())
+    code, r = teacher.call("api/mutes", {"uid": suid, "minutes": 0})
+    student.recv(["unmuted"])
+    check("Άρση σιωπής", code == 200 and not r["muted"])
+    teacher.recv(["mute_changed"])
+    student.send({"type": "chat", "text": "Ανάρμοστο μήνυμα"})
+    m = guest.recv(["chat"]); bad_id = m["id"]
+    student.recv(["chat"]); teacher.recv(["chat"])
+    code, _ = teacher.call(f"api/chat/messages/{bad_id}", method="DELETE")
+    m = guest.recv(["chat_deleted"])
+    check("Διαγραφή μηνύματος → ζωντανά σε όλους", code == 200 and bad_id in m["ids"])
+    student.recv(["chat_deleted"]); teacher.recv(["chat_deleted"])
+    code, hist = student.call("api/chat/history")
+    check("Το διαγραμμένο μήνυμα δεν υπάρχει στο ιστορικό", all(x["id"] != bad_id for x in hist["messages"]))
+    student.send({"type": "chat", "text": "msg για bulk 1"})
+    b1 = guest.recv(["chat"])["id"]; student.recv(["chat"]); teacher.recv(["chat"])
+    student.send({"type": "chat", "text": "msg για bulk 2"})
+    b2 = guest.recv(["chat"])["id"]; student.recv(["chat"]); teacher.recv(["chat"])
+    code, r = teacher.call("api/chat/bulk", {"ids": [b1, b2]})
+    check("Bulk διαγραφή chat", code == 200 and r["affected"] == 2)
+    guest.recv(["chat_deleted"]); student.recv(["chat_deleted"]); teacher.recv(["chat_deleted"])
+
     print("[10] Αποσύνδεση → ενημέρωση roster")
     guest.close()
     try:

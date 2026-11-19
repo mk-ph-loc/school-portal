@@ -149,11 +149,29 @@ def main() -> int:
         panels = guest.evaluate(f"{alpine(guest)}.panels.map(p=>({{id:p.id,mode:p.mode}}))")
         check("Ο guest έχει εργαλειοθήκες από το config", len(panels) >= 1, str(panels))
         di = guest.evaluate(f"{alpine(guest)}.panels.findIndex(p=>p.mode==='dock')")
+        dock_id = guest.evaluate(f"{alpine(guest)}.panels[{di}].id")
+        # Περιεχόμενο widget ΠΡΙΝ το float (π.χ. chat input ή timer placeholder)
+        before = guest.evaluate(
+            f"(()=>{{const s=document.getElementById('dock-slot-{dock_id}');"
+            "return s ? s.innerHTML.length : -1})()")
         guest.evaluate(f"(()=>{{const a={alpine(guest)};a.toggleMode(a.panels[{di}])}})()")
         time.sleep(0.8)
         mode = guest.evaluate(f"{alpine(guest)}.panels[{di}].mode")
         floated = guest.evaluate("!!document.querySelector('.tb-panel')")
         check("Ξεκούμπωμα → πλωτή εργαλειοθήκη (float)", mode == "float" and floated, mode)
+        # BUG FIX: το widget πρέπει να μετακομίσει στο float slot με τα περιεχόμενά του
+        after = guest.evaluate(
+            f"(()=>{{const s=document.getElementById('float-slot-{dock_id}');"
+            "if(!s) return -1; const w=s.querySelector('[data-widget]');"
+            "return w ? w.innerHTML.length : 0})()")
+        check(f"Το float διατηρεί τα περιεχόμενα του widget '{dock_id}'",
+              isinstance(after, int) and after > 50 and after >= (before or 0) * 0.8,
+              f"before={before} after={after}")
+        visible = guest.evaluate(
+            f"(()=>{{const el=document.getElementById('float-{dock_id}');"
+            "if(!el) return false; const r=el.getBoundingClientRect();"
+            "return r.width>100 && r.height>60 && getComputedStyle(el).display!=='none'})()")
+        check("Η πλωτή εργαλειοθήκη είναι ορατή με σώμα", bool(visible))
         guest.evaluate(f"(()=>{{const a={alpine(guest)};a.panels[{di}].x=300;a.panels[{di}].y=200}})()")
         time.sleep(0.5)
         pos = guest.evaluate(f"(()=>{{const a={alpine(guest)};const el=document.getElementById('float-'+a.panels[{di}].id);if(!el)return null;const r=el.getBoundingClientRect();return [Math.round(r.left),Math.round(r.top)]}})()")
@@ -184,6 +202,45 @@ def main() -> int:
         check("Δημόσιος timer εμφανίζεται στον guest", bool(timer_ok))
         countdown = guest.evaluate(f"(()=>{{const a={alpine(guest)};const t=a.activeTimers.find(x=>x.label==='UI Timer');return a.fmtLeft(a.timerLeft(t))}})()")
         check("Αντίστροφη μέτρηση σε μορφή mm:ss", bool(countdown and ":" in str(countdown)), str(countdown))
+        # BUG FIX: ο guest μπορεί πλέον να κλείσει (τοπικά) το παράθυρο του timer
+        guest.evaluate(f"(()=>{{const a={alpine(guest)};const t=a.activeTimers.find(x=>x.label==='UI Timer');a.dismissTimer(t)}})()")
+        time.sleep(0.4)
+        gone = guest.evaluate(f"!{alpine(guest)}.activeTimers.some(t=>t.label==='UI Timer')")
+        check("Ο guest κλείνει το timer με το ✕ (τοπική απόκρυψη)", bool(gone))
+        teacher.evaluate(f"(()=>{{const a={alpine(teacher)};const t=a.activeTimers.find(x=>x.label==='UI Timer');if(t)a.stopTimer(t.id)}})()")
+        time.sleep(0.4)
+
+        print("\n=== 5. Poll: ψήφος → auto-close → reconnect ΔΕΝ ξαναδείχνει modal ===")
+        teacher.evaluate(f"(()=>{{const a={alpine(teacher)};a.cmd.audience='guests';a.cmd.pollQ='UI poll: όλα καλά;';a.cmd.pollOpts='Ναι, Όχι';a.cmd.pollShow=true;a.cmd.pollAuto=true;a.sendPoll()}})()")
+        poll_shown = wait_for(guest, f"{alpine(guest)}.activePoll && {alpine(guest)}.activePoll.question.includes('UI poll')", timeout=15)
+        check("Ο guest βλέπει το poll modal", bool(poll_shown))
+        guest.evaluate(f"{alpine(guest)}.votePoll(0)")
+        closed = wait_for(guest, f"{alpine(guest)}.activePoll && {alpine(guest)}.activePoll.closed === true", timeout=15)
+        check("Auto-close: το poll ολοκληρώθηκε όταν ψήφισαν όλοι", bool(closed))
+        results_visible = guest.evaluate(f"!!{alpine(guest)}.pollResults && {alpine(guest)}.pollResults.total >= 1")
+        check("Ο guest βλέπει τα τελικά αποτελέσματα στο κλειστό poll", bool(results_visible))
+        guest.evaluate(f"{alpine(guest)}.hidePoll()")
+        # reconnect: προσομοίωση με νέο WS — το welcome δεν πρέπει να φέρει το poll
+        guest.evaluate(f"(()=>{{const a={alpine(guest)};a.ws.close()}})()")
+        back = wait_for(guest, f"{alpine(guest)}.wsOk === true", timeout=20)
+        time.sleep(1.0)
+        no_reshow = guest.evaluate(f"!{alpine(guest)}.activePoll")
+        check("Reconnect: το απαντημένο poll ΔΕΝ επανεμφανίζεται", bool(back and no_reshow))
+
+        print("\n=== 6. Κονσόλα διαχείρισης & σύνθετη ανακοίνωση (UI καθηγητή) ===")
+        has_manage = teacher.evaluate(f"{alpine(teacher)}.menu.some(m=>m.url==='#manage')")
+        check("Μενού καθηγητή: 🗄️ Διαχείριση", bool(has_manage))
+        teacher.evaluate(f"(()=>{{const a={alpine(teacher)};a.openMenu(a.menu.find(m=>m.url==='#manage'))}})()")
+        mg_ok = wait_for(teacher, "!!document.getElementById('mg-body') && document.querySelectorAll('#mg-body .mg-check').length >= 1", timeout=15)
+        check("Η κονσόλα φορτώνει λίστα με checkboxes (bulk)", bool(mg_ok))
+        teacher.evaluate(f"(()=>{{const a={alpine(teacher)};a.manageTab='polls';a.renderManage(document.getElementById('panel-host'))}})()")
+        polls_tab = wait_for(teacher, f"{alpine(teacher)}.mgPolls.length >= 1", timeout=15)
+        check("Καρτέλα Δημοσκοπήσεις: αποθηκευμένα polls με αποτελέσματα", bool(polls_tab))
+        teacher.evaluate(f"(()=>{{const a={alpine(teacher)};a.toggleAdvMode()}})()")
+        cat_ok = wait_for(teacher, f"{alpine(teacher)}.catalog.lessons.length >= 3", timeout=15)
+        check("Σύνθετη ανακοίνωση: κατάλογος μαθημάτων φορτώνει", bool(cat_ok))
+        fav_filter = teacher.evaluate(f"(()=>{{const a={alpine(teacher)};a.linkFilter.fav=true;const n=a.filteredCatalog().length;a.linkFilter.fav=false;return n}})()")
+        check("Φίλτρο ⭐ αγαπημένων λειτουργεί", isinstance(fav_filter, int) and fav_filter >= 1, str(fav_filter))
 
         print(f"\n{'✓ ΟΛΟΙ οι browser έλεγχοι πέρασαν' if not FAILED else '✗ ΑΠΟΤΥΧΙΑ'} ({PASSED} ✓ / {FAILED} ✗)")
         return 1 if FAILED else 0

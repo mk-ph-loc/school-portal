@@ -57,6 +57,7 @@ extra_javascript:
   - assets/javascripts/mathjax-config.js
   - assets/javascripts/mermaid-init.js
   - assets/javascripts/mkdocs-extras.js
+  - assets/javascripts/lesson-edit.js
   - assets/javascripts/portal-nav.js
 
 # Hook: μετατρέπει τα markers διδακτικών φάσεων σε δομικά στοιχεία και

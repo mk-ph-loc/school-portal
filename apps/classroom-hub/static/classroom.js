@@ -19,14 +19,26 @@ function classroom() {
     ws: null, wsOk: false, roster: [], announcements: [], toasts: [],
     chatMsgs: [], chatText: '', activeTimers: [], clockTick: 0, serverSkew: 0,
     activePoll: null, pollResults: null, activeQuiz: null, quizAnswers: [], quizResult: null,
-    quizProgress: [], cfgSummary: '',
+    quizProgress: [], cfgSummary: '', mutedUntil: 0, mutes: [],
+    answeredPolls: {}, answeredQuizzes: {},   // τοπικά «έχω ήδη απαντήσει» (και για guests)
     // --- κεντρικό παράθυρο ---
     activeUrl: '', activeTitle: '', frameSrc: 'about:blank',
     panels: [],            // {id,title,mode,x,y,w,h,open}
     cmd: { audience: 'students', tmima: '', text: '', msgId: '', navUrl: '',
            pollId: '', pollQ: '', pollOpts: '', pollShow: true, quizBankId: '',
+           pollAuto: true, pollMin: 0, quizAuto: true, quizMin: 0,
            timerLabel: '', timerMin: 5, timerVis: 'public', timerPeriod: 0,
            timerEdge: 'end', timerOffset: 0 },
+    // --- σύνθετη ανακοίνωση ---
+    advMode: false, advKind: 'announce', advLinks: [], advNavigate: false,
+    catalog: { lessons: [], apps: [], custom_links: [] },
+    linkFilter: { q: '', cls: '', tag: '', fav: false },
+    newLink: { title: '', url: '' },
+    // --- κονσόλα διαχείρισης ---
+    manageTab: 'announcements', mgAnnouncements: [], mgPolls: [], mgQuizzes: [], mgChat: [],
+    mgSel: {},             // id → true (επιλεγμένα ανά καρτέλα, καθαρίζεται σε αλλαγή tab)
+    mgEdit: null,          // {type:'announcement'|'poll'|'quiz', item:{...}}
+    mgDays: 7, mgBusy: false,
 
     get roleLabel() {
       return { guest: 'επισκέπτης', student: 'μαθητής', teacher: 'καθηγητής' }[this.role] || '';
@@ -77,6 +89,7 @@ function classroom() {
       await this.loadConfig();
       this.connectWs();
       this.loadChatHistory();
+      this.loadMutes();
     },
 
     async loadConfig() {
@@ -89,6 +102,7 @@ function classroom() {
       this.eventsCfg = cfg.events_cfg; this.allowedApps = cfg.allowed_apps;
       this.guestChat = cfg.guest_chat; this.guestForum = cfg.guest_forum;
       this.announcements = cfg.announcements || [];
+      this.catalog.custom_links = cfg.announce_links || [];
       this.serverSkew = (cfg.server_now || Date.now() / 1000) - Date.now() / 1000;
       this.buildPanels(cfg.toolbars);
     },
@@ -97,10 +111,14 @@ function classroom() {
       // διατήρηση θέσεων/mode στο localStorage ανά χρήστη
       let saved = {};
       try { saved = JSON.parse(localStorage.getItem('classroom.panels') || '{}'); } catch (e) {}
+      // Κρατάμε ζωντανές αναφορές των widgets ΠΡΙΝ αλλάξουν τα panels — το Alpine
+      // x-for μπορεί να καταστρέψει τα παλιά slots μαζί με το περιεχόμενό τους.
+      this._widgets = this._widgets || {};
+      document.querySelectorAll('[data-widget]').forEach(w => { this._widgets[w.dataset.widget] = w; });
       this.panels = toolbars.map(t => Object.assign(
         { id: t.id, title: t.title, mode: t.mode, x: t.x, y: t.y, w: t.w, h: t.h, open: true },
         saved[t.id] || {}));
-      this.$nextTick(() => this.mountWidgets());
+      this.scheduleMount();
     },
 
     savePanels() {
@@ -110,19 +128,47 @@ function classroom() {
     },
 
     mountWidgets() {
-      // μετακίνηση των ζωντανών widget templates στα slots (dock ή float)
+      // Μετακίνηση των ζωντανών widget nodes στα slots (dock ή float).
+      // Τα nodes κρατιούνται και σε ΙΔΙΩΤΙΚΗ αναφορά (this._widgets): όταν το
+      // Alpine x-for καταστρέφει το παλιό slot, το node αποσυνδέεται από το DOM
+      // και δεν το βρίσκει πια κανένας querySelector — γι' αυτό το float άδειαζε.
+      this._widgets = this._widgets || {};
       this.panels.forEach(p => {
-        const src = document.querySelector(`#widget-templates [data-widget="${p.id}"]`);
+        let src = this._widgets[p.id];
+        if (!src || !src.isConnected) {
+          const found = document.querySelector(`[data-widget="${p.id}"]`);
+          if (found) src = this._widgets[p.id] = found;
+        }
         const slot = document.getElementById((p.mode === 'dock' ? 'dock-slot-' : 'float-slot-') + p.id);
         if (src && slot && src.parentElement !== slot) slot.appendChild(src);
       });
     },
 
+    scheduleMount() {
+      // Το Alpine x-for δημιουργεί/καταστρέφει τα slots ΑΣΥΓΧΡΟΝΑ (queueMicrotask
+      // μετά το reactive effect) — ένα μόνο $nextTick μπορεί να τρέξει ΠΡΙΝ την
+      // ενημέρωση του DOM. Δοκιμάζουμε ξανά μέχρι να τοποθετηθούν όλα τα widgets.
+      let tries = 0;
+      const attempt = () => {
+        this.mountWidgets();
+        const missing = this.panels.some(p => {
+          const slot = document.getElementById((p.mode === 'dock' ? 'dock-slot-' : 'float-slot-') + p.id);
+          return !slot || !slot.querySelector(`[data-widget="${p.id}"]`);
+        });
+        if (missing && ++tries < 20) setTimeout(attempt, 50);
+      };
+      this.$nextTick(attempt);
+    },
+
     toggleMode(p) {
+      // ΠΡΩΤΑ σώζουμε τη ζωντανή αναφορά του widget — μετά το mode change το
+      // Alpine μπορεί να καταστρέψει το παλιό slot μαζί με το περιεχόμενο.
+      const w = document.querySelector(`[data-widget="${p.id}"]`);
+      if (w) (this._widgets = this._widgets || {})[p.id] = w;
       p.mode = p.mode === 'dock' ? 'float' : 'dock';
       p.open = true;
       this.savePanels();
-      this.$nextTick(() => this.mountWidgets());
+      this.scheduleMount();
     },
 
 
@@ -193,12 +239,13 @@ function classroom() {
       if (m.url === '#announcements') host.innerHTML = this.renderAnnouncements();
       else if (m.url === '#chat') {
         host.innerHTML = '<div class="rounded-2xl bg-white ring-1 ring-slate-200 p-4 shadow-sm"><h2 class="font-extrabold mb-2">💬 Chat Τάξης</h2><div id="page-chat-slot"></div></div>';
-        const src = document.querySelector('#widget-templates [data-widget="chat"]');
+        const src = document.querySelector('[data-widget="chat"]');
         const inToolbar = this.panels.some(p => p.id === 'chat');
         if (!inToolbar && src) document.getElementById('page-chat-slot').appendChild(src);
         else document.getElementById('page-chat-slot').innerHTML =
           '<p class="text-sm text-slate-500">Το chat είναι ήδη ανοιχτό στην εργαλειοθήκη 💬 (αριστερά ή πλωτή).</p>';
       }
+      else if (m.url === '#manage') await this.renderManage(host);
       else if (m.url === '#forum') await this.renderForum(host);
       else if (m.url === '#help') host.innerHTML = this.renderHelp();
       else host.innerHTML = '';
@@ -208,11 +255,18 @@ function classroom() {
       const items = [...this.announcements].reverse().map(a => {
         const icon = a.kind === 'award' ? '🏆' : (a.kind === 'congrats' ? '🎉' : '📣');
         const time = new Date(a.ts * 1000).toLocaleTimeString('el-GR', { hour: '2-digit', minute: '2-digit' });
+        const links = (a.links || []).map(l =>
+          `<button data-nav="${this.esc(l.url)}" data-title="${this.esc(l.title)}"
+             class="ann-link inline-flex items-center gap-1 rounded-lg bg-blue-50 hover:bg-blue-100 ring-1 ring-blue-200 text-blue-700 text-[11px] font-bold px-2 py-1 mt-1 mr-1 transition">🔗 ${this.esc(l.title)}</button>`).join('');
         return `<div class="rounded-xl bg-white ring-1 ring-slate-200 p-3 flex gap-3 items-start shadow-sm">
           <span class="text-xl">${icon}</span>
           <div class="flex-1"><div class="text-sm font-semibold">${this.esc(a.text)}</div>
+          ${links ? `<div>${links}</div>` : ''}
           <div class="text-[10px] text-slate-400 mt-0.5">${time}${a.target_name ? ' → ' + this.esc(a.target_name) : ''}</div></div></div>`;
       }).join('');
+      // Τα κουμπιά συνδέσμων δένονται μετά την εισαγωγή του HTML (openPanelPage).
+      setTimeout(() => document.querySelectorAll('#panel-host .ann-link').forEach(b =>
+        b.addEventListener('click', () => this.navigateTo(b.dataset.nav, '🔗 ' + b.dataset.title))), 0);
       return `<h2 class="font-extrabold text-lg mb-3">📣 Ανακοινώσεις</h2>
         <div class="space-y-2">${items || '<p class="text-sm text-slate-400 italic">Δεν υπάρχουν ανακοινώσεις ακόμα.</p>'}</div>`;
     },
@@ -363,8 +417,17 @@ function classroom() {
           this.serverSkew = m.server_now - Date.now() / 1000;
           this.announcements = m.announcements || [];
           this.activeTimers = m.timers || [];
-          if (m.polls && m.polls.length && this.role !== 'teacher') this.showPoll(m.polls[m.polls.length - 1]);
-          if (m.quizzes && m.quizzes.length && this.role !== 'teacher') this.showQuiz(m.quizzes[m.quizzes.length - 1]);
+          this.mutedUntil = m.muted_until || 0;
+          // Ο server στέλνει ΜΟΝΟ polls/quizzes που δεν έχω απαντήσει· επιπλέον
+          // φιλτράρουμε τοπικά (guest quiz δεν καταγράφεται στη βάση).
+          if (m.polls && m.polls.length && this.role !== 'teacher') {
+            const p = m.polls.filter(x => !this.answeredPolls[x.id]).pop();
+            if (p) this.showPoll(p);
+          }
+          if (m.quizzes && m.quizzes.length && this.role !== 'teacher') {
+            const q = m.quizzes.filter(x => !this.answeredQuizzes[x.id]).pop();
+            if (q) this.showQuiz(q);
+          }
           break;
         case 'pong': this.serverSkew = m.server_now - Date.now() / 1000; break;
         case 'roster': {
@@ -379,6 +442,27 @@ function classroom() {
           if (this.activeUrl === '#announcements')
             document.getElementById('panel-host').innerHTML = this.renderAnnouncements();
           break;
+        case 'announcement_updated': {
+          const i = this.announcements.findIndex(a => a.id === m.id);
+          if (i >= 0) this.announcements[i] = Object.assign({}, this.announcements[i], m);
+          if (this.activeUrl === '#announcements')
+            document.getElementById('panel-host').innerHTML = this.renderAnnouncements();
+          if (this.activeUrl === '#manage' && this.manageTab === 'announcements') this.loadManage();
+          break;
+        }
+        case 'announcement_deleted':
+          this.announcements = this.announcements.filter(a => a.id !== m.id);
+          this.toasts = this.toasts.filter(t => t.id !== m.id);
+          if (this.activeUrl === '#announcements')
+            document.getElementById('panel-host').innerHTML = this.renderAnnouncements();
+          if (this.activeUrl === '#manage' && this.manageTab === 'announcements') this.loadManage();
+          break;
+        case 'announcements_bulk_deleted':
+          this.announcements = this.announcements.filter(a => !m.ids.includes(a.id));
+          if (this.activeUrl === '#announcements')
+            document.getElementById('panel-host').innerHTML = this.renderAnnouncements();
+          if (this.activeUrl === '#manage' && this.manageTab === 'announcements') this.loadManage();
+          break;
         case 'random_pick':
           this.toast({ id: 'pick' + m.ts, kind: m.uid === this.identity.uid ? 'award' : 'congrats',
                        text: `🎲 Επιλέχθηκε: ${m.emoji} ${m.name}${m.tmima ? ' (' + m.tmima + ')' : ''}!` });
@@ -390,26 +474,66 @@ function classroom() {
             this.toast({ id: 'nav' + m.ts, kind: 'announce', text: 'Ο καθηγητής μας μεταφέρει σε νέα σελίδα: ' + (m.title || m.url) });
           }
           break;
-        case 'poll': this.showPoll(m); break;
+        case 'poll':
+          // ενημέρωση ενεργού poll (edit) ή νέο poll — ποτέ επανεμφάνιση απαντημένου
+          if (m.updated && this.activePoll && this.activePoll.id === m.id) {
+            Object.assign(this.activePoll, { question: m.question, options: m.options, show_results: m.show_results });
+          } else if (!this.answeredPolls[m.id]) this.showPoll(m);
+          break;
         case 'poll_voted':
-          if (this.activePoll && this.activePoll.id === m.id) this.activePoll.answered = true;
+          this.answeredPolls[m.id] = true;
+          if (this.activePoll && this.activePoll.id === m.id) {
+            this.activePoll.answered = true;
+            // χωρίς ζωντανά αποτελέσματα → αυτόματη απόκρυψη μετά από λίγο
+            if (!this.activePoll.show_results && this.role !== 'teacher')
+              setTimeout(() => {
+                if (this.activePoll && this.activePoll.id === m.id && !this.activePoll.closed)
+                  this.hidePoll();
+              }, 6000);
+          }
           break;
         case 'poll_results':
           if (this.activePoll && this.activePoll.id === m.id) {
             this.pollResults = m;
             if (m.closed) { this.activePoll.closed = true; this.activePoll.show_results = true; }
+          } else if (m.closed && this.role === 'teacher') {
+            this.pollResults = m;                       // τελικά αποτελέσματα για τον καθηγητή
           }
           break;
-        case 'quiz': this.showQuiz(m); break;
-        case 'quiz_result': this.quizResult = m; if (m.recorded || m.score === m.total) this.confetti(); break;
+        case 'poll_deleted':
+          if (this.activePoll && this.activePoll.id === m.id) this.hidePoll();
+          if (this.activeUrl === '#manage' && this.manageTab === 'polls') this.loadManage();
+          break;
+        case 'poll_updated':
+          if (this.activeUrl === '#manage' && this.manageTab === 'polls') this.loadManage();
+          break;
+        case 'quiz':
+          if (m.updated && this.activeQuiz && this.activeQuiz.id === m.id && !this.quizResult) {
+            Object.assign(this.activeQuiz, { title: m.title, questions: m.questions });
+            this.quizAnswers = new Array(m.questions.length).fill(-1);
+          } else if (!this.answeredQuizzes[m.id]) this.showQuiz(m);
+          break;
+        case 'quiz_result':
+          this.quizResult = m;
+          if (this.activeQuiz) this.answeredQuizzes[this.activeQuiz.id] = true;
+          if (m.recorded || m.score === m.total) this.confetti();
+          break;
         case 'quiz_progress':
           this.quizProgress = this.quizProgress.filter(r => r.uid !== m.uid).concat([m]);
           break;
         case 'quiz_closed':
           if (this.activeQuiz && this.activeQuiz.id === m.id && !this.quizResult) {
             this.activeQuiz = null;
-            this.toast({ id: 'qc' + m.id, kind: 'announce', text: 'Το quiz έκλεισε από τον καθηγητή.' });
+            this.toast({ id: 'qc' + m.id, kind: 'announce', text: 'Το quiz έκλεισε.' });
           }
+          if (this.activeUrl === '#manage' && this.manageTab === 'quizzes') this.loadManage();
+          break;
+        case 'quiz_deleted':
+          if (this.activeQuiz && this.activeQuiz.id === m.id) { this.activeQuiz = null; this.quizResult = null; }
+          if (this.activeUrl === '#manage' && this.manageTab === 'quizzes') this.loadManage();
+          break;
+        case 'quiz_updated':
+          if (this.activeUrl === '#manage' && this.manageTab === 'quizzes') this.loadManage();
           break;
         case 'timer':
           this.activeTimers = this.activeTimers.filter(t => t.id !== m.id).concat([m]);
@@ -429,6 +553,22 @@ function classroom() {
             if (log) log.scrollTop = log.scrollHeight;
           });
           break;
+        case 'chat_deleted':
+          this.chatMsgs = this.chatMsgs.filter(x => !m.ids.includes(x.id));
+          if (this.activeUrl === '#manage' && this.manageTab === 'chat') this.loadManage();
+          break;
+        case 'muted':
+          this.mutedUntil = m.until_ts;
+          this.toast({ id: 'mute' + m.until_ts, kind: 'announce',
+                       text: '🔇 Ο καθηγητής επέβαλε σιωπή στο chat/forum έως τις ' + this.fmtTime(m.until_ts) + '.' });
+          break;
+        case 'unmuted':
+          this.mutedUntil = 0;
+          this.toast({ id: 'unmute' + Date.now(), kind: 'congrats', text: '🔊 Η σιωπή σου αρθηκε — μπορείς να ξαναγράψεις!' });
+          break;
+        case 'mute_changed':
+          this.loadMutes();
+          break;
         case 'forum_post': this.appendForumPost(m); break;
         case 'forum_thread':
           if (this.activeUrl === '#forum' && !this.forumOpen)
@@ -447,6 +587,7 @@ function classroom() {
       this.activePoll = Object.assign({ answered: false, closed: false }, m);
       this.pollResults = null;
     },
+    hidePoll() { this.activePoll = null; this.pollResults = null; },
     votePoll(i) { this.wsSend({ type: 'poll_vote', id: this.activePoll.id, choice: i }); },
     async closePoll() {
       if (!this.activePoll) return;
@@ -456,6 +597,7 @@ function classroom() {
       this.activeQuiz = m; this.quizAnswers = new Array(m.questions.length).fill(-1);
       this.quizResult = null;
     },
+    hideQuiz() { this.activeQuiz = null; this.quizResult = null; this.quizAnswers = []; },
     submitQuiz() {
       this.wsSend({ type: 'quiz_submit', id: this.activeQuiz.id, answers: this.quizAnswers });
     },
@@ -471,7 +613,21 @@ function classroom() {
 
     // --- timers ---
     now() { return Date.now() / 1000 + this.serverSkew; },
-    timerLeft(t) { this.clockTick; return Math.max(0, t.ends_at - this.now()); },
+    timerLeft(t) {
+      this.clockTick;
+      const left = Math.max(0, t.ends_at - this.now());
+      // Watchdog: αν το timer_done χάθηκε (reconnect/ασθενές ρολόι), δεν μένει
+      // «κολλημένο» στο 00:00 — καθαρίζεται τοπικά 10s μετά τη λήξη.
+      if (left === 0 && this.now() - t.ends_at > 10) {
+        setTimeout(() => { this.activeTimers = this.activeTimers.filter(x => x.id !== t.id); }, 0);
+      }
+      return left;
+    },
+    dismissTimer(t) {
+      // ✕ για ΟΛΟΥΣ: ο μαθητής/guest κρύβει τοπικά· ο καθηγητής σταματά για όλους.
+      if (this.role === 'teacher') this.stopTimer(t.id);
+      else this.activeTimers = this.activeTimers.filter(x => x.id !== t.id);
+    },
     fmtLeft(sec) {
       sec = Math.ceil(sec);
       const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
@@ -485,7 +641,7 @@ function classroom() {
       if (!this.panels.some(p => p.id === 'timer')) {
         this.panels.push({ id: 'timer', title: '⏱️ Χρονομετρητής', mode: 'float',
                            x: 60, y: 120, w: 280, h: 220, open: true });
-        this.$nextTick(() => this.mountWidgets());
+        this.scheduleMount();
       } else {
         const p = this.panels.find(p => p.id === 'timer');
         p.open = true;
@@ -542,15 +698,20 @@ function classroom() {
       const options = this.cmd.pollOpts.split(',').map(s => s.trim()).filter(Boolean);
       if (!this.cmd.pollQ.trim() || options.length < 2) { alert('Χρειάζεται ερώτηση και ≥2 επιλογές (με κόμμα).'); return; }
       try {
-        await this.api('api/cmd/poll', this.cmdBody({ question: this.cmd.pollQ, options, show_results: this.cmd.pollShow }));
+        await this.api('api/cmd/poll', this.cmdBody({
+          question: this.cmd.pollQ, options, show_results: this.cmd.pollShow,
+          auto_close: this.cmd.pollAuto, duration_sec: Math.max(0, this.cmd.pollMin || 0) * 60 }));
         this.cmd.pollQ = ''; this.cmd.pollOpts = '';
       } catch (e) { alert(e.message); }
     },
     async sendQuizBank() {
       if (!this.cmd.quizBankId) return;
       this.quizProgress = [];
-      try { await this.api('api/cmd/quiz', this.cmdBody({ bank_id: this.cmd.quizBankId })); }
-      catch (e) { alert(e.message); }
+      try {
+        await this.api('api/cmd/quiz', this.cmdBody({
+          bank_id: this.cmd.quizBankId, auto_close: this.cmd.quizAuto,
+          duration_sec: Math.max(0, this.cmd.quizMin || 0) * 60 }));
+      } catch (e) { alert(e.message); }
     },
     async sendTimer() {
       const body = this.cmdBody({ label: this.cmd.timerLabel || 'Χρονομετρητής',
@@ -576,6 +737,310 @@ function classroom() {
         this.cfgSummary = `✓ ${s.tmimata} τμήματα · ${s.menu} μενού · ${s.toolbars} εργαλειοθήκες · ${s.timers} timers · ${s.events} γεγονότα · ${s.quizzes} quiz`;
       } catch (e) { alert(e.message); }
       ev.target.value = '';
+    },
+
+    // --- 🔇 chat moderation (καθηγητής) ---
+    async loadMutes() {
+      if (this.role !== 'teacher') return;
+      try { this.mutes = (await this.api('api/mutes')).mutes; } catch (e) {}
+    },
+    isMuted(uid) { this.clockTick; return this.mutes.some(m => m.uid === uid && m.until_ts > this.now()); },
+    async muteUser(c, minutes) {
+      try { await this.api('api/mutes', { uid: c.uid, name: c.name, minutes }); await this.loadMutes(); }
+      catch (e) { alert(e.message); }
+    },
+    async unmuteUser(uid) {
+      try { await this.api('api/mutes', { uid, minutes: 0 }); await this.loadMutes(); }
+      catch (e) { alert(e.message); }
+    },
+    async deleteChatMsg(id) {
+      try { await this.api('api/chat/messages/' + id, undefined, 'DELETE'); }
+      catch (e) { alert(e.message); }
+    },
+
+    // --- 📣 σύνθετη ανακοίνωση ---
+    async toggleAdvMode() {
+      this.advMode = !this.advMode;
+      if (this.advMode && !this.catalog.lessons.length) await this.loadCatalog();
+    },
+    async loadCatalog() {
+      try {
+        const d = await this.api('api/lessons-catalog');
+        this.catalog = { lessons: d.lessons, apps: d.apps, custom_links: d.custom_links };
+      } catch (e) { alert(e.message); }
+    },
+    catalogTags() { return [...new Set(this.catalog.lessons.flatMap(l => l.tags || []))].sort(); },
+    catalogClasses() {
+      const seen = {};
+      this.catalog.lessons.forEach(l => { seen[l.class_slug] = l.class_label; });
+      return Object.entries(seen).map(([slug, label]) => ({ slug, label }));
+    },
+    filteredCatalog() {
+      const f = this.linkFilter, q = f.q.trim().toLowerCase();
+      return this.catalog.lessons.filter(l =>
+        (!f.fav || l.favorite) && (!f.cls || l.class_slug === f.cls) &&
+        (!f.tag || (l.tags || []).includes(f.tag)) &&
+        (!q || l.title.toLowerCase().includes(q) || l.lesson.includes(q)));
+    },
+    linkAdded(url) { return this.advLinks.some(l => l.url === url); },
+    toggleLink(item) {
+      if (this.linkAdded(item.url)) this.advLinks = this.advLinks.filter(l => l.url !== item.url);
+      else if (this.advLinks.length < 8) this.advLinks.push({ title: item.title, url: item.url });
+    },
+    async addCustomLink() {
+      if (!this.newLink.url.trim()) return;
+      try {
+        const d = await this.api('api/announce-links',
+          { action: 'add', title: this.newLink.title, url: this.newLink.url.trim() });
+        this.catalog.custom_links = d.links;
+        this.newLink = { title: '', url: '' };
+      } catch (e) { alert(e.message); }
+    },
+    async removeCustomLink(url) {
+      try {
+        const d = await this.api('api/announce-links', { action: 'remove', url });
+        this.catalog.custom_links = d.links;
+        this.advLinks = this.advLinks.filter(l => l.url !== url);
+      } catch (e) { alert(e.message); }
+    },
+    async sendAdvanced() {
+      if (!this.cmd.text.trim()) { alert('Γράψε το κείμενο της ανακοίνωσης.'); return; }
+      try {
+        await this.api('api/cmd/announce', this.cmdBody({
+          kind: this.advKind, text: this.cmd.text, links: this.advLinks, navigate: this.advNavigate }));
+        this.cmd.text = ''; this.advLinks = []; this.advNavigate = false;
+      } catch (e) { alert(e.message); }
+    },
+
+    // --- 🗄️ κονσόλα διαχείρισης ---
+    async renderManage(host) {
+      if (this.role !== 'teacher') {
+        host.innerHTML = '<div class="rounded-2xl bg-white ring-1 ring-slate-200 p-6 text-sm text-slate-500 shadow-sm">🔒 Η διαχείριση είναι διαθέσιμη μόνο στους καθηγητές.</div>';
+        return;
+      }
+      host.innerHTML = `
+        <h2 class="font-extrabold text-lg mb-3">🗄️ Διαχείριση Τάξης</h2>
+        <div class="flex gap-1.5 flex-wrap mb-3" id="mg-tabs">
+          ${[['announcements', '📣 Ανακοινώσεις'], ['polls', '📊 Δημοσκοπήσεις'], ['quizzes', '📝 Quiz & Αποτελέσματα'], ['chat', '💬 Chat & Σιωπές']]
+            .map(([id, label]) => `<button data-tab="${id}" class="mg-tab rounded-lg px-3 py-1.5 text-xs font-bold transition ${this.manageTab === id ? 'bg-indigo-600 text-white' : 'bg-white ring-1 ring-slate-200 text-slate-600 hover:bg-indigo-50'}">${label}</button>`).join('')}
+        </div>
+        <div id="mg-body" class="space-y-2"></div>`;
+      host.querySelectorAll('.mg-tab').forEach(b => b.addEventListener('click', () => {
+        this.manageTab = b.dataset.tab; this.mgSel = {}; this.renderManage(host);
+      }));
+      await this.loadManage();
+    },
+
+    async loadManage() {
+      const body = document.getElementById('mg-body');
+      if (!body || this.role !== 'teacher') return;
+      this.mgBusy = true;
+      try {
+        if (this.manageTab === 'announcements') {
+          this.mgAnnouncements = (await this.api('api/announcements?limit=200')).announcements.reverse();
+          body.innerHTML = this.mgAnnouncementsHtml();
+        } else if (this.manageTab === 'polls') {
+          this.mgPolls = (await this.api('api/polls')).polls;
+          body.innerHTML = this.mgPollsHtml();
+        } else if (this.manageTab === 'quizzes') {
+          this.mgQuizzes = (await this.api('api/quizzes')).quizzes;
+          body.innerHTML = this.mgQuizzesHtml();
+        } else if (this.manageTab === 'chat') {
+          this.mgChat = (await this.api('api/chat/history?limit=300')).messages.reverse();
+          await this.loadMutes();
+          body.innerHTML = this.mgChatHtml();
+        }
+        this.bindManage(body);
+      } catch (e) { body.innerHTML = `<p class="text-sm text-red-600">${this.esc(e.message)}</p>`; }
+      this.mgBusy = false;
+    },
+
+    mgToolbar(kind, extra = '') {
+      const n = Object.values(this.mgSel).filter(Boolean).length;
+      return `<div class="rounded-xl bg-white ring-1 ring-slate-200 p-2.5 flex items-center gap-2 flex-wrap text-xs shadow-sm">
+        <label class="flex items-center gap-1.5 font-bold"><input type="checkbox" id="mg-all" class="rounded"> Όλα</label>
+        <span class="text-slate-400" id="mg-count">${n} επιλεγμένα</span>
+        <button id="mg-del-sel" class="rounded-lg bg-red-100 hover:bg-red-200 text-red-700 font-bold px-2.5 py-1">🗑 Διαγραφή επιλεγμένων</button>
+        ${extra}
+        <span class="ml-auto flex items-center gap-1">Παλαιότερα των
+          <input id="mg-days" type="number" min="1" value="${this.mgDays}" class="w-14 rounded border border-slate-300 px-1.5 py-0.5"> ημερών:
+          <button id="mg-del-old" class="rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-2.5 py-1">🧹 Καθαρισμός</button>
+        </span></div>`;
+    },
+
+    mgRow(id, inner, extraBtns = '') {
+      return `<div class="rounded-xl bg-white ring-1 ring-slate-200 p-3 flex gap-2.5 items-start shadow-sm">
+        <input type="checkbox" data-sel="${this.esc(String(id))}" class="mg-check mt-1 rounded" ${this.mgSel[id] ? 'checked' : ''}>
+        <div class="flex-1 min-w-0">${inner}</div>
+        <div class="flex gap-1 shrink-0">${extraBtns}
+          <button data-del="${this.esc(String(id))}" class="mg-del rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold px-2 py-1" title="Διαγραφή">🗑</button>
+        </div></div>`;
+    },
+
+    mgAnnouncementsHtml() {
+      const rows = this.mgAnnouncements.map(a => {
+        const icon = a.kind === 'award' ? '🏆' : (a.kind === 'congrats' ? '🎉' : '📣');
+        const links = (a.links || []).map(l => `<span class="inline-block rounded bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0.5 mr-1">🔗 ${this.esc(l.title)}</span>`).join('');
+        return this.mgRow(a.id, `
+          <div class="text-sm font-semibold">${icon} ${this.esc(a.text)}</div>
+          ${links ? `<div class="mt-0.5">${links}</div>` : ''}
+          <div class="text-[10px] text-slate-400 mt-0.5">${new Date(a.ts * 1000).toLocaleString('el-GR')} · κοινό: ${this.esc(a.audience)}${a.tmima ? ' (' + this.esc(a.tmima) + ')' : ''}${a.target_name ? ' → ' + this.esc(a.target_name) : ''}</div>`,
+          `<button data-edit="${a.id}" class="mg-edit rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold px-2 py-1" title="Επεξεργασία">✏️</button>`);
+      }).join('');
+      return this.mgToolbar('announcements') + (rows || '<p class="text-sm text-slate-400 italic p-2">Καμία αποθηκευμένη ανακοίνωση.</p>');
+    },
+
+    mgPollsHtml() {
+      const rows = this.mgPolls.map(p => {
+        const bars = p.options.map((o, i) => `
+          <div class="text-[11px] mt-0.5"><div class="flex justify-between"><span>${this.esc(o)}</span><b>${p.counts[i]}</b></div>
+          <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-cyan-500" style="width:${p.total ? 100 * p.counts[i] / p.total : 0}%"></div></div></div>`).join('');
+        return this.mgRow(p.id, `
+          <div class="text-sm font-semibold">📊 ${this.esc(p.question)}
+            <span class="text-[9px] px-1.5 py-0.5 rounded-full font-bold ${p.closed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-700'}">${p.closed ? 'ΚΛΕΙΣΤΟ' : 'ΕΝΕΡΓΟ'}</span></div>
+          <div class="max-w-sm">${bars}</div>
+          <div class="text-[10px] text-slate-400 mt-0.5">${new Date(p.ts * 1000).toLocaleString('el-GR')} · ${p.total} ψήφοι</div>`,
+          `${p.closed ? '' : `<button data-close="${p.id}" class="mg-close rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold px-2 py-1" title="Κλείσιμο">🔒</button>`}
+           <button data-edit="${p.id}" class="mg-edit rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold px-2 py-1" title="Επεξεργασία">✏️</button>`);
+      }).join('');
+      return this.mgToolbar('polls', '<button id="mg-close-sel" class="rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-2.5 py-1">🔒 Κλείσιμο επιλεγμένων</button>')
+        + (rows || '<p class="text-sm text-slate-400 italic p-2">Καμία δημοσκόπηση.</p>');
+    },
+
+    mgQuizzesHtml() {
+      const rows = this.mgQuizzes.map(q => {
+        const results = q.results.map(r => `
+          <div class="flex items-center justify-between text-[11px] bg-fuchsia-50 rounded px-1.5 py-0.5 mt-0.5">
+            <span>${this.esc(r.name)}${r.tmima ? ' (' + this.esc(r.tmima) + ')' : ''}</span>
+            <span class="flex items-center gap-1.5"><b>${r.score}/${r.total}</b>
+              <button data-rdel="${r.id}" class="mg-rdel text-red-400 hover:text-red-600" title="Διαγραφή αποτελέσματος">✕</button></span>
+          </div>`).join('');
+        return this.mgRow(q.id, `
+          <div class="text-sm font-semibold">📝 ${this.esc(q.title)}
+            <span class="text-[9px] px-1.5 py-0.5 rounded-full font-bold ${q.closed ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-700'}">${q.closed ? 'ΚΛΕΙΣΤΟ' : 'ΕΝΕΡΓΟ'}</span></div>
+          <div class="text-[10px] text-slate-400 mt-0.5">${new Date(q.ts * 1000).toLocaleString('el-GR')} · ${q.results.length} υποβολές</div>
+          <div class="max-w-sm mt-1">${results || '<span class="text-[10px] text-slate-400 italic">Χωρίς αποτελέσματα ακόμα.</span>'}</div>
+          ${q.results.length ? `<button data-rclear="${q.id}" class="mg-rclear text-[10px] text-red-500 hover:underline mt-1">🧹 διαγραφή όλων των αποτελεσμάτων</button>` : ''}`,
+          `${q.closed ? '' : `<button data-close="${q.id}" class="mg-close rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold px-2 py-1" title="Κλείσιμο">🔒</button>`}
+           <button data-edit="${q.id}" class="mg-edit rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold px-2 py-1" title="Επεξεργασία τίτλου">✏️</button>`);
+      }).join('');
+      return this.mgToolbar('quizzes', '<button id="mg-close-sel" class="rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-2.5 py-1">🔒 Κλείσιμο επιλεγμένων</button>')
+        + (rows || '<p class="text-sm text-slate-400 italic p-2">Κανένα quiz.</p>');
+    },
+
+    mgChatHtml() {
+      const muteRows = this.mutes.map(m => `
+        <div class="flex items-center justify-between text-xs bg-amber-50 ring-1 ring-amber-200 rounded-lg px-2.5 py-1.5">
+          <span>🔇 <b>${this.esc(m.name || m.uid)}</b> έως ${this.fmtTime(m.until_ts)} (από ${this.esc(m.by_name)})</span>
+          <button data-unmute="${this.esc(m.uid)}" class="mg-unmute rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold px-2 py-0.5">🔊 Άρση</button>
+        </div>`).join('');
+      const rows = this.mgChat.map(m => this.mgRow(m.id, `
+        <div class="text-xs"><b style="color:${this.esc(m.color || '#334155')}">${this.esc(m.name)}</b>
+          <span class="text-slate-400 text-[9px]">${new Date(m.ts * 1000).toLocaleString('el-GR')}</span>
+          <span class="text-[9px] text-slate-400">(${this.esc(m.role)}${m.tmima ? ' · ' + this.esc(m.tmima) : ''})</span>
+          <div class="bg-slate-50 rounded px-2 py-1 mt-0.5 break-words">${this.esc(m.text)}</div></div>`,
+        m.role !== 'teacher' ? `<button data-mute="${this.esc(m.uid)}" data-name="${this.esc(m.name)}" class="mg-mute rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold px-2 py-1" title="Σιωπή">🔇</button>` : '')).join('');
+      return this.mgToolbar('chat', '<button id="mg-clear-chat" class="rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold px-2.5 py-1">🧨 Εκκαθάριση ΟΛΟΥ του chat</button>')
+        + (muteRows ? `<div class="space-y-1">${muteRows}</div>` : '')
+        + (rows || '<p class="text-sm text-slate-400 italic p-2">Άδειο chat.</p>');
+    },
+
+    bindManage(body) {
+      const refreshCount = () => {
+        const n = Object.values(this.mgSel).filter(Boolean).length;
+        const el = body.querySelector('#mg-count'); if (el) el.textContent = n + ' επιλεγμένα';
+      };
+      body.querySelectorAll('.mg-check').forEach(ch => ch.addEventListener('change', () => {
+        this.mgSel[ch.dataset.sel] = ch.checked; refreshCount();
+      }));
+      const all = body.querySelector('#mg-all');
+      if (all) all.addEventListener('change', () => {
+        body.querySelectorAll('.mg-check').forEach(ch => { ch.checked = all.checked; this.mgSel[ch.dataset.sel] = all.checked; });
+        refreshCount();
+      });
+      const selIds = () => Object.keys(this.mgSel).filter(k => this.mgSel[k]);
+      const tab = this.manageTab;
+      const bulkPath = { announcements: 'api/announcements/bulk', polls: 'api/polls/bulk', quizzes: 'api/quizzes/bulk', chat: 'api/chat/bulk' }[tab];
+      const doBulk = async (payload, confirmMsg) => {
+        if (confirmMsg && !confirm(confirmMsg)) return;
+        try { await this.api(bulkPath, payload); this.mgSel = {}; await this.loadManage(); }
+        catch (e) { alert(e.message); }
+      };
+      const delSel = body.querySelector('#mg-del-sel');
+      if (delSel) delSel.addEventListener('click', () => {
+        const ids = selIds();
+        if (!ids.length) { alert('Διάλεξε πρώτα στοιχεία με τα checkboxes.'); return; }
+        doBulk(tab === 'chat' ? { ids } : { action: 'delete', ids }, `Διαγραφή ${ids.length} στοιχείων;`);
+      });
+      const closeSel = body.querySelector('#mg-close-sel');
+      if (closeSel) closeSel.addEventListener('click', () => {
+        const ids = selIds();
+        if (!ids.length) { alert('Διάλεξε πρώτα στοιχεία.'); return; }
+        doBulk({ action: 'close', ids });
+      });
+      const days = body.querySelector('#mg-days');
+      const delOld = body.querySelector('#mg-del-old');
+      if (delOld) delOld.addEventListener('click', () => {
+        const d = Math.max(1, parseFloat(days.value) || 7); this.mgDays = d;
+        doBulk(tab === 'chat' ? { older_than_days: d } : { action: 'delete', older_than_days: d },
+               `Διαγραφή όσων είναι παλαιότερα των ${d} ημερών;`);
+      });
+      const clearChat = body.querySelector('#mg-clear-chat');
+      if (clearChat) clearChat.addEventListener('click', () => doBulk({ clear_all: true }, 'Διαγραφή ΟΛΟΥ του ιστορικού chat;'));
+      body.querySelectorAll('.mg-del').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Διαγραφή;')) return;
+        const id = b.dataset.del;
+        const path = { announcements: 'api/announcements/', polls: 'api/polls/', quizzes: 'api/quizzes/', chat: 'api/chat/messages/' }[tab] + id;
+        try { await this.api(path, undefined, 'DELETE'); delete this.mgSel[id]; await this.loadManage(); }
+        catch (e) { alert(e.message); }
+      }));
+      body.querySelectorAll('.mg-close').forEach(b => b.addEventListener('click', async () => {
+        const path = (tab === 'polls' ? 'api/cmd/poll/' : 'api/cmd/quiz/') + b.dataset.close + '/close';
+        try { await this.api(path, {}); await this.loadManage(); } catch (e) { alert(e.message); }
+      }));
+      body.querySelectorAll('.mg-edit').forEach(b => b.addEventListener('click', () => this.openMgEdit(tab, b.dataset.edit)));
+      body.querySelectorAll('.mg-rdel').forEach(b => b.addEventListener('click', async () => {
+        try { await this.api('api/quiz-results/' + b.dataset.rdel, undefined, 'DELETE'); await this.loadManage(); }
+        catch (e) { alert(e.message); }
+      }));
+      body.querySelectorAll('.mg-rclear').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Διαγραφή ΟΛΩΝ των αποτελεσμάτων αυτού του quiz;')) return;
+        try { await this.api('api/quiz-results/bulk-delete', { quiz_id: b.dataset.rclear, all: true }); await this.loadManage(); }
+        catch (e) { alert(e.message); }
+      }));
+      body.querySelectorAll('.mg-mute').forEach(b => b.addEventListener('click', async () => {
+        const mins = prompt('Σιωπή (λεπτά) για τον/τη ' + b.dataset.name + ':', '15');
+        if (mins === null) return;
+        try { await this.api('api/mutes', { uid: b.dataset.mute, name: b.dataset.name, minutes: parseFloat(mins) || 15 }); await this.loadManage(); }
+        catch (e) { alert(e.message); }
+      }));
+      body.querySelectorAll('.mg-unmute').forEach(b => b.addEventListener('click', () => this.unmuteUser(b.dataset.unmute).then(() => this.loadManage())));
+    },
+
+    openMgEdit(tab, id) {
+      if (tab === 'announcements') {
+        const a = this.mgAnnouncements.find(x => x.id === id);
+        if (a) this.mgEdit = { type: 'announcement', id, kind: a.kind, text: a.text };
+      } else if (tab === 'polls') {
+        const p = this.mgPolls.find(x => x.id === id);
+        if (p) this.mgEdit = { type: 'poll', id, question: p.question, options: p.options.join(', '), show_results: p.show_results };
+      } else if (tab === 'quizzes') {
+        const q = this.mgQuizzes.find(x => x.id === id);
+        if (q) this.mgEdit = { type: 'quiz', id, title: q.title };
+      }
+    },
+    async saveMgEdit() {
+      const e = this.mgEdit; if (!e) return;
+      try {
+        if (e.type === 'announcement')
+          await this.api('api/announcements/' + e.id, { kind: e.kind, text: e.text }, 'PUT');
+        else if (e.type === 'poll')
+          await this.api('api/polls/' + e.id, { question: e.question,
+            options: e.options.split(',').map(s => s.trim()).filter(Boolean), show_results: e.show_results }, 'PUT');
+        else if (e.type === 'quiz')
+          await this.api('api/quizzes/' + e.id, { title: e.title }, 'PUT');
+        this.mgEdit = null; await this.loadManage();
+      } catch (err) { alert(err.message); }
     },
 
     // --- εφέ: toasts, confetti, beep ---

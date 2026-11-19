@@ -43,7 +43,23 @@ function wizard(authed) {
       this.$watch('virtual', v => { try { localStorage.setItem('wizard-virtual', JSON.stringify(v)); } catch (e) {} });
       this.$watch('gridTmima', v => { try { localStorage.setItem('wizard-grid-tmima', v); } catch (e) {} });
       setInterval(() => { this.nowTick = Date.now(); }, 20000);   // ρολόι συστήματος → χρωματισμός «τώρα»
-      if (this.authed) await this.refresh();
+      if (this.authed) {
+        await this.refresh();
+        await this.handleDeepLink();
+      }
+    },
+
+    /** Deep-links: #schedule → καρτέλα Ωράριο· #edit=<cls>/<subj>/<lesson> →
+     *  άμεσο άνοιγμα του visual editor (π.χ. από το ✏️ στις σελίδες /docs/). */
+    async handleDeepLink() {
+      const h = location.hash || '';
+      if (h === '#schedule') { this.tab = 'schedule'; return; }
+      const m = h.match(/^#edit=([\w-]+\/[\w-]+\/[\w-]+)$/);
+      if (m) {
+        this.tab = 'lessons';
+        await this.openLessonByKey(m[1]);
+        if (!this.editing) this.error = 'Το μάθημα δεν βρέθηκε: ' + m[1];
+      }
     },
 
     async api(url, opts) {

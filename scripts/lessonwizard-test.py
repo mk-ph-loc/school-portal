@@ -155,6 +155,14 @@ def main() -> int:
     st, _, bks = http_json("/lesson-wizard/api/books", cookie=cookie)
     check("api/books: λίστα βιβλίων", st == 200 and isinstance(bks.get("books"), list))
 
+    # --- lesson-edit.js: το νέο script σερβίρεται στα static assets ---
+    try:
+        with urllib.request.urlopen(BASE + "/docs/assets/javascripts/lesson-edit.js", timeout=10) as r:
+            le_src = r.read().decode("utf-8", errors="ignore")
+        check("lesson-edit.js διαθέσιμο στο /docs/assets/", r.status == 200 and "lesson-edit-fab" in le_src)
+    except Exception as exc:
+        check("lesson-edit.js διαθέσιμο στο /docs/assets/", False, str(exc))
+
     tn_url = "/docs/mathimata/gymnasio-g/pliroforiki/m02-pyrgoi-anoy/index.teacher.html"
     try:
         with urllib.request.urlopen(BASE + tn_url, timeout=10) as r:
@@ -251,6 +259,35 @@ def main() -> int:
         check("καθηγητής: 6 badges φάσεων με χρόνους", bool(badges))
         bar = cdp.evaluate("!!document.querySelector('.lesson-plan-bar')")
         check("καθηγητής: μπάρα σχεδίου μαθήματος + link wizard", bool(bar))
+
+        # --- ✏️ lesson-edit FAB (μόνο καθηγητής) & γρήγορη επεξεργασία ---
+        fab = wait_for(cdp, "!!document.getElementById('lesson-edit-fab')", timeout=15)
+        check("καθηγητής: FAB ✏️ επεξεργασίας στη σελίδα μαθήματος", bool(fab))
+        if fab:
+            # Το Material instant navigation μπορεί να ξαναχτίσει το FAB λίγο
+            # μετά την εμφάνιση — περιμένουμε να σταθεροποιηθεί πριν το click.
+            time.sleep(1.5)
+            cdp.evaluate("document.getElementById('lesson-edit-fab').click()")
+            menu_open = wait_for(cdp, "document.getElementById('lesson-edit-menu').classList.contains('open')")
+            visual_link = wait_for(cdp,
+                "(function(){var a=document.querySelector('#lesson-edit-menu a');"
+                "return a ? a.getAttribute('href') : null;})()", timeout=10)
+            check("μενού ✏️: link προς wizard #edit=<lesson>",
+                  bool(menu_open) and visual_link == "/lesson-wizard/#edit=gymnasio-g/pliroforiki/m02-pyrgoi-anoy",
+                  str(visual_link))
+            cdp.evaluate("[...document.querySelectorAll('#lesson-edit-menu button')].find(b=>b.textContent.includes('Γρήγορη')).click()")
+            loaded_md = wait_for(cdp,
+                "(function(){var t=document.getElementById('lesson-edit-textarea');"
+                "return t && t.value.indexOf('<!-- phase:')!==-1;})()", timeout=15)
+            check("γρήγορη επεξεργασία: φορτώνει το raw markdown του μαθήματος", bool(loaded_md))
+            cdp.evaluate("document.getElementById('lesson-edit-close').click()")
+
+        # --- Deep-link #edit ανοίγει τον visual editor του wizard ---
+        cdp.send("Page.navigate", {"url": BASE + "/lesson-wizard/#edit=gymnasio-g/pliroforiki/m02-pyrgoi-anoy"})
+        deep_ok = wait_for(cdp,
+            "(function(){var b=document.body._x_dataStack && document.body._x_dataStack[0];"
+            "return b && b.editing === 'gymnasio-g/pliroforiki/m02-pyrgoi-anoy';})()", timeout=20)
+        check("wizard deep-link #edit: ανοίγει κατευθείαν το μάθημα", bool(deep_ok))
 
         # --- Αρχική: widget ωραρίου ---
         cdp.send("Page.navigate", {"url": BASE + "/docs/"})
