@@ -289,10 +289,10 @@ def main():
     check("Parser: καρτέλες → menu/toolbars/timers/events/quiz",
           len(cfg["menu"]) >= 5 and len(cfg["toolbars"]) >= 3 and len(cfg["timers"]) >= 2
           and len(cfg["events"]) >= 2 and len(cfg["quizzes_bank"]) >= 1)
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("lw", "/opt/school-portal/apps/lesson-wizard/app.py")
-    lw = importlib.util.module_from_spec(spec); spec.loader.exec_module(lw)
-    sched = lw.parse_schedule_xlsx(tmp)
+    # Ο parser ωραρίου ζει στο common.schedule (Task 3: το lesson-wizard/app.py
+    # έγινε wiring με routers — ίδιοι parsers, ίδια σύγκριση με πριν).
+    from common.schedule import parse_schedule_xlsx as lw_parse_schedule_xlsx
+    sched = lw_parse_schedule_xlsx(tmp)
     check("Το ίδιο Excel διαβάζεται ΑΥΤΟΥΣΙΟ από το Lesson Wizard (ωράριο)",
           sched["tmimata"] == cfg["schedule"]["tmimata"]
           and sched["periods"] == cfg["schedule"]["periods"]

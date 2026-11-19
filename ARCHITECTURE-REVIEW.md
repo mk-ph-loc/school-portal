@@ -3,6 +3,7 @@
 > **Ημερομηνία review:** 19 Νοεμβρίου 2026
 > **Κατάσταση:** Βήμα 1 (bug fixes) ✅ · Βήμα 2 (κοινό πακέτο `common/`) ✅ — commit `2e0f814`, pushed στο origin/main
 > · Task 3 (classroom-hub → APIRouters) ✅ + εκκρεμότητες Βήματος 2 (ενιαίος κωδικός, backup/list_lessons) ✅ — commit `e5b92cc`, pushed στο origin/main (19/11/2026)
+> · Task 3 ΟΛΟΚΛΗΡΩΘΗΚΕ: h5p-studio & lesson-wizard → APIRouters ✅ (19/11/2026, ίδιο μοτίβο· ίδια routes/API contracts, όλα τα e2e πράσινα)
 > **Σκοπός αρχείου:** αρχειακή καταγραφή του review + αυτόνομος οδηγός για τα επόμενα tasks
 > (κάθε ενότητα «Task» μπορεί να δοθεί αυτούσια ως prompt σε νέα συνομιλία).
 
@@ -145,10 +146,43 @@ livequiz ✓ · smoke 73/73 ✓ (όλα τα services active με τον νέο 
   ⚠️ Προϋπάρχον (ΟΧΙ από το refactor): το `tools-browser-test.py` αποτυγχάνει στα
   checks του παλιού vanilla πίνακα (`redraw`/`.tbtn`) γιατί το /board/ είναι πλέον
   Excalidraw — ίδιο failure και με τον pre-refactor κώδικα· θέλει ενημέρωση του test.
-- `h5p-studio/main.py` (~1.700 γραμμές) → 4 routers: editor/library, player/import-export,
-  AI wizard, MkDocs embed. **(Εκκρεμεί)**
-- `apps/lesson-wizard/app.py` → lessons, schedule, fs-browser, books. **(Εκκρεμεί)**
-- **Αποδοχή:** όλα τα e2e tests πράσινα χωρίς αλλαγές στα API contracts. ✅ για classroom-hub.
+- ~~`h5p-studio/main.py` (~1.700 γραμμές)~~ ✅ **Έγινε 19/11/2026** — ίδιο μοτίβο με classroom-hub:
+  ```
+  h5p-studio/
+    main.py           # wiring: FastAPI, mounts (static/h5p-libraries/library), healthz (67 γρ.)
+    state.py          # διαδρομές/σταθερές/TYPE_LIBS/labels/icons/PREVIEW_ID + TeacherAuth (79 γρ.)
+    store.py          # SQLite schema+queries (activities/settings) + ai_config/.env.keys (93 γρ.)
+    content.py        # dependency closure, build_content ανά τύπο, save/upsert, editor-state ↔ content.json (656 γρ.)
+    routers/
+      editor.py       # σελίδες index/edit, login/logout, CRUD βιβλιοθήκης, preview, media upload/videos (290 γρ.)
+      player.py       # play/preview pages + import/export .h5p (validate_h5p_zip) (174 γρ.)
+      wizard.py       # AI suggest/prompts/generate/paste-json + ρυθμίσεις AI (339 γρ.)
+      embed.py        # list_lessons (common.lessons) + embed-code + 1-κλικ embed (.bak, common.fs) (100 γρ.)
+  ```
+  Συμβάσεις: ίδια 27 routes/methods (diff πριν/μετά = κενό)· κοινό state στο `state.py`
+  (`import state`, ΟΧΙ `from state import …`)· το `content.py` είναι καθαρή βιβλιοθήκη
+  (εξαρτάται μόνο από state/store — κανένα router δεν κάνει import άλλο router).
+  Δεν υπήρχαν `@app.on_event`/WS σε αυτό το app (lifespan δεν χρειάζεται).
+- ~~`apps/lesson-wizard/app.py` (949 γραμμές)~~ ✅ **Έγινε 19/11/2026**:
+  ```
+  apps/lesson-wizard/
+    app.py            # wiring: FastAPI, mount static, include_router (43 γρ.)
+    state.py          # διαδρομές/σταθερές + auth + lesson_dir/list_all_lessons/backup_file/rebuild_nav (134 γρ.)
+    routers/
+      lessons.py      # σελίδα/auth/check, λίστα & visual editor φάσεων, meta/tags, νέο μάθημα, υλικό (265 γρ.)
+      schedule.py     # Excel template/upload, public JSON, active/broadcast, πλέγμα (cell/tmima/periods/move) (295 γρ.)
+      fs_browser.py   # γενικός file browser docs/ (fs_path guard, list/read/save/upload/mkdir/delete) (159 γρ.)
+      books.py        # 📖 βιβλιοθήκη PDF + rebuild_library_page + link #page=N σε μάθημα (164 γρ.)
+  ```
+  Συμβάσεις: ίδια 32 routes/methods (diff πριν/μετά = κενό)· `rebuild_nav()`/`backup_file()`
+  κοινοί στο `state.py` (τους καλούν lessons/schedule/fs_browser/books — χωρίς κυκλικά).
+  Το `scripts/classroom-test.py` §9 πλέον καλεί απευθείας τον `common.schedule.parse_schedule_xlsx`
+  (αντί να φορτώνει ολόκληρο το lw app.py ως module — ίδιος parser, ίδια σύγκριση).
+  **Επαλήθευση (και τα δύο):** h5p-test 54/54 · lessonwizard-test 62/62 · classroom-test ✓ ·
+  livequiz ✓ · weblab ✓ · appbuilder ✓ · smoke 73/73. AST-level diff όλων των συναρτήσεων/
+  σταθερών/classes πριν↔μετά: 0 διαφορές (μόνο προσθήκη `state./store./content.` qualifiers).
+- **Αποδοχή:** όλα τα e2e tests πράσινα χωρίς αλλαγές στα API contracts. ✅ ΟΛΟΚΛΗΡΩΘΗΚΕ
+  (classroom-hub + h5p-studio + lesson-wizard).
 
 ### Task 4 — Αξιοπιστία (μικρό, μπορεί μαζί με Task 3)
 - **Nav single-owner στο mkdocs.yml**: σήμερα γράφουν 2 writers με διαφορετική λογική —
