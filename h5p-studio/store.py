@@ -7,18 +7,20 @@ activities/settings στο h5p.db (μέσω common.db — WAL/Row, χωρίς FK
 from __future__ import annotations
 
 import os
-import sqlite3
 
-from common.db import connect
+from common.db import session
 
 import state
 
 # ---------------------------------------------------------------------------
 # Βάση δεδομένων (SQLite — κοινές ρυθμίσεις πύλης μέσω common.db)
 # ---------------------------------------------------------------------------
-def db() -> sqlite3.Connection:
-    # Χωρίς FK constraints στο σχήμα — foreign_keys όπως πριν (default OFF)
-    return connect(state.DB_PATH, foreign_keys=False)
+def db():
+    """Context manager σύνδεσης: commit/rollback ΚΑΙ close (common.db.session).
+
+    Χωρίς FK constraints στο σχήμα — foreign_keys όπως πριν (default OFF).
+    """
+    return session(state.DB_PATH, foreign_keys=False)
 
 
 def init_db() -> None:

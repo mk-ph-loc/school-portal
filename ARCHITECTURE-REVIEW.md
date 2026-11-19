@@ -4,6 +4,7 @@
 > **Κατάσταση:** Βήμα 1 (bug fixes) ✅ · Βήμα 2 (κοινό πακέτο `common/`) ✅ — commit `2e0f814`, pushed στο origin/main
 > · Task 3 (classroom-hub → APIRouters) ✅ + εκκρεμότητες Βήματος 2 (ενιαίος κωδικός, backup/list_lessons) ✅ — commit `e5b92cc`, pushed στο origin/main (19/11/2026)
 > · Task 3 ΟΛΟΚΛΗΡΩΘΗΚΕ: h5p-studio & lesson-wizard → APIRouters ✅ — commit `ebb73b0`, pushed στο origin/main (19/11/2026, ίδιο μοτίβο· ίδια routes/API contracts, όλα τα e2e πράσινα)
+> · Task 4 (Αξιοπιστία) ✅: common/nav.py single-owner + flock, lifespan livequiz/weblab, logging παντού, SQLite session() με closing — όλα τα e2e §5 πράσινα (19/11/2026)
 > **Σκοπός αρχείου:** αρχειακή καταγραφή του review + αυτόνομος οδηγός για τα επόμενα tasks
 > (κάθε ενότητα «Task» μπορεί να δοθεί αυτούσια ως prompt σε νέα συνομιλία).
 
@@ -184,20 +185,46 @@ livequiz ✓ · smoke 73/73 ✓ (όλα τα services active με τον νέο 
 - **Αποδοχή:** όλα τα e2e tests πράσινα χωρίς αλλαγές στα API contracts. ✅ ΟΛΟΚΛΗΡΩΘΗΚΕ
   (classroom-hub + h5p-studio + lesson-wizard).
 
-### Task 4 — Αξιοπιστία (μικρό, μπορεί μαζί με Task 3)
-- **Nav single-owner στο mkdocs.yml**: σήμερα γράφουν 2 writers με διαφορετική λογική —
-  Lesson Wizard `rebuild_nav()` (block rewrite μεταξύ BEGIN/END AUTO-NAV) και
-  MD-Bridge `add_to_nav()` (text insertion ΕΚΤΟΣ block → κίνδυνος απώλειας σε rebuild +
-  race χωρίς lock). Λύση: ένα `common/nav.py` με folder-driven idempotent
-  `rebuild_nav()`· όλοι γράφουν αρχεία και το καλούν· `flock` στο `data/nav.lock`
-  γύρω από κάθε yml write.
-- **Lifespan** αντί deprecated `@app.on_event("startup")` (classroom, livequiz, weblab).
-- **Logging** σε όλα τα apps (stderr → journalctl)· καθόλου σιωπηλά `except: pass`
-  σε background loops.
-- **SQLite connection closing**: το `with db() as conn:` κάνει commit αλλά ΔΕΝ κλείνει
-  τη σύνδεση (39 call sites στο classroom). Wrapper με `contextlib.closing` στο
-  `common/db.py` (π.χ. `@contextmanager def session(path)`).
-- **Rate-limit tuning** αν χρειαστεί (βλ. §2 σημείωση NAT).
+### Task 4 — Αξιοπιστία ✅ **Έγινε 19/11/2026**
+- ~~**Nav single-owner στο mkdocs.yml**~~ ✅ Νέο `common/nav.py`: folder-driven
+  idempotent `rebuild_nav(mkdocs_yml, backup_dir=…)` που ξαναχτίζει ΟΛΟ το μπλοκ
+  μεταξύ BEGIN/END AUTO-NAV — Βιβλιοθήκη (αν υπάρχουν PDF) + Μαθήματα
+  (`mathimata/`, ίδιες συμβάσεις τίτλων με πριν) + **Παλιό Υλικό** (ΟΛΟΙ οι
+  φάκελοι του `_paradeigma/` — Γυμνάσιο/Λύκειο + games/media/teachers με τίτλους
+  από τα H1 τους). Το χειροκίνητο `_paradeigma` nav μετακόμισε ΜΕΣΑ στο block
+  (αφαιρέθηκε το διπλότυπο εκτός). Κάθε ανάγνωση+εγγραφή κάτω από **flock στο
+  `data/nav.lock`**· ατομική εγγραφή (tmp + `os.replace`, 664)· ιστορικό .bak
+  στο backups/ του caller (common.fs). Ο wizard (`state.rebuild_nav()`) και το
+  MD-Bridge (`add_to_nav()` → γράφει μόνο το .md και καλεί rebuild) είναι πλέον
+  λεπτοί wrappers — καμία δική τους λογική nav. Οι δημοσιεύσεις του bridge
+  επιβιώνουν κάθε rebuild του wizard (live ad-hoc test ✓)· 8 ταυτόχρονα
+  rebuilds από ξεχωριστές διεργασίες → 1 μπλοκ, καμία διαφθορά ✓.
+- ~~**Lifespan** αντί deprecated `@app.on_event("startup")`~~ ✅ livequiz &
+  weblab πήραν `@asynccontextmanager lifespan` (init_db + cleanup task, cancel
+  στο shutdown) — ίδιο μοτίβο με το classroom (Task 3). Δεν έμεινε κανένα
+  `on_event` στα δικά μας apps.
+- ~~**Logging** σε όλα τα apps~~ ✅ `logging.basicConfig(INFO, stderr)` σε
+  exams/livequiz/weblab/h5p/appbuilder/pandoc/mdbridge/lessonwizard/classroom
+  (→ journalctl μέσω systemd). Τα σιωπηλά `except Exception: pass` στα
+  background loops έγιναν `log.exception(...)`: `_cleanup_loop` livequiz &
+  weblab, WS handlers livequiz/weblab (το housekeeping του classroom είχε
+  διορθωθεί στο Β6c). Τα αναμενόμενα per-socket send failures μένουν ήσυχα
+  (καθαρίζονται στο receive loop — όχι background loop).
+- ~~**SQLite connection closing**~~ ✅ `common/db.py`: `session()` /
+  `session_ro()` με `contextlib.closing` (commit/rollback όπως πριν + ΠΑΝΤΑ
+  close). Οι `db()` των classroom-hub (39 call sites), h5p-studio, exams,
+  livequiz, weblab επιστρέφουν πλέον `session(...)` — τα υπάρχοντα
+  `with db() as conn:` δεν άλλαξαν καθόλου. Το mdbridge χρησιμοποιεί
+  `hedgedoc_session()` (read-only, πάντα close). Verify: closed-after-exit +
+  rollback-on-error unit check ✓.
+- **Rate-limit tuning**: ΔΕΝ χρειάστηκε αλλαγή — με 30r/m+burst10 όλα τα e2e
+  πέρασαν διαδοχικά (με ~60-75s παύση μεταξύ runs, όπως ορίζει το §5).
+  Παραμένει η παρακολούθηση για NAT (ένα IP για όλο το σχολείο).
+- **Επαλήθευση (live, μέσω Nginx):** classroom ✓ · livequiz ✓ · weblab ✓ ·
+  appbuilder ✓ · h5p 54/54 ✓ · lessonwizard 62/62 ✓ · smoke 73/73 ✓ ·
+  mkdocs build ✓ (νέο nav με ίδιο περιεχόμενο σελίδων). Ad-hoc: publish-new →
+  entry ΜΕΣΑ στο AUTO-NAV block & επιβιώνει rebuild wizard· διαγραφή αρχείου →
+  το entry φεύγει αυτόματα (folder-driven)· idempotent 2ο rebuild = no-op.
 
 ### Task 5 — Ποιότητα ζωής (τελευταίο, χαμηλού ρίσκου)
 - **Test harness**: 17 scripts με copy-pasted `Client/check/cookiejar` boilerplate και

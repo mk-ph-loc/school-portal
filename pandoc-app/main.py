@@ -9,6 +9,7 @@ FastAPI εφαρμογή που χρησιμοποιεί το pandoc του συ
 """
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 from pathlib import Path
@@ -34,6 +35,11 @@ BUILD_SCRIPT = Path("/opt/school-portal/scripts/build-docs.sh")
 
 for _d in (DATA_DIR, TEMPLATES_DIR, UPLOAD_DIR):
     _d.mkdir(parents=True, exist_ok=True)
+
+# stderr → journalctl (systemd)
+logging.basicConfig(level=logging.INFO,
+                    format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("pandoc")
 
 PANDOC_BIN = shutil.which("pandoc") or "/usr/bin/pandoc"
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024      # ευθυγραμμισμένο με client_max_body_size

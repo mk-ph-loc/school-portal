@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import logging
 import re
 import secrets
 import shutil
@@ -28,6 +29,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
@@ -37,7 +39,12 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
 from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
-from common.db import connect
+from common.db import session
+
+# stderr → journalctl (systemd) — κανένα σιωπηλό except σε background loops
+logging.basicConfig(level=logging.INFO,
+                    format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("weblab")
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -56,12 +63,22 @@ PIN_RE = re.compile(r"^\d{4}$")
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")   # ίδιο με το build-apps-manifest.py
 VALID_ACCESS = {"all", "teachers"}
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Εκκίνηση/τερματισμός (αντί deprecated @app.on_event — Task 4)."""
+    init_db()
+    task = asyncio.create_task(_cleanup_loop())
+    yield
+    task.cancel()
+
+
 app = FastAPI(
     title="Εργαστήριο Web (HTML / CSS / JS)",
     description="Συνεργατικός editor ανάπτυξης ιστοσελίδων για το LAN της τάξης",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=lifespan,
 )
 # ΣΗΜΕΙΩΣΗ: Το root_path (/web-lab) ορίζεται στο uvicorn μέσω του systemd
 # unit, ώστε τα url_for() των templates να παράγουν σωστό πρόθεμα πίσω από
@@ -73,9 +90,12 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # ---------------------------------------------------------------------------
 # Βάση δεδομένων (SQLite — κοινές ρυθμίσεις πύλης μέσω common.db)
 # ---------------------------------------------------------------------------
-def db() -> sqlite3.Connection:
-    # Χωρίς FK constraints στο σχήμα — foreign_keys όπως πριν (default OFF)
-    return connect(DB_PATH, foreign_keys=False)
+def db():
+    """Context manager σύνδεσης: commit/rollback ΚΑΙ close (common.db.session).
+
+    Χωρίς FK constraints στο σχήμα — foreign_keys όπως πριν (default OFF).
+    """
+    return session(DB_PATH, foreign_keys=False)
 
 
 def init_db() -> None:
@@ -485,7 +505,7 @@ async def room_socket(ws: WebSocket, pin: str):
     except HTTPException as exc:
         await send_json(ws, {"type": "error", "message": str(exc.detail)})
     except Exception:
-        pass  # μη έγκυρο JSON κ.λπ. — η σύνδεση κλείνει καθαρά
+        log.exception("ws %s: απρόσμενο σφάλμα — η σύνδεση κλείνει καθαρά", pin)
     finally:
         r.sockets.discard(ws)
         if not r.sockets:
@@ -497,12 +517,6 @@ async def room_socket(ws: WebSocket, pin: str):
 # ---------------------------------------------------------------------------
 # Εκκίνηση / περιοδικός καθαρισμός
 # ---------------------------------------------------------------------------
-@app.on_event("startup")
-async def startup() -> None:
-    init_db()
-    asyncio.create_task(_cleanup_loop())
-
-
 async def _cleanup_loop() -> None:
     """Σβήνει δωμάτια ανενεργά για > ROOM_TTL ώστε το PIN pool να μένει διαθέσιμο."""
     while True:
@@ -516,5 +530,5 @@ async def _cleanup_loop() -> None:
                     if not ROOMS.get(row["pin"]):     # όχι ενεργό μάθημα
                         conn.execute("DELETE FROM rooms WHERE pin=?", (row["pin"],))
         except Exception:
-            pass
+            log.exception("cleanup loop: απρόσμενο σφάλμα (το loop συνεχίζει)")
         await asyncio.sleep(3600)

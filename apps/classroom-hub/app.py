@@ -36,6 +36,7 @@ Forum, Βοήθεια — διαμορφώσιμα ανά ρόλο από Excel)
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 import secrets
 import time
@@ -52,6 +53,10 @@ import state
 import store
 import presence
 from routers import commands, polls, quizzes, timers, chat_forum, config_xlsx, catalog
+
+# stderr → journalctl (systemd) — ίχνη από housekeeping/nav κ.λπ.
+logging.basicConfig(level=logging.INFO,
+                    format="%(levelname)s %(name)s: %(message)s")
 
 store.init_db()
 

@@ -21,9 +21,11 @@ import csv
 import hmac
 import io
 import json
+import logging
 import secrets
 import sqlite3
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +36,12 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
 from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
-from common.db import connect
+from common.db import session
+
+# stderr → journalctl (systemd) — κανένα σιωπηλό except σε background loops
+logging.basicConfig(level=logging.INFO,
+                    format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("livequiz")
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -48,12 +55,22 @@ MAX_QUESTIONS = 50
 SESSION_TTL = 12 * 3600              # αυτόματος καθαρισμός ανενεργών sessions
 REVEAL_SECONDS = 6                   # διάρκεια προβολής αποτελεσμάτων στον προτζέκτορα
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Εκκίνηση/τερματισμός (αντί deprecated @app.on_event — Task 4)."""
+    init_db()
+    task = asyncio.create_task(_cleanup_loop())
+    yield
+    task.cancel()
+
+
 app = FastAPI(
     title="Ζωντανό Παιχνίδι Τάξης (Live Quiz)",
     description="Ζωντανά κουίζ πραγματικού χρόνου για το LAN της τάξης",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=lifespan,
 )
 # ΣΗΜΕΙΩΣΗ: Το root_path (/live-quiz) ορίζεται στο uvicorn μέσω του systemd
 # unit, ώστε τα url_for() των templates να παράγουν σωστό πρόθεμα πίσω από
@@ -65,8 +82,9 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # ---------------------------------------------------------------------------
 # Βάση δεδομένων (SQLite — κοινές ρυθμίσεις πύλης μέσω common.db)
 # ---------------------------------------------------------------------------
-def db() -> sqlite3.Connection:
-    return connect(DB_PATH)
+def db():
+    """Context manager σύνδεσης: commit/rollback ΚΑΙ close (common.db.session)."""
+    return session(DB_PATH)
 
 
 def init_db() -> None:
@@ -933,9 +951,9 @@ async def game_socket(ws: WebSocket, pin: str):
             elif msg.get("type") == "ping":
                 await send_json(ws, {"type": "pong"})
     except (WebSocketDisconnect, RuntimeError):
-        pass
+        pass  # κανονική αποσύνδεση
     except Exception:
-        pass  # μη έγκυρο JSON κ.λπ. — η σύνδεση κλείνει καθαρά
+        log.exception("ws %s: απρόσμενο σφάλμα — η σύνδεση κλείνει καθαρά", pin)
     finally:
         r.sockets.discard(ws)
 
@@ -943,12 +961,6 @@ async def game_socket(ws: WebSocket, pin: str):
 # ---------------------------------------------------------------------------
 # Εκκίνηση / περιοδικός καθαρισμός
 # ---------------------------------------------------------------------------
-@app.on_event("startup")
-async def startup() -> None:
-    init_db()
-    asyncio.create_task(_cleanup_loop())
-
-
 async def _cleanup_loop() -> None:
     """Κλείνει/σβήνει πολύ παλιά sessions ώστε το PIN pool να μένει διαθέσιμο."""
     while True:
@@ -965,5 +977,5 @@ async def _cleanup_loop() -> None:
                     conn.execute("DELETE FROM sessions WHERE pin=?", (row["pin"],))
                     ROOMS.pop(row["pin"], None)
         except Exception:
-            pass
+            log.exception("cleanup loop: απρόσμενο σφάλμα (το loop συνεχίζει)")
         await asyncio.sleep(600)

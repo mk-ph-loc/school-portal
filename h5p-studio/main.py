@@ -30,12 +30,18 @@ H5P Studio — Ψηφιακή Πύλη Σχολείου & Εργαστηρίου
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 import state
 import store
 from routers import editor, player, wizard, embed
+
+# stderr → journalctl (systemd)
+logging.basicConfig(level=logging.INFO,
+                    format="%(levelname)s %(name)s: %(message)s")
 
 store.init_db()
 

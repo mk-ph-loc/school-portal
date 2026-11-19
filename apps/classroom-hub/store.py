@@ -8,18 +8,18 @@ timeout 15s)· η βάση μένει στο data/classroom.db όπως πάντ
 from __future__ import annotations
 
 import json
-import sqlite3
 import time
 
 from fastapi import HTTPException
 
-from common.db import connect, add_columns
+from common.db import session, add_columns
 
 import state
 
 
-def db() -> sqlite3.Connection:
-    return connect(state.DB_PATH, create_parent=True)
+def db():
+    """Context manager σύνδεσης: commit/rollback ΚΑΙ close (common.db.session)."""
+    return session(state.DB_PATH, create_parent=True)
 
 
 def init_db() -> None:

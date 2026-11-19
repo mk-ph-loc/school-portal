@@ -17,9 +17,9 @@ from pathlib import Path
 from fastapi import HTTPException
 
 from common.auth import TeacherAuth
-from common.classes import CLASS_GROUPS
 from common.fs import backup_history
-from common.lessons import FM_RE, valid_lesson_path, list_all_lessons as _list_all_lessons
+from common.lessons import valid_lesson_path, list_all_lessons as _list_all_lessons
+from common.nav import rebuild_nav as _rebuild_nav
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -48,9 +48,6 @@ UPLOAD_MAX = 40 * 1024 * 1024                        # 40 MB ανά αρχείο
 FS_UPLOAD_EXTS = UPLOAD_EXTS | {".md", ".txt", ".css", ".js", ".json", ".csv",
                                 ".docx", ".odt", ".xlsx", ".ipynb", ".py"}
 NAME_RE = re.compile(r"^[^/\\\x00-\x1f]+$")          # όνομα αρχείου/φακέλου χωρίς διαδρομές
-
-NAV_BEGIN = "# BEGIN AUTO-NAV MATHIMATA"
-NAV_END = "# END AUTO-NAV MATHIMATA"
 
 
 # ---------------------------------------------------------------------------
@@ -86,49 +83,12 @@ def backup_file(path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Αυτόματο nav στο mkdocs.yml (μεταξύ των δεικτών BEGIN/END AUTO-NAV)
+# Αυτόματο nav στο mkdocs.yml — single owner: common.nav (Task 4)
 # ---------------------------------------------------------------------------
 def rebuild_nav() -> None:
-    """Ξαναγράφει το μπλοκ Μαθήματα στο nav με βάση τους φακέλους."""
-    text = MKDOCS_YML.read_text(encoding="utf-8")
-    i = text.find(NAV_BEGIN)
-    j = text.find(NAV_END)
-    if i == -1 or j == -1:
-        return                                    # χωρίς δείκτες δεν πειράζουμε
-    j_end = text.find("\n", j)
-    # Ο δείκτης BEGIN πρέπει να ξεκινά στην αρχή της γραμμής του (όχι μετά τα
-    # κενά indent της προηγούμενης χρήσης — θα διπλασιάζονταν σε κάθε rebuild).
-    i = text.rfind("\n", 0, i) + 1
-    lines = ["  " + NAV_BEGIN + " (διαχειρίζεται το Lesson Wizard — μην επεξεργάζεστε χειροκίνητα)"]
-    if LIBRARY_DIR.is_dir() and any(LIBRARY_DIR.glob("*.pdf")):
-        lines.append("  - 📖 Βιβλιοθήκη: vivliothiki/index.md")
-    lines.append("  - Μαθήματα:")
-    lessons = list_all_lessons()
-    by_class: dict[str, dict[str, list]] = {}
-    for les in lessons:
-        by_class.setdefault(les["class_slug"], {}).setdefault(les["subject"], []).append(les)
-    for cls in CLASS_GROUPS:
-        subjects = by_class.get(cls["slug"])
-        if not subjects:
-            continue
-        lines.append(f"      - {cls['label']}:")
-        for subj, items in subjects.items():
-            subj_label = subj.replace("-", " ").capitalize()
-            idx_rel = f"mathimata/{cls['slug']}/{subj}/index.md"
-            if (DOCS_DIR / idx_rel).is_file():
-                # Προτίμηση του title από το front-matter του index (π.χ. «Πληροφορική Γ' Γυμνασίου»)
-                fm = FM_RE.match((DOCS_DIR / idx_rel).read_text(encoding="utf-8", errors="ignore"))
-                if fm:
-                    tm = re.search(r"^title:\s*['\"]?(.+?)['\"]?\s*$", fm.group(1), re.MULTILINE)
-                    if tm:
-                        subj_label = tm.group(1).strip().replace("'", "''")
-                lines.append(f"          - '{subj_label}': {idx_rel}")
-            for les in items:
-                title = les["title"].replace("'", "''")
-                rel = f"mathimata/{cls['slug']}/{subj}/{les['lesson']}/index.md"
-                lines.append(f"          - '{title}': {rel}")
-    lines.append("  " + NAV_END)
-    new_text = text[:i] + "\n".join(lines) + text[j_end:]
-    if new_text != text:
-        backup_file(MKDOCS_YML)
-        MKDOCS_YML.write_text(new_text, encoding="utf-8")
+    """Folder-driven idempotent rebuild (flock στο data/nav.lock, .bak ιστορικό).
+
+    Η λογική ζει στο common/nav.py — ίδιο μπλοκ χτίζει και το MD-Bridge, ώστε
+    οι δημοσιεύσεις του (_paradeigma/) να επιβιώνουν κάθε rebuild.
+    """
+    _rebuild_nav(MKDOCS_YML, backup_dir=BACKUP_DIR)

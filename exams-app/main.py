@@ -15,6 +15,7 @@ import csv
 import hmac
 import io
 import json
+import logging
 import re
 import secrets
 import sqlite3
@@ -32,7 +33,7 @@ from pydantic import BaseModel, Field
 
 from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
 from common.classes import CLASS_GROUPS as CLASSES, CLASS_SLUGS, CLASS_LABELS, greek_slug
-from common.db import connect
+from common.db import session
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -51,6 +52,11 @@ ALLOWED_EXTENSIONS = {".py", ".docx", ".pdf", ".zip", ".txt", ".sb3", ".glo"}
 # Αλφάβητο κωδικού επιβεβαίωσης χωρίς διφορούμενους χαρακτήρες (0/O, 1/I)
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
+# stderr → journalctl (systemd)
+logging.basicConfig(level=logging.INFO,
+                    format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("exams")
+
 app = FastAPI(
     title="Παράδοση Εργασιών & Ψηφιακά Διαγωνίσματα",
     description="Υποβολές εργασιών και ηλεκτρονικά διαγωνίσματα Πληροφορικής",
@@ -67,8 +73,9 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # ---------------------------------------------------------------------------
 # Βάση δεδομένων (SQLite — κοινές ρυθμίσεις πύλης μέσω common.db)
 # ---------------------------------------------------------------------------
-def db() -> sqlite3.Connection:
-    return connect(DB_PATH)
+def db():
+    """Context manager σύνδεσης: commit/rollback ΚΑΙ close (common.db.session)."""
+    return session(DB_PATH)
 
 
 def init_db() -> None:

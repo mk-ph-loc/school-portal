@@ -20,6 +20,8 @@ Lesson Wizard — Οπτικός επεξεργαστής ημερήσιων μ�
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -27,6 +29,10 @@ from common.schedule import parse_schedule_xlsx
 
 import state
 from routers import lessons, schedule, fs_browser, books
+
+# stderr → journalctl (systemd) — ίχνη από rebuild_nav κ.λπ.
+logging.basicConfig(level=logging.INFO,
+                    format="%(levelname)s %(name)s: %(message)s")
 
 app = FastAPI(
     title="Lesson Wizard — Ημερήσια Μαθήματα",

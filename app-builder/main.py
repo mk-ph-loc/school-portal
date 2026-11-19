@@ -18,6 +18,7 @@ from __future__ import annotations
 import hmac
 import html as html_mod
 import io
+import logging
 import json
 import re
 import secrets
@@ -47,6 +48,11 @@ DOCS_DIR = PORTAL_DIR / "mkdocs-site" / "docs"
 BUILD_DOCS_SCRIPT = PORTAL_DIR / "scripts" / "build-docs.sh"
 
 COOKIE_NAME = "appbuilder_teacher"
+
+# stderr → journalctl (systemd)
+logging.basicConfig(level=logging.INFO,
+                    format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("appbuilder")
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 VALID_ACCESS = {"all", "teachers"}

@@ -20,8 +20,8 @@
 from __future__ import annotations
 
 import hmac
+import logging
 import re
-import shutil
 import sqlite3
 import subprocess
 from datetime import datetime
@@ -32,10 +32,16 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
-from common.classes import CLASS_GROUPS, CLASS_SLUGS, CLASS_LABELS
-from common.db import connect_ro
+from common.classes import CLASS_GROUPS, CLASS_SLUGS
+from common.db import session_ro
 from common.fs import backup_beside, backup_history
 from common.lessons import list_lessons_grouped
+from common.nav import rebuild_nav
+
+# stderr → journalctl (systemd)· warnings+ ώστε να φαίνεται και με --log-level warning
+logging.basicConfig(level=logging.INFO,
+                    format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("mdbridge")
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -83,12 +89,12 @@ require_teacher = auth.require_teacher
 # ---------------------------------------------------------------------------
 # Βοηθητικά: βάση HedgeDoc (read-only), δικαιώματα, backup, rebuild
 # ---------------------------------------------------------------------------
-def hedgedoc_conn() -> sqlite3.Connection:
-    """Read-only σύνδεση στη βάση του HedgeDoc (mode=ro — ποτέ δεν γράφουμε)."""
+def hedgedoc_session():
+    """Read-only σύνδεση στη βάση HedgeDoc ως context manager (πάντα close)."""
     if not HEDGEDOC_DB.is_file():
         raise HTTPException(503, "Δεν βρέθηκε η βάση HedgeDoc (hedgedoc.sqlite). "
                                  "Ελέγξτε το school-hedgedoc.service.")
-    return connect_ro(HEDGEDOC_DB)
+    return session_ro(HEDGEDOC_DB)
 
 
 def fix_md_permissions(path: Path) -> None:
@@ -256,15 +262,12 @@ def fetch_note(ref: str) -> dict:
         ref = ref[: -len("/download")]
     if not NOTE_ID_RE.match(ref):
         raise HTTPException(400, "Μη έγκυρο ID/URL σημείωσης.")
-    conn = hedgedoc_conn()
-    try:
+    with hedgedoc_session() as conn:
         row = conn.execute(
             "SELECT id, alias, title, content, permission, createdAt, "
             "updatedAt, lastchangeAt FROM Notes WHERE alias = ? OR id = ?",
             (ref, ref),
         ).fetchone()
-    finally:
-        conn.close()
     if row is None:
         raise HTTPException(404, f"Η σημείωση '{ref}' δεν βρέθηκε στη βάση HedgeDoc.")
     return {
@@ -307,51 +310,14 @@ def validate_lesson_path(lesson: str) -> Path:
 
 
 def add_to_nav(rel_path: str, title: str) -> bool:
-    """Προσθέτει το νέο μάθημα στο nav: του mkdocs.yml κάτω από την τάξη του.
+    """Ενημερώνει το nav μέσω του single owner common.nav (Task 4).
 
-    Text-based εισαγωγή (όχι yaml round-trip) ώστε να διατηρούνται σχόλια,
-    !!python/name tags και η μορφοποίηση του αρχείου ανέπαφα.
+    Το αρχείο έχει ΗΔΗ γραφτεί στον φάκελο της τάξης — η folder-driven
+    rebuild_nav() το βρίσκει και ξαναχτίζει ΟΛΟ το αυτόματο μπλοκ (μαζί με
+    τα mathimata/ του Lesson Wizard) κάτω από flock στο data/nav.lock.
+    Έτσι οι δημοσιεύσεις επιβιώνουν κάθε rebuild του wizard (παλιό bug).
     """
-    parts = PurePosixPath(rel_path).parts
-    slug = parts[1] if parts[0] == "_paradeigma" else parts[0]
-    label = CLASS_LABELS[slug]
-    text = MKDOCS_YML.read_text(encoding="utf-8")
-    if rel_path in text:
-        return False                              # ήδη υπάρχει στο nav
-    lines = text.splitlines()
-    # Βρίσκουμε τη γραμμή "- <Τάξη>:" μέσα στο nav (6 spaces indent)
-    class_idx = None
-    in_nav = False
-    for i, ln in enumerate(lines):
-        if re.match(r"^nav:\s*$", ln):
-            in_nav = True
-            continue
-        if in_nav and re.match(r"^\S", ln):       # τέλος του nav block
-            break
-        if in_nav and ln.strip() == f"- {label}:":
-            class_idx = i
-            break
-    if class_idx is None:
-        return False
-    # Τελευταία γραμμή της ενότητας τάξης (indent > 6, πριν την επόμενη "- Χ:" 6-space ή λιγότερο)
-    insert_at = class_idx + 1
-    for j in range(class_idx + 1, len(lines)):
-        ln = lines[j]
-        if not ln.strip():
-            continue
-        indent = len(ln) - len(ln.lstrip())
-        if indent <= 6:
-            break
-        insert_at = j + 1
-    safe_title = title.replace('"', "'")
-    lines.insert(insert_at, f'          - "{safe_title}": {rel_path}')
-    # Backup του mkdocs.yml πριν την αλλαγή (δίπλα + ιστορικό στο backups/)
-    shutil.copy2(MKDOCS_YML, MKDOCS_YML.with_name("mkdocs.yml.bak"))
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(MKDOCS_YML, BACKUP_DIR / f"mkdocs.{stamp}.yml.bak")
-    MKDOCS_YML.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return True
+    return rebuild_nav(MKDOCS_YML, backup_dir=BACKUP_DIR)
 
 
 def demote_headings(text: str) -> str:
@@ -438,15 +404,12 @@ def logout(response: Response):
 def api_notes(request: Request):
     """Ενεργές σημειώσεις από τη βάση hedgedoc.sqlite (τίτλος, ID, τροποποίηση)."""
     require_teacher(request)
-    conn = hedgedoc_conn()
-    try:
+    with hedgedoc_session() as conn:
         rows = conn.execute(
             "SELECT id, alias, title, permission, createdAt, updatedAt, lastchangeAt, "
             "length(content) AS size FROM Notes "
             "ORDER BY COALESCE(lastchangeAt, updatedAt) DESC LIMIT 500"
         ).fetchall()
-    finally:
-        conn.close()
     notes = [{
         "id": r["id"],
         "ref": note_ref(r),

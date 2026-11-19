@@ -134,7 +134,7 @@ extra:
 
 nav:
   - Αρχική: index.md
-  # BEGIN AUTO-NAV MATHIMATA (διαχειρίζεται το Lesson Wizard — μην επεξεργάζεστε χειροκίνητα)
+  # BEGIN AUTO-NAV MATHIMATA (διαχειρίζεται αυτόματα από την πύλη — μην επεξεργάζεστε χειροκίνητα)
   - 📖 Βιβλιοθήκη: vivliothiki/index.md
   - Μαθήματα:
       - Γ' Γυμνασίου:
@@ -142,43 +142,44 @@ nav:
           - '🌀 Μ01 · Αναδρομή: Αυτοομοιότητα & Σπιράλ': mathimata/gymnasio-g/pliroforiki/m01-anadromi-aformisi-spiral/index.md
           - '🗼 Μ02 · Οι Πύργοι του Ανόι': mathimata/gymnasio-g/pliroforiki/m02-pyrgoi-anoy/index.md
           - '🔺 Μ03 · Το Τρίγωνο Sierpinski': mathimata/gymnasio-g/pliroforiki/m03-trigono-sierpinski/index.md
-  # END AUTO-NAV MATHIMATA
-  - 🎪 Δυνατότητες MkDocs: paradeigma-dynatotiton/index.md
   - Παλιό Υλικό (Παράδειγμα):
       - _paradeigma/index.md
       - Γυμνάσιο:
           - Α' Γυμνασίου:
               - _paradeigma/gymnasio-a/index.md
-              - Εισαγωγή στην Πληροφορική: _paradeigma/gymnasio-a/eisagogi.md
-              - Ψευδογλώσσα: _paradeigma/gymnasio-a/pseudoglossa.md
-              - Python: _paradeigma/gymnasio-a/python.md
+              - 'Εισαγωγή στην Πληροφορική': _paradeigma/gymnasio-a/eisagogi.md
+              - 'Ψευδογλώσσα (ΓΛΩΣΣΑ)': _paradeigma/gymnasio-a/pseudoglossa.md
+              - 'Python — Τα πρώτα μου προγράμματα': _paradeigma/gymnasio-a/python.md
           - Β' Γυμνασίου:
               - _paradeigma/gymnasio-b/index.md
-              - Δομές Επανάληψης: _paradeigma/gymnasio-b/epanalipsi.md
-              - Δυαδικό Σύστημα: _paradeigma/gymnasio-b/dyadiko.md
-              - Ασκήσεις Python: _paradeigma/gymnasio-b/python.md
+              - 'Το Δυαδικό Σύστημα': _paradeigma/gymnasio-b/dyadiko.md
+              - 'Δομές Επανάληψης': _paradeigma/gymnasio-b/epanalipsi.md
+              - 'Ασκήσεις Python — Β'' Γυμνασίου': _paradeigma/gymnasio-b/python.md
           - Γ' Γυμνασίου:
               - _paradeigma/gymnasio-g/index.md
-              - Πίνακες: _paradeigma/gymnasio-g/pinakes.md
-              - Συναρτήσεις: _paradeigma/gymnasio-g/synartiseis.md
+              - 'Πίνακες': _paradeigma/gymnasio-g/pinakes.md
+              - 'Συναρτήσεις & Διαδικασίες': _paradeigma/gymnasio-g/synartiseis.md
       - Λύκειο:
           - Α' Λυκείου:
               - _paradeigma/lykeio-a/index.md
-              - Αλγοριθμική: _paradeigma/lykeio-a/algoritmiki.md
-              - Δομές Δεδομένων: _paradeigma/lykeio-a/domes-dedomenon.md
-              - Κουίζ: _paradeigma/lykeio-a/quiz.md
+              - 'Αλγοριθμική': _paradeigma/lykeio-a/algoritmiki.md
+              - 'Δομές Δεδομένων': _paradeigma/lykeio-a/domes-dedomenon.md
+              - 'Κουίζ Αυτοαξιολόγησης — Α'' Λυκείου': _paradeigma/lykeio-a/quiz.md
           - Β' Λυκείου:
               - _paradeigma/lykeio-b/index.md
-              - Αναζήτηση & Ταξινόμηση: _paradeigma/lykeio-b/taxinomisi.md
-              - Πολυπλοκότητα: _paradeigma/lykeio-b/polyplokotita.md
+              - 'Πολυπλοκότητα Αλγορίθμων': _paradeigma/lykeio-b/polyplokotita.md
+              - 'Αναζήτηση & Ταξινόμηση': _paradeigma/lykeio-b/taxinomisi.md
           - Γ' Λυκείου:
               - _paradeigma/lykeio-g/index.md
-              - Επανάληψη ύλης: _paradeigma/lykeio-g/epanaliptiki.md
-              - Θέματα Πανελλαδικών: _paradeigma/lykeio-g/themata.md
-      - Εργαστήρι:
+              - 'Επανάληψη Ύλης — Γ'' Λυκείου': _paradeigma/lykeio-g/epanaliptiki.md
+              - 'Θέματα Πανελλαδικών — Τυπολογία': _paradeigma/lykeio-g/themata.md
+      - '🎮 Εκπαιδευτικά Παιχνίδια':
           - _paradeigma/games/index.md
-          - Πολυμέσα: _paradeigma/media/index.md
-      - Καθηγητές:
+      - '🎬 Πολυμέσα':
+          - _paradeigma/media/index.md
+      - '🗝️ Περιοχή Καθηγητών':
           - _paradeigma/teachers/index.md
-          - Λύσεις Ασκήσεων: _paradeigma/teachers/lyseis.md
+          - 'Λύσεις Ασκήσεων': _paradeigma/teachers/lyseis.md
+  # END AUTO-NAV MATHIMATA
+  - 🎪 Δυνατότητες MkDocs: paradeigma-dynatotiton/index.md
   - Σχετικά: about.md

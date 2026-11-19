@@ -156,7 +156,8 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   ├── classes.py          # οι 6 τάξεις (slug/label) + teachers area + greek_slug()
 │   ├── lessons.py          # parse/render φάσεων, front-matter tags/favorite,
 │   │                       # κατάλογος μαθημάτων + list_lessons_grouped/flat (dropdowns)
-│   ├── db.py               # SQLite connect (WAL/Row/FK), read-only connect, migrations
+│   ├── db.py               # SQLite connect (WAL/Row/FK) + session() που ΚΛΕΙΝΕΙ τη σύνδεση
+│   ├── nav.py              # single owner του mkdocs.yml nav: folder-driven rebuild + flock
 │   ├── fs.py               # backup_history/backup_beside (.bak πριν από κάθε εγγραφή)
 │   └── schedule.py         # ωράριο Excel→JSON, HH:MM, deadlines ±offset, JSON helpers
 │   # Τα apps το βρίσκουν μέσω Environment=PYTHONPATH=/opt/school-portal στα units.
@@ -622,7 +623,8 @@ slides.pdf, διαδραστικά .html, φύλλα εργασίας, αποσ�
 ```bash
 mkdir -p /opt/school-portal/mkdocs-site/docs/mathimata/gymnasio-g/pliroforiki/m04-titlos
 nano .../m04-titlos/index.md   # με τα phase markers παραπάνω
-# το nav ενημερώνεται αυτόματα από το wizard (ή πρόσθεσέ το μεταξύ των δεικτών AUTO-NAV)
+# το nav ενημερώνεται αυτόματα (common/nav.py — folder-driven rebuild από wizard/MD-Bridge·
+# ΟΛΟ το μπλοκ μεταξύ των δεικτών AUTO-NAV ξαναχτίζεται, μην το επεξεργάζεστε χειροκίνητα)
 sudo systemctl start school-mkdocs.service
 ```
 
