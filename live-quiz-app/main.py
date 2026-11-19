@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import asyncio
 import csv
-import hashlib
 import hmac
 import io
 import json
@@ -34,15 +33,16 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
+from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
+from common.db import connect
+
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
 # ---------------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "livequiz.db"
 
-TEACHER_CODE = "teacher2026"
 COOKIE_NAME = "livequiz_teacher"
-COOKIE_MAX_AGE = 8 * 3600            # μία σχολική ημέρα
 MAX_PLAYERS = 60                     # ένα εργαστήριο/τμήμα
 MAX_QUESTIONS = 50
 SESSION_TTL = 12 * 3600              # αυτόματος καθαρισμός ανενεργών sessions
@@ -63,14 +63,10 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 # ---------------------------------------------------------------------------
-# Βάση δεδομένων (SQLite — ενσωματωμένη στην Python, χωρίς επιπλέον πακέτα)
+# Βάση δεδομένων (SQLite — κοινές ρυθμίσεις πύλης μέσω common.db)
 # ---------------------------------------------------------------------------
 def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+    return connect(DB_PATH)
 
 
 def init_db() -> None:
@@ -119,43 +115,12 @@ def init_db() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC), όχι απλό flag
+# Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC) — common.auth
 # ---------------------------------------------------------------------------
-def _secret_key() -> bytes:
-    """Σταθερό μυστικό ανά εγκατάσταση (δημιουργείται μία φορά, εκτός git)."""
-    key_file = BASE_DIR / ".cookie-secret"
-    if not key_file.exists():
-        key_file.write_text(secrets.token_hex(32))
-        key_file.chmod(0o600)
-    return key_file.read_text().strip().encode()
-
-
-SECRET_KEY = _secret_key()
-
-
-def make_token() -> str:
-    expires = int(time.time()) + COOKIE_MAX_AGE
-    payload = str(expires)
-    sig = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
-
-
-def token_valid(token: str | None) -> bool:
-    if not token or "." not in token:
-        return False
-    payload, _, sig = token.partition(".")
-    expected = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        return False
-    try:
-        return int(payload) > time.time()
-    except ValueError:
-        return False
-
-
-def require_teacher(request: Request) -> None:
-    if not token_valid(request.cookies.get(COOKIE_NAME)):
-        raise HTTPException(401, "Απαιτείται κωδικός καθηγητή.")
+auth = TeacherAuth(BASE_DIR, COOKIE_NAME)
+make_token = auth.make_token
+token_valid = auth.token_valid
+require_teacher = auth.require_teacher
 
 
 # ---------------------------------------------------------------------------

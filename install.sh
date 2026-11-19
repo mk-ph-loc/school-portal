@@ -973,6 +973,9 @@ log "Ρύθμιση Nginx…"
 if [[ -x "${PORTAL_DIR}/scripts/make-ssl-cert.sh" ]]; then
     bash "${PORTAL_DIR}/scripts/make-ssl-cert.sh" || warn "Αποτυχία δημιουργίας TLS cert — το HTTPS δεν θα λειτουργεί."
 fi
+# Κοινά proxy headers για τα rate-limited login locations (school_login zone)
+mkdir -p /etc/nginx/snippets
+install -m 644 "${PORTAL_DIR}/config/nginx/school-proxy-headers.conf" /etc/nginx/snippets/school-proxy-headers.conf
 install -m 644 "${PORTAL_DIR}/config/nginx/school-portal" /etc/nginx/sites-available/school-portal
 ln -sf /etc/nginx/sites-available/school-portal /etc/nginx/sites-enabled/school-portal
 rm -f /etc/nginx/sites-enabled/default
@@ -998,6 +1001,11 @@ ok "Ο Nginx τρέχει στη θύρα 80."
 # 9. systemd services
 # ---------------------------------------------------------------------------
 log "Εγκατάσταση systemd υπηρεσιών…"
+# Κοινό πακέτο common/ (auth, classes, lessons, db, schedule) — τα units το
+# βρίσκουν μέσω PYTHONPATH=/opt/school-portal (Βήμα 2 architecture review).
+if [[ ! -f "${PORTAL_DIR}/common/__init__.py" ]]; then
+    die "Λείπει το κοινό πακέτο common/ — κάντε git pull πριν την εγκατάσταση."
+fi
 install -m 644 "${PORTAL_DIR}/config/systemd/school-pandoc.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-mkdocs.service" /etc/systemd/system/
 install -m 644 "${PORTAL_DIR}/config/systemd/school-mkdocs.path"    /etc/systemd/system/

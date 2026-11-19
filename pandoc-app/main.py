@@ -9,10 +9,8 @@ FastAPI εφαρμογή που χρησιμοποιεί το pandoc του συ
 """
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
-import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +18,8 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+from common.classes import CLASSES_WITH_TEACHERS as CLASSES, greek_slug
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -39,15 +39,7 @@ PANDOC_BIN = shutil.which("pandoc") or "/usr/bin/pandoc"
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024      # ευθυγραμμισμένο με client_max_body_size
 PANDOC_TIMEOUT = 60                        # δευτερόλεπτα
 
-CLASSES = [
-    {"slug": "gymnasio-a", "label": "Α' Γυμνασίου"},
-    {"slug": "gymnasio-b", "label": "Β' Γυμνασίου"},
-    {"slug": "gymnasio-g", "label": "Γ' Γυμνασίου"},
-    {"slug": "lykeio-a", "label": "Α' Λυκείου"},
-    {"slug": "lykeio-b", "label": "Β' Λυκείου"},
-    {"slug": "lykeio-g", "label": "Γ' Λυκείου"},
-    {"slug": "teachers", "label": "🔐 Περιοχή Καθηγητών"},
-]
+# Οι 6 τάξεις + η προστατευμένη περιοχή καθηγητών (common.classes)
 CLASS_SLUGS = {c["slug"] for c in CLASSES}
 
 app = FastAPI(
@@ -67,18 +59,8 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # Βοηθητικές συναρτήσεις
 # ---------------------------------------------------------------------------
 def slugify(text: str) -> str:
-    """Μετατρέπει ελληνικό/λατινικό τίτλο σε ασφαλές όνομα αρχείου."""
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(c for c in text if not unicodedata.combining(c))
-    greek_map = {
-        "α": "a", "β": "v", "γ": "g", "δ": "d", "ε": "e", "ζ": "z", "η": "i",
-        "θ": "th", "ι": "i", "κ": "k", "λ": "l", "μ": "m", "ν": "n", "ξ": "x",
-        "ο": "o", "π": "p", "ρ": "r", "σ": "s", "ς": "s", "τ": "t", "υ": "y",
-        "φ": "f", "χ": "ch", "ψ": "ps", "ω": "o",
-    }
-    text = "".join(greek_map.get(ch, ch) for ch in text.lower())
-    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
-    return text[:80] or "mathima"
+    """Μετατρέπει ελληνικό/λατινικό τίτλο σε ασφαλές όνομα αρχείου (common.classes)."""
+    return greek_slug(text, limit=80, fallback="mathima")
 
 
 def safe_template_name(name: str) -> Path:

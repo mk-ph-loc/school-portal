@@ -148,6 +148,16 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 
 ```
 /opt/school-portal/
+├── common/                 # 🧩 Κοινό πακέτο Python (Βήμα 2 architecture review)
+│   ├── auth.py             # TeacherAuth: HMAC cookies καθηγητή (legacy + payload),
+│   │                       # TEACHER_CODE/COOKIE_MAX_AGE — ίδιο μοτίβο σε ΟΛΑ τα apps
+│   ├── classes.py          # οι 6 τάξεις (slug/label) + teachers area + greek_slug()
+│   ├── lessons.py          # parse/render φάσεων, front-matter tags/favorite,
+│   │                       # κατάλογος μαθημάτων (Lesson Wizard & Classroom Hub)
+│   ├── db.py               # SQLite connect (WAL/Row/FK), read-only connect, migrations
+│   └── schedule.py         # ωράριο Excel→JSON, HH:MM, deadlines ±offset, JSON helpers
+│   # Τα apps το βρίσκουν μέσω Environment=PYTHONPATH=/opt/school-portal στα units.
+│   # Τα δεδομένα (DB, .cookie-secret, schedule.json) μένουν στους φακέλους των apps.
 ├── dashboard/              # Κεντρική πύλη (/)
 │   ├── index.html          # Ζώνη Μαθητών + Ζώνη Καθηγητών
 │   ├── lab/index.html      # Placeholder «Υπό Κατασκευή» (/lab/)
@@ -613,6 +623,17 @@ sudo systemctl start school-mkdocs.service
 
 ## 🔧 Τεχνικές Σημειώσεις
 
+- **Architecture Review:** Το πλήρες review αρχιτεκτονικής (bugs που διορθώθηκαν,
+  κοινό πακέτο `common/`, επόμενα tasks refactor & οδηγός επαλήθευσης) είναι στο
+  [`ARCHITECTURE-REVIEW.md`](ARCHITECTURE-REVIEW.md) — ενημερώνεται μετά από κάθε βήμα.
+- **Κοινό πακέτο `common/`:** Η αυθεντικοποίηση καθηγητή (HMAC cookies), οι
+  λίστες τάξεων, το parsing μαθημάτων/ωραρίου και οι συνδέσεις SQLite ζουν στο
+  `common/` (auth, classes, lessons, db, schedule) αντί να είναι αντιγραμμένα
+  σε κάθε app. Κάθε app περνά τον δικό του φάκελο (`TeacherAuth(BASE_DIR, …)`),
+  οπότε τα `.cookie-secret`/βάσεις παραμένουν ανά app και τα υπάρχοντα cookies
+  συνεχίζουν να ισχύουν. Τα systemd units ορίζουν
+  `Environment=PYTHONPATH=/opt/school-portal` για να βρίσκεται το πακέτο· για
+  χειροκίνητη εκτέλεση: `PYTHONPATH=/opt/school-portal venv/bin/uvicorn main:app …`.
 - **Ελληνικά PDF:** WeasyPrint + DejaVu/Liberation fonts (Type0/CID με ToUnicode →
   αναζητήσιμο κείμενο). Δεν απαιτείται LaTeX (~2 GB εξοικονόμηση).
 - **Offline-first:** Tailwind, Alpine και Pyodide φιλοξενούνται τοπικά. Η πύλη

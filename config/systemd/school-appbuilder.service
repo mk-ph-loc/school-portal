@@ -12,6 +12,8 @@ WorkingDirectory=/opt/school-portal/app-builder
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=HOME=/opt/school-portal/app-builder
+# Κοινό πακέτο common/ (auth, classes, lessons, db, schedule) στη ρίζα της πύλης
+Environment=PYTHONPATH=/opt/school-portal
 ExecStart=/opt/school-portal/venv/bin/uvicorn main:app \
     --host 127.0.0.1 --port 8008 \
     --root-path /app-builder --proxy-headers --forwarded-allow-ips 127.0.0.1 \

@@ -12,7 +12,6 @@ FastAPI εφαρμογή με SQLite για:
 from __future__ import annotations
 
 import csv
-import hashlib
 import hmac
 import io
 import json
@@ -20,7 +19,6 @@ import re
 import secrets
 import sqlite3
 import time
-import unicodedata
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -32,6 +30,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
+from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
+from common.classes import CLASS_GROUPS as CLASSES, CLASS_SLUGS, CLASS_LABELS, greek_slug
+from common.db import connect
+
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
 # ---------------------------------------------------------------------------
@@ -40,22 +42,11 @@ DB_PATH = BASE_DIR / "exams.db"
 SUBMISSIONS_DIR = BASE_DIR / "submissions"
 SUBMISSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
-TEACHER_CODE = "teacher2026"
 COOKIE_NAME = "exams_teacher"
-COOKIE_MAX_AGE = 8 * 3600            # μία σχολική ημέρα
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # ευθυγραμμισμένο με client_max_body_size 50M
 ALLOWED_EXTENSIONS = {".py", ".docx", ".pdf", ".zip", ".txt", ".sb3", ".glo"}
 
-CLASSES = [
-    {"slug": "gymnasio-a", "label": "Α' Γυμνασίου"},
-    {"slug": "gymnasio-b", "label": "Β' Γυμνασίου"},
-    {"slug": "gymnasio-g", "label": "Γ' Γυμνασίου"},
-    {"slug": "lykeio-a", "label": "Α' Λυκείου"},
-    {"slug": "lykeio-b", "label": "Β' Λυκείου"},
-    {"slug": "lykeio-g", "label": "Γ' Λυκείου"},
-]
-CLASS_SLUGS = {c["slug"] for c in CLASSES}
-CLASS_LABELS = {c["slug"]: c["label"] for c in CLASSES}
+# Οι 6 τάξεις του mkdocs-site — κοινές σε όλη την πύλη (common.classes)
 
 # Αλφάβητο κωδικού επιβεβαίωσης χωρίς διφορούμενους χαρακτήρες (0/O, 1/I)
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -74,14 +65,10 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 # ---------------------------------------------------------------------------
-# Βάση δεδομένων (SQLite — ενσωματωμένη στην Python, χωρίς επιπλέον πακέτα)
+# Βάση δεδομένων (SQLite — κοινές ρυθμίσεις πύλης μέσω common.db)
 # ---------------------------------------------------------------------------
 def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+    return connect(DB_PATH)
 
 
 def init_db() -> None:
@@ -127,23 +114,8 @@ init_db()
 
 
 # ---------------------------------------------------------------------------
-# Βοηθητικές συναρτήσεις
+# Βοηθητικές συναρτήσεις (greek_slug: common.classes)
 # ---------------------------------------------------------------------------
-def greek_slug(text: str) -> str:
-    """Μετατρέπει ελληνικό/λατινικό κείμενο σε ασφαλές όνομα αρχείου (Greeklish)."""
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(c for c in text if not unicodedata.combining(c))
-    greek_map = {
-        "α": "a", "β": "v", "γ": "g", "δ": "d", "ε": "e", "ζ": "z", "η": "i",
-        "θ": "th", "ι": "i", "κ": "k", "λ": "l", "μ": "m", "ν": "n", "ξ": "x",
-        "ο": "o", "π": "p", "ρ": "r", "σ": "s", "ς": "s", "τ": "t", "υ": "y",
-        "φ": "f", "χ": "ch", "ψ": "ps", "ω": "o",
-    }
-    text = "".join(greek_map.get(ch, ch) for ch in text.lower())
-    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
-    return text[:60] or "mathitis"
-
-
 def new_code() -> str:
     """Μοναδικός κωδικός επιβεβαίωσης παράδοσης, π.χ. K7M2-9QXD."""
     raw = "".join(secrets.choice(CODE_ALPHABET) for _ in range(8))
@@ -170,42 +142,11 @@ def safe_upload_name(orig: str) -> str:
     return f"{stem}{ext}"
 
 
-# --- Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC), όχι απλό flag ---
-def _secret_key() -> bytes:
-    """Σταθερό μυστικό ανά εγκατάσταση (δημιουργείται μία φορά, εκτός git)."""
-    key_file = BASE_DIR / ".cookie-secret"
-    if not key_file.exists():
-        key_file.write_text(secrets.token_hex(32))
-        key_file.chmod(0o600)
-    return key_file.read_text().strip().encode()
-
-
-SECRET_KEY = _secret_key()
-
-
-def make_token() -> str:
-    expires = int(time.time()) + COOKIE_MAX_AGE
-    payload = str(expires)
-    sig = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
-
-
-def token_valid(token: str | None) -> bool:
-    if not token or "." not in token:
-        return False
-    payload, _, sig = token.partition(".")
-    expected = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        return False
-    try:
-        return int(payload) > time.time()
-    except ValueError:
-        return False
-
-
-def require_teacher(request: Request) -> None:
-    if not token_valid(request.cookies.get(COOKIE_NAME)):
-        raise HTTPException(401, "Απαιτείται κωδικός καθηγητή.")
+# --- Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC) — common.auth ---
+auth = TeacherAuth(BASE_DIR, COOKIE_NAME)
+make_token = auth.make_token
+token_valid = auth.token_valid
+require_teacher = auth.require_teacher
 
 
 def activity_row(row: sqlite3.Row) -> dict[str, Any]:
@@ -467,7 +408,8 @@ class Login(BaseModel):
 
 @app.post("/api/teacher/login")
 def teacher_login(payload: Login, response: Response):
-    if not hmac.compare_digest(payload.password, TEACHER_CODE):
+    # encode() ώστε να υποστηρίζονται και μη-ASCII (λανθασμένοι) κωδικοί
+    if not hmac.compare_digest(payload.password.encode(), TEACHER_CODE.encode()):
         raise HTTPException(401, "Λανθασμένος κωδικός καθηγητή.")
     response.set_cookie(
         COOKIE_NAME, make_token(),

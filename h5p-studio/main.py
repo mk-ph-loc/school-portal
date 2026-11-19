@@ -23,7 +23,6 @@ H5P Studio — Ψηφιακή Πύλη Σχολείου & Εργαστηρίου
 """
 from __future__ import annotations
 
-import hashlib
 import hmac
 import io
 import json
@@ -46,6 +45,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
+from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
+from common.classes import CLASS_GROUPS, CLASS_SLUGS, CLASS_LABELS
+from common.db import connect
+
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
 # ---------------------------------------------------------------------------
@@ -60,24 +63,12 @@ BUILD_DOCS_SCRIPT = PORTAL_DIR / "scripts" / "build-docs.sh"
 BACKUP_DIR = BASE_DIR / "backups"
 ENV_KEYS_FILE = PORTAL_DIR / ".env.keys"
 
-TEACHER_CODE = "teacher2026"
 COOKIE_NAME = "h5pstudio_teacher"
-COOKIE_MAX_AGE = 8 * 3600                          # μία σχολική ημέρα
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024               # ίδιο με client_max_body_size
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 LIBDIR_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._]*-\d+\.\d+$")
 
-# Οι 6 τάξεις του mkdocs-site (ίδιοι φάκελοι με το nav του mkdocs.yml)
-CLASS_GROUPS = [
-    {"slug": "gymnasio-a", "label": "Α' Γυμνασίου"},
-    {"slug": "gymnasio-b", "label": "Β' Γυμνασίου"},
-    {"slug": "gymnasio-g", "label": "Γ' Γυμνασίου"},
-    {"slug": "lykeio-a",   "label": "Α' Λυκείου"},
-    {"slug": "lykeio-b",   "label": "Β' Λυκείου"},
-    {"slug": "lykeio-g",   "label": "Γ' Λυκείου"},
-]
-CLASS_SLUGS = {c["slug"] for c in CLASS_GROUPS}
-CLASS_LABELS = {c["slug"]: c["label"] for c in CLASS_GROUPS}
+# Οι 6 τάξεις του mkdocs-site — κοινές σε όλη την πύλη (common.classes)
 
 SUBJECTS = ["Πληροφορική", "Μαθηματικά", "Φυσική", "Χημεία", "Βιολογία",
             "Γλώσσα", "Αρχαία Ελληνικά", "Ιστορία", "Γεωγραφία", "Αγγλικά",
@@ -126,13 +117,11 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 # ---------------------------------------------------------------------------
-# Βάση δεδομένων (SQLite — ενσωματωμένη στην Python, χωρίς επιπλέον πακέτα)
+# Βάση δεδομένων (SQLite — κοινές ρυθμίσεις πύλης μέσω common.db)
 # ---------------------------------------------------------------------------
 def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+    # Χωρίς FK constraints στο σχήμα — foreign_keys όπως πριν (default OFF)
+    return connect(DB_PATH, foreign_keys=False)
 
 
 def init_db() -> None:
@@ -165,43 +154,12 @@ init_db()
 
 
 # ---------------------------------------------------------------------------
-# Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC), όχι απλό flag
+# Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC) — common.auth
 # ---------------------------------------------------------------------------
-def _secret_key() -> bytes:
-    """Σταθερό μυστικό ανά εγκατάσταση (δημιουργείται μία φορά, εκτός git)."""
-    key_file = BASE_DIR / ".cookie-secret"
-    if not key_file.exists():
-        key_file.write_text(secrets.token_hex(32))
-        key_file.chmod(0o600)
-    return key_file.read_text().strip().encode()
-
-
-SECRET_KEY = _secret_key()
-
-
-def make_token() -> str:
-    expires = int(time.time()) + COOKIE_MAX_AGE
-    payload = str(expires)
-    sig = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
-
-
-def token_valid(token: str | None) -> bool:
-    if not token or "." not in token:
-        return False
-    payload, _, sig = token.partition(".")
-    expected = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        return False
-    try:
-        return int(payload) > time.time()
-    except ValueError:
-        return False
-
-
-def require_teacher(request: Request) -> None:
-    if not token_valid(request.cookies.get(COOKIE_NAME)):
-        raise HTTPException(401, "Απαιτείται κωδικός καθηγητή.")
+auth = TeacherAuth(BASE_DIR, COOKIE_NAME)
+make_token = auth.make_token
+token_valid = auth.token_valid
+require_teacher = auth.require_teacher
 
 
 # ---------------------------------------------------------------------------
@@ -1324,11 +1282,16 @@ def api_export(request: Request, aid: str):
 # API — Ενσωμάτωση σε μάθημα MkDocs (iframe + 1 κλικ append με .bak backup)
 # ---------------------------------------------------------------------------
 def list_lessons() -> list[dict]:
-    """Όλα τα .md μαθήματα ανά τάξη (όπως στο apps/hedgedoc-bridge)."""
+    """Όλα τα .md μαθήματα ανά τάξη (όπως στο apps/hedgedoc-bridge).
+
+    Νέα δομή: mathimata/<τάξη>/· το παλιό υλικό ζει στο _paradeigma/<τάξη>/.
+    """
     groups = []
     for c in CLASS_GROUPS:
         lessons = []
-        class_dir = DOCS_DIR / c["slug"]
+        class_dir = DOCS_DIR / "mathimata" / c["slug"]
+        if not class_dir.is_dir():
+            class_dir = DOCS_DIR / "_paradeigma" / c["slug"]
         if class_dir.is_dir():
             for p in sorted(class_dir.rglob("*.md")):
                 rel = p.relative_to(DOCS_DIR).as_posix()
@@ -1380,9 +1343,12 @@ def api_embed(request: Request, aid: str, body: EmbedRequest):
     row = get_activity_row(aid)
     lesson = body.lesson.strip().replace("\\", "/").lstrip("/")
     parts = PurePosixPath(lesson).parts
+    # Νέα δομή: mathimata/<τάξη>/… ή _paradeigma/<τάξη>/… (παλιό υλικό).
+    slug = parts[1] if len(parts) > 1 and parts[0] in ("mathimata", "_paradeigma") else (
+        parts[0] if parts else "")
     if (not lesson.endswith(".md") or not parts
             or any(p in ("..", "") for p in parts)
-            or parts[0] not in CLASS_SLUGS):
+            or slug not in CLASS_SLUGS):
         raise HTTPException(400, "Μη έγκυρη διαδρομή μαθήματος (μόνο φάκελοι τάξεων).")
     target = (DOCS_DIR / lesson).resolve()
     if not str(target).startswith(str(DOCS_DIR.resolve()) + "/") or not target.is_file():
@@ -1409,8 +1375,9 @@ def api_embed(request: Request, aid: str, body: EmbedRequest):
     # Άμεσο rebuild (το school-mkdocs.path θα το έκανε έτσι κι αλλιώς)
     subprocess.Popen(["/bin/bash", str(BUILD_DOCS_SCRIPT)],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return {"ok": True, "lesson": lesson,
-            "docs_url": "/docs/" + lesson[:-3] + "/"}
+    # use_directory_urls: index.md → /docs/<dir>/, αλλιώς /docs/<dir>/<stem>/
+    docs_url = "/docs/" + (lesson[:-8] if lesson.endswith("/index.md") else lesson[:-3] + "/")
+    return {"ok": True, "lesson": lesson, "docs_url": docs_url}
 
 
 

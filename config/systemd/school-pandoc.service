@@ -12,6 +12,8 @@ WorkingDirectory=/opt/school-portal/pandoc-app
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=HOME=/opt/school-portal/pandoc-app
+# Κοινό πακέτο common/ (auth, classes, lessons, db, schedule) στη ρίζα της πύλης
+Environment=PYTHONPATH=/opt/school-portal
 ExecStart=/opt/school-portal/venv/bin/uvicorn main:app \
     --host 127.0.0.1 --port 8002 \
     --root-path /pandoc --proxy-headers --forwarded-allow-ips 127.0.0.1 \

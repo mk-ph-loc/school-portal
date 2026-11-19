@@ -19,20 +19,21 @@
 """
 from __future__ import annotations
 
-import hashlib
 import hmac
 import re
-import secrets
 import shutil
 import sqlite3
 import subprocess
-import time
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+
+from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
+from common.classes import CLASS_GROUPS, CLASS_SLUGS, CLASS_LABELS
+from common.db import connect_ro
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -45,24 +46,12 @@ MKDOCS_YML = PORTAL_DIR / "mkdocs-site" / "mkdocs.yml"
 BUILD_DOCS_SCRIPT = PORTAL_DIR / "scripts" / "build-docs.sh"
 BACKUP_DIR = BASE_DIR / "backups"
 
-TEACHER_CODE = "teacher2026"
 COOKIE_NAME = "mdbridge_teacher"
-COOKIE_MAX_AGE = 8 * 3600                      # μία σχολική ημέρα
 
 TEMPLATE_NOTE_ALIAS = "template-demo"          # έτοιμο πρότυπο δυνατοτήτων
 NOTE_URL_BASE = "/md-pad/"                     # subpath του HedgeDoc στον Nginx
 
-# Οι 6 τάξεις του mkdocs-site (ίδιοι φάκελοι με το nav του mkdocs.yml)
-CLASS_GROUPS = [
-    {"slug": "gymnasio-a", "label": "Α' Γυμνασίου"},
-    {"slug": "gymnasio-b", "label": "Β' Γυμνασίου"},
-    {"slug": "gymnasio-g", "label": "Γ' Γυμνασίου"},
-    {"slug": "lykeio-a",   "label": "Α' Λυκείου"},
-    {"slug": "lykeio-b",   "label": "Β' Λυκείου"},
-    {"slug": "lykeio-g",   "label": "Γ' Λυκείου"},
-]
-CLASS_SLUGS = {c["slug"] for c in CLASS_GROUPS}
-CLASS_LABELS = {c["slug"]: c["label"] for c in CLASS_GROUPS}
+# Οι 6 τάξεις του mkdocs-site — κοινές σε όλη την πύλη (common.classes)
 
 FILENAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")     # πεζά λατινικά/greeklish
 NOTE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")    # UUID/base64url/alias
@@ -81,43 +70,12 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 # ---------------------------------------------------------------------------
-# Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC), όχι απλό flag
+# Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC) — common.auth
 # ---------------------------------------------------------------------------
-def _secret_key() -> bytes:
-    """Σταθερό μυστικό ανά εγκατάσταση (δημιουργείται μία φορά, εκτός git)."""
-    key_file = BASE_DIR / ".cookie-secret"
-    if not key_file.exists():
-        key_file.write_text(secrets.token_hex(32))
-        key_file.chmod(0o600)
-    return key_file.read_text().strip().encode()
-
-
-SECRET_KEY = _secret_key()
-
-
-def make_token() -> str:
-    expires = int(time.time()) + COOKIE_MAX_AGE
-    payload = str(expires)
-    sig = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
-
-
-def token_valid(token: str | None) -> bool:
-    if not token or "." not in token:
-        return False
-    payload, _, sig = token.partition(".")
-    expected = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        return False
-    try:
-        return int(payload) > time.time()
-    except ValueError:
-        return False
-
-
-def require_teacher(request: Request) -> None:
-    if not token_valid(request.cookies.get(COOKIE_NAME)):
-        raise HTTPException(401, "Απαιτείται κωδικός καθηγητή.")
+auth = TeacherAuth(BASE_DIR, COOKIE_NAME)
+make_token = auth.make_token
+token_valid = auth.token_valid
+require_teacher = auth.require_teacher
 
 
 # ---------------------------------------------------------------------------
@@ -128,9 +86,7 @@ def hedgedoc_conn() -> sqlite3.Connection:
     if not HEDGEDOC_DB.is_file():
         raise HTTPException(503, "Δεν βρέθηκε η βάση HedgeDoc (hedgedoc.sqlite). "
                                  "Ελέγξτε το school-hedgedoc.service.")
-    conn = sqlite3.connect(f"file:{HEDGEDOC_DB}?mode=ro", uri=True, timeout=10)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return connect_ro(HEDGEDOC_DB)
 
 
 def fix_md_permissions(path: Path) -> None:
@@ -350,12 +306,18 @@ def list_lessons() -> list[dict]:
 
 
 def validate_lesson_path(lesson: str) -> Path:
-    """Επικύρωση διαδρομής .md μέσα στις 6 τάξεις (όχι assets/teachers)."""
+    """Επικύρωση διαδρομής .md μέσα στις 6 τάξεις (όχι assets/teachers).
+
+    Δέχεται τη νέα δομή mathimata/<τάξη>/… και την παλιά _paradeigma/<τάξη>/…
+    — ίδια paths με αυτά που επιστρέφει η list_lessons() στο UI.
+    """
     lesson = lesson.strip().replace("\\", "/").lstrip("/")
     parts = PurePosixPath(lesson).parts
+    slug = parts[1] if len(parts) > 1 and parts[0] in ("mathimata", "_paradeigma") else (
+        parts[0] if parts else "")
     if (not lesson.endswith(".md") or not parts
             or any(p in ("..", "") for p in parts)
-            or parts[0] not in CLASS_SLUGS):
+            or slug not in CLASS_SLUGS):
         raise HTTPException(400, "Μη έγκυρη διαδρομή μαθήματος (μόνο φάκελοι τάξεων).")
     target = (DOCS_DIR / lesson).resolve()
     if not str(target).startswith(str(DOCS_DIR.resolve()) + "/"):
@@ -472,7 +434,8 @@ def healthz():
 async def login(request: Request, response: Response):
     body = await request.json()
     password = str(body.get("password", ""))
-    if not hmac.compare_digest(password, TEACHER_CODE):
+    # encode() ώστε να υποστηρίζονται και μη-ASCII (λανθασμένοι) κωδικοί
+    if not hmac.compare_digest(password.encode(), TEACHER_CODE.encode()):
         raise HTTPException(401, "Λανθασμένος κωδικός καθηγητή.")
     response.set_cookie(
         COOKIE_NAME, make_token(),

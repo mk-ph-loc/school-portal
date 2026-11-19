@@ -192,29 +192,29 @@ def main():
     check("GET /api/embed/{id} → snippet", code == 200 and 'iframe src="/apps/e2e-paste-app/"' in body.get("embed", ""))
     code, body = t.call("api/lessons")
     lessons = [l["path"] for l in body.get("lessons", [])]
-    check("Λίστα μαθημάτων .md", code == 200 and "gymnasio-b/dyadiko.md" in lessons, f"{len(lessons)} μαθήματα")
+    check("Λίστα μαθημάτων .md", code == 200 and "_paradeigma/gymnasio-b/dyadiko.md" in lessons, f"{len(lessons)} μαθήματα")
     check("Εκτός assets/teachers", not any(l.startswith(("assets/", "teachers/")) for l in lessons))
 
     print("\n=== 7. Άμεση εισαγωγή σε μάθημα MkDocs ===")
-    lesson_file = PORTAL / "mkdocs-site" / "docs" / "gymnasio-b" / "dyadiko.md"
+    lesson_file = PORTAL / "mkdocs-site" / "docs" / "_paradeigma" / "gymnasio-b" / "dyadiko.md"
     original = lesson_file.read_text(encoding="utf-8")
     try:
-        code, body = t.call("api/embed-into-lesson", {"id": "e2e-paste-app", "lesson": "gymnasio-b/dyadiko.md"})
+        code, body = t.call("api/embed-into-lesson", {"id": "e2e-paste-app", "lesson": "_paradeigma/gymnasio-b/dyadiko.md"})
         check("Εισαγωγή → 200", code == 200, str(code) + " " + str(body.get("detail", "")))
         new_text = lesson_file.read_text(encoding="utf-8")
         check("Το block προστέθηκε στο τέλος", new_text.rstrip().endswith("</div>") and 'src="/apps/e2e-paste-app/"' in new_text)
         check("Το αρχικό περιεχόμενο διατηρήθηκε", new_text.startswith(original.rstrip()[:100]))
-        code, body = t.call("api/embed-into-lesson", {"id": "e2e-paste-app", "lesson": "gymnasio-b/dyadiko.md"})
+        code, body = t.call("api/embed-into-lesson", {"id": "e2e-paste-app", "lesson": "_paradeigma/gymnasio-b/dyadiko.md"})
         check("Διπλή εισαγωγή → 409", code == 409, str(code))
         code, body = t.call("api/embed-into-lesson", {"id": "e2e-paste-app", "lesson": "../../etc/passwd"})
         check("Path traversal → 400/404", code in (400, 404), str(code))
-        code, body = t.call("api/embed-into-lesson", {"id": "e2e-paste-app", "lesson": "teachers/lyseis.md"})
+        code, body = t.call("api/embed-into-lesson", {"id": "e2e-paste-app", "lesson": "_paradeigma/teachers/lyseis.md"})
         check("Προστατευμένη περιοχή teachers → 400", code == 400, str(code))
         # Αναμονή αυτόματου rebuild (inotify path unit ή άμεσο trigger)
         rebuilt = False
         for _ in range(40):
             time.sleep(1)
-            c, page = get_url("http://127.0.0.1/docs/gymnasio-b/dyadiko/")
+            c, page = get_url("http://127.0.0.1/docs/_paradeigma/gymnasio-b/dyadiko/")
             if c == 200 and "custom-app-embed" in page and 'src="/apps/e2e-paste-app/"' in page:
                 rebuilt = True
                 break

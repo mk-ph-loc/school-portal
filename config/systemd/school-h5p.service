@@ -12,6 +12,8 @@ WorkingDirectory=/opt/school-portal/h5p-studio
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=HOME=/opt/school-portal/h5p-studio
+# Κοινό πακέτο common/ (auth, classes, lessons, db, schedule) στη ρίζα της πύλης
+Environment=PYTHONPATH=/opt/school-portal
 # ΣΗΜΕΙΩΣΗ: Η 8011 χρησιμοποιείται ήδη από το Web Lab (/web-lab/)·
 # το H5P Studio ακούει στο 127.0.0.1:8012 πίσω από τον Nginx στο /h5p-studio/.
 ExecStart=/opt/school-portal/venv/bin/uvicorn main:app \

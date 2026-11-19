@@ -15,11 +15,7 @@ Lesson Wizard — Οπτικός επεξεργαστής ημερήσιων μ�
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
-import json
 import re
-import secrets
 import shutil
 import time
 from datetime import datetime
@@ -29,6 +25,13 @@ from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File,
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
+from common.classes import CLASS_GROUPS, CLASS_SLUGS, CLASS_LABELS, SLUG_RE
+from common.lessons import (PHASE_TYPES, FM_RE, parse_lesson, render_lesson,
+                            fm_meta, set_fm_meta, valid_lesson_path,
+                            list_all_lessons as _list_all_lessons)
+from common.schedule import DAYS, hhmm as _hhmm, load_json, save_json, parse_schedule_xlsx
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -47,33 +50,9 @@ BOOKS_JSON = DATA_DIR / "books.json"
 TEMPLATE_XLSX = DATA_DIR / "orari-protypo.xlsx"
 LIBRARY_DIR = DOCS_DIR / "vivliothiki"
 
-DAYS = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή"]
-
-TEACHER_CODE = "teacher2026"
 COOKIE_NAME = "lessonwizard_teacher"
-COOKIE_MAX_AGE = 8 * 3600                            # μία σχολική ημέρα
 
-CLASS_GROUPS = [
-    {"slug": "gymnasio-a", "label": "Α' Γυμνασίου"},
-    {"slug": "gymnasio-b", "label": "Β' Γυμνασίου"},
-    {"slug": "gymnasio-g", "label": "Γ' Γυμνασίου"},
-    {"slug": "lykeio-a",   "label": "Α' Λυκείου"},
-    {"slug": "lykeio-b",   "label": "Β' Λυκείου"},
-    {"slug": "lykeio-g",   "label": "Γ' Λυκείου"},
-]
-CLASS_SLUGS = {c["slug"] for c in CLASS_GROUPS}
-CLASS_LABELS = {c["slug"]: c["label"] for c in CLASS_GROUPS}
-
-SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")        # πεζά λατινικά/greeklish
-PHASE_TYPES = {
-    "aformisi":      {"icon": "🎯", "label": "Αφόρμηση",       "duration": 5},
-    "syzitisi":      {"icon": "💬", "label": "Συζήτηση",       "duration": 6},
-    "parousiasi":    {"icon": "📽️", "label": "Παρουσίαση",     "duration": 10},
-    "drastiriotita": {"icon": "✍️", "label": "Δραστηριότητα",  "duration": 15},
-    "aksiologisi":   {"icon": "✅", "label": "Αξιολόγηση",     "duration": 6},
-    "kleisimo":      {"icon": "🧭", "label": "Κλείσιμο",       "duration": 3},
-    "custom":        {"icon": "🧩", "label": "Ελεύθερη φάση",  "duration": 5},
-}
+# Τάξεις & τύποι φάσεων: common.classes / common.lessons (ίδια σε όλη την πύλη)
 UPLOAD_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".pdf",
                ".html", ".mp4", ".webm", ".mp3", ".ogg", ".pptx", ".odp", ".zip"}
 UPLOAD_MAX = 40 * 1024 * 1024                        # 40 MB ανά αρχείο
@@ -95,121 +74,30 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 
 # ---------------------------------------------------------------------------
-# Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC), όχι απλό flag
+# Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC) — common.auth
 # ---------------------------------------------------------------------------
-def _secret_key() -> bytes:
-    key_file = BASE_DIR / ".cookie-secret"
-    if not key_file.exists():
-        key_file.write_text(secrets.token_hex(32))
-        key_file.chmod(0o600)
-    return key_file.read_text().strip().encode()
+auth = TeacherAuth(BASE_DIR, COOKIE_NAME)
+make_token = auth.make_token
+token_valid = auth.token_valid
+require_teacher = auth.require_teacher
 
 
-SECRET_KEY = _secret_key()
-
-
-def make_token() -> str:
-    expires = int(time.time()) + COOKIE_MAX_AGE
-    payload = str(expires)
-    sig = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
-
-
-def token_valid(token: str | None) -> bool:
-    if not token or "." not in token:
-        return False
-    payload, _, sig = token.partition(".")
-    expected = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        return False
-    try:
-        return int(payload) > time.time()
-    except ValueError:
-        return False
-
-
-def require_teacher(request: Request) -> None:
-    if not token_valid(request.cookies.get(COOKIE_NAME)):
-        raise HTTPException(401, "Απαιτείται κωδικός καθηγητή.")
 # ---------------------------------------------------------------------------
-# Parsing / serialization μαθήματος (φάσεις με markers — ίδιο format με το hook)
+# Μαθήματα: parsing/render/front-matter στο common.lessons (ίδιο format με το hook)
 # ---------------------------------------------------------------------------
-PHASE_RE = re.compile(
-    r"^<!--\s*phase:\s*([a-z0-9_-]+)([^\n]*?)-->\s*$(.*?)^<!--\s*/phase\s*-->\s*$",
-    re.MULTILINE | re.DOTALL,
-)
-ATTR_RE = re.compile(r"\|\s*([a-z_]+):\s*([^|]*?)(?=\||$)")
-TN_RE = re.compile(r"<!--\s*teacher-notes\s*-->(.*?)<!--\s*/teacher-notes\s*-->", re.DOTALL)
-FM_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
-
-
-def parse_lesson(md: str) -> dict:
-    """Χωρίζει το markdown σε front-matter, κεφαλίδα, φάσεις & σημειώσεις."""
-    fm = ""
-    m = FM_RE.match(md)
-    if m:
-        fm = m.group(1)
-        md_rest = md[m.end():]
-    else:
-        md_rest = md
-    tn = ""
-    tnm = TN_RE.search(md_rest)
-    if tnm:
-        tn = tnm.group(1).strip()
-        md_rest = TN_RE.sub("", md_rest)
-    phases = []
-    header_parts = []
-    pos = 0
-    for pm in PHASE_RE.finditer(md_rest):
-        header_parts.append(md_rest[pos:pm.start()])
-        attrs = dict((k.strip(), v.strip()) for k, v in ATTR_RE.findall(pm.group(2) or ""))
-        ptype = pm.group(1)
-        phases.append({
-            "type": ptype,
-            "title": attrs.get("title", PHASE_TYPES.get(ptype, {}).get("label", "Φάση")),
-            "duration": int(attrs.get("duration", "0") or 0),
-            "body": pm.group(3).strip("\n"),
-        })
-        pos = pm.end()
-    header_parts.append(md_rest[pos:])
-    return {
-        "front_matter": fm,
-        "header": "".join(header_parts).strip("\n"),
-        "phases": phases,
-        "teacher_notes": tn,
-    }
-
-
-def render_lesson(data: dict) -> str:
-    """Συναρμολογεί το markdown από τα δομικά στοιχεία (στρογγυλοποίηση μορφής)."""
-    out = []
-    if data.get("front_matter"):
-        out.append("---\n" + data["front_matter"].strip() + "\n---\n")
-    out.append(data.get("header", "").strip() + "\n")
-    for ph in data.get("phases", []):
-        ptype = ph.get("type", "custom")
-        title = ph.get("title") or PHASE_TYPES.get(ptype, {}).get("label", "Φάση")
-        dur = int(ph.get("duration") or 0)
-        out.append(
-            f"\n<!-- phase: {ptype} | title: {title} | duration: {dur} -->\n"
-            + ph.get("body", "").strip()
-            + "\n<!-- /phase -->\n"
-        )
-    if data.get("teacher_notes", "").strip():
-        out.append("\n<!-- teacher-notes -->\n" + data["teacher_notes"].strip() + "\n<!-- /teacher-notes -->\n")
-    return "\n".join(out).replace("\n\n\n", "\n\n")
-
-
 def lesson_dir(class_slug: str, subject: str, lesson: str) -> Path:
     """Έγκυρος φάκελος ημερήσιου μαθήματος (αυστηρή επαλήθευση διαδρομών)."""
-    if not (SLUG_RE.match(class_slug) and class_slug in CLASS_SLUGS):
-        raise HTTPException(400, "Μη έγκυρη τάξη.")
-    if not SLUG_RE.match(subject) or not SLUG_RE.match(lesson):
-        raise HTTPException(400, "Μη έγκυρο όνομα μαθήματος/ενότητας.")
+    if not valid_lesson_path(class_slug, subject, lesson):
+        raise HTTPException(400, "Μη έγκυρη τάξη ή όνομα μαθήματος/ενότητας.")
     d = (MATH_DIR / class_slug / subject / lesson).resolve()
     if not str(d).startswith(str(MATH_DIR.resolve())):
         raise HTTPException(400, "Μη έγκυρη διαδρομή.")
     return d
+
+
+def list_all_lessons() -> list[dict]:
+    """Όλα τα ημερήσια μαθήματα του mkdocs-site (common.lessons)."""
+    return _list_all_lessons(MATH_DIR)
 
 
 def backup_file(path: Path) -> None:
@@ -221,103 +109,7 @@ def backup_file(path: Path) -> None:
     shutil.copy2(path, BACKUP_DIR / f"{stamp}__{rel}.bak")
 
 
-def fm_meta(fm: str) -> dict:
-    """Ελαφρύ διάβασμα μεταδεδομένων front-matter (tags/favorite/unit/book).
-
-    Δεν απαιτεί PyYAML — καλύπτει τις μορφές που γράφει το wizard:
-      tags: [a, b]  ή  tags:\n    - a\n    - b
-      favorite: true
-    """
-    meta: dict = {"tags": [], "favorite": False}
-    m = re.search(r"^tags:\s*\[(.*?)\]\s*$", fm, re.MULTILINE)
-    if m:
-        meta["tags"] = [t.strip().strip("'\"") for t in m.group(1).split(",") if t.strip()]
-    else:
-        m = re.search(r"^tags:\s*\n((?:\s+-\s+.+\n?)+)", fm, re.MULTILINE)
-        if m:
-            meta["tags"] = [x.strip().lstrip("-").strip().strip("'\"")
-                            for x in m.group(1).strip().splitlines() if x.strip()]
-    m = re.search(r"^favorite:\s*(true|yes|1)\s*$", fm, re.MULTILINE | re.IGNORECASE)
-    meta["favorite"] = bool(m)
-    m = re.search(r"^\s+unit:\s*['\"]?(.*?)['\"]?\s*$", fm, re.MULTILINE)
-    if m:
-        meta["unit"] = m.group(1).strip()
-    m = re.search(r"^\s+book_pages:\s*['\"]?(.*?)['\"]?\s*$", fm, re.MULTILINE)
-    if m:
-        meta["book_pages"] = m.group(1).strip()
-    return meta
-
-
-def set_fm_meta(fm: str, tags: list[str] | None, favorite: bool | None) -> str:
-    """Γράφει/αντικαθιστά τα tags & favorite στο front-matter (χωρίς YAML lib)."""
-    lines = fm.splitlines()
-    out: list[str] = []
-    skip_block = False
-    for ln in lines:
-        if skip_block:
-            if re.match(r"^\s+-\s+", ln):
-                continue                          # γραμμές παλιάς λίστας tags
-            skip_block = False
-        if re.match(r"^tags:", ln):
-            if not re.match(r"^tags:\s*\[", ln):
-                skip_block = True                 # block-style λίστα → αφαίρεση
-            continue
-        if re.match(r"^favorite:", ln):
-            continue
-        out.append(ln)
-    if tags is not None:
-        clean = [re.sub(r"[\[\],#'\"\n]", "", str(t)).strip() for t in tags]
-        clean = [t for t in clean if t][:12]
-        if clean:
-            out.append("tags: [" + ", ".join(clean) + "]")
-    if favorite:
-        out.append("favorite: true")
-    return "\n".join(out).strip("\n")
-
-
-def list_all_lessons() -> list[dict]:
-    """Όλα τα ημερήσια μαθήματα (φάκελοι με index.md κάτω από mathimata/)."""
-    out = []
-    if not MATH_DIR.is_dir():
-        return out
-    for cls_dir in sorted(MATH_DIR.iterdir()):
-        if not cls_dir.is_dir() or cls_dir.name not in CLASS_SLUGS:
-            continue
-        for subj_dir in sorted(cls_dir.iterdir()):
-            if not subj_dir.is_dir():
-                continue
-            for les_dir in sorted(subj_dir.iterdir()):
-                idx = les_dir / "index.md"
-                if not les_dir.is_dir() or not idx.is_file():
-                    continue
-                text = idx.read_text(encoding="utf-8", errors="ignore")
-                parsed = parse_lesson(text)
-                if not parsed["phases"]:
-                    continue                      # index ενότητας, όχι μάθημα
-                title = les_dir.name
-                hm = re.search(r"^# (.+)$", parsed["header"], re.MULTILINE)
-                if hm:
-                    title = hm.group(1).strip()
-                total = sum(p["duration"] for p in parsed["phases"])
-                files = [p.name for p in sorted(les_dir.iterdir())
-                         if p.is_file() and p.name != "index.md"]
-                meta = fm_meta(parsed["front_matter"])
-                out.append({
-                    "class_slug": cls_dir.name,
-                    "class_label": CLASS_LABELS[cls_dir.name],
-                    "subject": subj_dir.name,
-                    "lesson": les_dir.name,
-                    "title": title,
-                    "phases": len(parsed["phases"]),
-                    "duration": total,
-                    "files": files,
-                    "tags": meta["tags"],
-                    "favorite": meta["favorite"],
-                    "unit": meta.get("unit", ""),
-                    "book_pages": meta.get("book_pages", ""),
-                    "url": f"/docs/mathimata/{cls_dir.name}/{subj_dir.name}/{les_dir.name}/",
-                })
-    return out
+# fm_meta/set_fm_meta/list_all_lessons: common.lessons (βλ. imports & wrappers)
 # ---------------------------------------------------------------------------
 # Αυτόματο nav στο mkdocs.yml (μεταξύ των δεικτών BEGIN/END AUTO-NAV)
 # ---------------------------------------------------------------------------
@@ -433,20 +225,8 @@ lesson:
 <!-- /teacher-notes -->
 """
 # ---------------------------------------------------------------------------
-# Ωράριο (Excel → JSON) & ενεργό μάθημα
+# Ωράριο (Excel → JSON) & ενεργό μάθημα — parsing/JSON helpers: common.schedule
 # ---------------------------------------------------------------------------
-def load_json(path: Path, default):
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return default
-
-
-def save_json(path: Path, data) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
 def make_template_xlsx() -> None:
     """Δημιουργεί το πρότυπο Excel ωραρίου (4 φύλλα, με οδηγίες & παράδειγμα)."""
     from openpyxl import Workbook
@@ -499,46 +279,8 @@ def make_template_xlsx() -> None:
     wb.save(TEMPLATE_XLSX)
 
 
-def parse_schedule_xlsx(path: Path) -> dict:
-    """Μετατρέπει το Excel ωραρίου στο JSON που καταναλώνει το schedule.js."""
-    from openpyxl import load_workbook
-
-    wb = load_workbook(path, read_only=True, data_only=True)
-    tmimata = []
-    if "Τμήματα" in wb.sheetnames:
-        for row in wb["Τμήματα"].iter_rows(min_row=2, values_only=True):
-            if row and row[0]:
-                tmimata.append({"name": str(row[0]).strip(),
-                                "class_slug": str(row[1] or "").strip()})
-    periods = []
-    if "Ωρες" in wb.sheetnames:
-        for row in wb["Ωρες"].iter_rows(min_row=2, values_only=True):
-            if row and row[1] and row[2]:
-                periods.append({"start": _hhmm(row[1]), "end": _hhmm(row[2])})
-    timetable: dict = {}
-    if "Ωραριο" in wb.sheetnames:
-        for row in wb["Ωραριο"].iter_rows(min_row=2, values_only=True):
-            if not row or not row[0] or not row[1] or not row[2]:
-                continue
-            tm, day, period = str(row[0]).strip(), str(row[1]).strip(), str(int(row[2]))
-            title = str(row[3] or "").strip()
-            url = str(row[4] or "").strip()
-            timetable.setdefault(tm, {}).setdefault(day, {})[period] = {"title": title, "url": url}
-    wb.close()
-    return {"tmimata": tmimata, "periods": periods, "timetable": timetable,
-            "updated": datetime.now().isoformat(timespec="seconds")}
-
-
-def _hhmm(v) -> str:
-    """Δέχεται '8:15', datetime.time ή κλάσμα ημέρας του Excel."""
-    if hasattr(v, "strftime"):
-        return v.strftime("%H:%M")
-    if isinstance(v, (int, float)):
-        mins = round(float(v) * 24 * 60)
-        return f"{mins // 60:02d}:{mins % 60:02d}"
-    s = str(v).strip()
-    m = re.match(r"^(\d{1,2}):(\d{2})", s)
-    return f"{int(m.group(1)):02d}:{m.group(2)}" if m else s
+# parse_schedule_xlsx/_hhmm: common.schedule (δέχεται και το ενιαίο Excel του
+# Classroom Hub — οι 3 καρτέλες ωραρίου είναι ΑΥΤΟΥΣΙΕΣ με αυτό το πρότυπο).
 # ---------------------------------------------------------------------------
 # Routes — σελίδες & auth
 # ---------------------------------------------------------------------------

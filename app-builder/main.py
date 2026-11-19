@@ -15,7 +15,6 @@
 """
 from __future__ import annotations
 
-import hashlib
 import hmac
 import html as html_mod
 import io
@@ -25,7 +24,6 @@ import secrets
 import shutil
 import subprocess
 import sys
-import time
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -33,6 +31,8 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, Response, Uploa
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
 
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
@@ -45,9 +45,7 @@ MANIFEST_SCRIPT = PORTAL_DIR / "scripts" / "build-apps-manifest.py"
 DOCS_DIR = PORTAL_DIR / "mkdocs-site" / "docs"
 BUILD_DOCS_SCRIPT = PORTAL_DIR / "scripts" / "build-docs.sh"
 
-TEACHER_CODE = "teacher2026"
 COOKIE_NAME = "appbuilder_teacher"
-COOKIE_MAX_AGE = 8 * 3600            # μία σχολική ημέρα
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 VALID_ACCESS = {"all", "teachers"}
@@ -81,43 +79,12 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 # ---------------------------------------------------------------------------
-# Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC), όχι απλό flag
+# Αυθεντικοποίηση καθηγητή: υπογεγραμμένο cookie (HMAC) — common.auth
 # ---------------------------------------------------------------------------
-def _secret_key() -> bytes:
-    """Σταθερό μυστικό ανά εγκατάσταση (δημιουργείται μία φορά, εκτός git)."""
-    key_file = BASE_DIR / ".cookie-secret"
-    if not key_file.exists():
-        key_file.write_text(secrets.token_hex(32))
-        key_file.chmod(0o600)
-    return key_file.read_text().strip().encode()
-
-
-SECRET_KEY = _secret_key()
-
-
-def make_token() -> str:
-    expires = int(time.time()) + COOKIE_MAX_AGE
-    payload = str(expires)
-    sig = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
-
-
-def token_valid(token: str | None) -> bool:
-    if not token or "." not in token:
-        return False
-    payload, _, sig = token.partition(".")
-    expected = hmac.new(SECRET_KEY, payload.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        return False
-    try:
-        return int(payload) > time.time()
-    except ValueError:
-        return False
-
-
-def require_teacher(request: Request) -> None:
-    if not token_valid(request.cookies.get(COOKIE_NAME)):
-        raise HTTPException(401, "Απαιτείται κωδικός καθηγητή.")
+auth = TeacherAuth(BASE_DIR, COOKIE_NAME)
+make_token = auth.make_token
+token_valid = auth.token_valid
+require_teacher = auth.require_teacher
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +324,8 @@ def healthz():
 async def login(request: Request, response: Response):
     body = await request.json()
     password = str(body.get("password", ""))
-    if not hmac.compare_digest(password, TEACHER_CODE):
+    # encode() ώστε να υποστηρίζονται και μη-ASCII (λανθασμένοι) κωδικοί
+    if not hmac.compare_digest(password.encode(), TEACHER_CODE.encode()):
         raise HTTPException(401, "Λανθασμένος κωδικός καθηγητή.")
     response.set_cookie(
         COOKIE_NAME, make_token(),
@@ -545,7 +513,7 @@ def list_lessons() -> list[dict]:
     lessons = []
     for p in sorted(DOCS_DIR.rglob("*.md")):
         rel = p.relative_to(DOCS_DIR).as_posix()
-        if rel.startswith(("assets/", "teachers/")):
+        if rel.startswith(("assets/", "teachers/", "_paradeigma/teachers/")):
             continue  # assets: όχι μαθήματα· teachers: προστατευμένη περιοχή Basic Auth
         # Πρώτη επικεφαλίδα # ως φιλικός τίτλος (αλλιώς το όνομα αρχείου)
         label = rel
@@ -599,7 +567,8 @@ async def embed_into_lesson(request: Request):
     target = (DOCS_DIR / lesson).resolve()
     if not str(target).startswith(str(DOCS_DIR.resolve()) + "/") or not target.is_file():
         raise HTTPException(404, "Το μάθημα δεν βρέθηκε.")
-    if target.parts[len(DOCS_DIR.resolve().parts)] in ("assets", "teachers"):
+    rel_parts = target.relative_to(DOCS_DIR.resolve()).parts
+    if rel_parts[0] == "assets" or "teachers" in rel_parts:
         raise HTTPException(400, "Δεν επιτρέπεται εισαγωγή σε assets ή στην προστατευμένη περιοχή teachers.")
 
     meta = read_app_meta(dest)

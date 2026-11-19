@@ -276,6 +276,7 @@ def main():
     with urllib.request.urlopen(req, timeout=20) as res:
         xlsx_bytes = res.read()
     check("Λήψη προτύπου .xlsx", xlsx_bytes[:2] == b"PK")
+    sys.path.insert(0, "/opt/school-portal")            # κοινό πακέτο common/
     sys.path.insert(0, "/opt/school-portal/apps/classroom-hub")
     import app as hub
     from pathlib import Path

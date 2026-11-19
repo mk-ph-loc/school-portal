@@ -28,6 +28,14 @@
 #   /h5p-studio/    → H5P Studio Διαδραστικών Ασκήσεων (FastAPI+SQLite @127.0.0.1:8012)
 # ===========================================================================
 
+# --- Rate limiting στα login endpoints (brute-force protection) ---
+# 30 προσπάθειες/λεπτό ανά IP (1 ανά 2s) + burst 10 nodelay: αρκετά χαλαρό
+# για διαδοχικά e2e tests & τυπογραφικά λάθη, αλλά κόβει το γρήγορο
+# brute-force (max ~40 απόπειρες/λεπτό αντί χιλιάδες). Οι μαθητές δεν
+# επηρεάζονται: τα student joins/PIN ΔΕΝ περνούν από τα login locations.
+# ΣΗΜΕΙΩΣΗ: το limit_req_zone επιτρέπεται ΜΟΝΟ σε http context (εκτός server).
+limit_req_zone $binary_remote_addr zone=school_login:1m rate=30r/m;
+
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -454,6 +462,64 @@ server {
     #     περιβάλλον καθηγητή (/exams/teacher) προστατεύεται από την ίδια
     #     την εφαρμογή με κωδικό teacher2026 (HMAC-signed cookie).
     # -----------------------------------------------------------------
+    # -----------------------------------------------------------------
+    # 6β0. Rate-limited login endpoints ΟΛΩΝ των εφαρμογών καθηγητή.
+    #      Τα exact matches (=) υπερισχύουν των ^~ prefix locations,
+    #      οπότε ΜΟΝΟ τα POST login περνούν από το limit_req· η υπόλοιπη
+    #      κίνηση κάθε app συνεχίζει κανονικά από το δικό του location.
+    #      Κοινό proxy snippet: ίδια headers με τα γενικά app locations.
+    # -----------------------------------------------------------------
+    location = /exams/api/teacher/login {
+        limit_req zone=school_login burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8004/api/teacher/login;
+        include /etc/nginx/snippets/school-proxy-headers.conf;
+    }
+    location = /live-quiz/api/teacher/login {
+        limit_req zone=school_login burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8005/api/teacher/login;
+        include /etc/nginx/snippets/school-proxy-headers.conf;
+    }
+    location = /web-lab/api/teacher/login {
+        limit_req zone=school_login burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8011/api/teacher/login;
+        include /etc/nginx/snippets/school-proxy-headers.conf;
+    }
+    location = /h5p-studio/api/login {
+        limit_req zone=school_login burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8012/api/login;
+        include /etc/nginx/snippets/school-proxy-headers.conf;
+    }
+    location = /app-builder/api/login {
+        limit_req zone=school_login burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8008/api/login;
+        include /etc/nginx/snippets/school-proxy-headers.conf;
+    }
+    location = /md-publish/api/login {
+        limit_req zone=school_login burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8009/api/login;
+        include /etc/nginx/snippets/school-proxy-headers.conf;
+    }
+    location = /lesson-wizard/api/login {
+        limit_req zone=school_login burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8013/api/login;
+        include /etc/nginx/snippets/school-proxy-headers.conf;
+    }
+    location = /classroom/api/join {
+        # ΜΟΝΟ το join με role=teacher ελέγχει κωδικό· τα guest/student joins
+        # είναι φθηνά, αλλά μοιράζονται το ίδιο endpoint — χαλαρότερο όριο.
+        limit_req zone=school_login burst=20 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8014/api/join;
+        include /etc/nginx/snippets/school-proxy-headers.conf;
+    }
+
     location = /exams {
         return 301 /exams/;
     }

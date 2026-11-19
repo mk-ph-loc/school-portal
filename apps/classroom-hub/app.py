@@ -28,9 +28,7 @@ Forum, Βοήθεια — διαμορφώσιμα ανά ρόλο από Excel)
 from __future__ import annotations
 
 import asyncio
-import base64
-import hashlib
-import hmac
+import logging
 import json
 import random
 import re
@@ -45,6 +43,13 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from common.auth import TeacherAuth, TEACHER_CODE, COOKIE_MAX_AGE
+from common.db import connect, add_columns
+from common.lessons import lessons_catalog
+from common.schedule import (DAYS, hhmm as _hhmm, parse_schedule_xlsx,
+                             schedule_deadline as _schedule_deadline,
+                             event_deadline as _event_deadline)
+
 # ---------------------------------------------------------------------------
 # Διαδρομές & σταθερές
 # ---------------------------------------------------------------------------
@@ -56,15 +61,14 @@ CONFIG_JSON = DATA_DIR / "config.json"                 # αποτέλεσμα τ
 TEMPLATE_XLSX = DATA_DIR / "rythmiseis-protypo.xlsx"   # ενιαίο πρότυπο όλων των ρυθμίσεων
 LW_SCHEDULE_JSON = PORTAL_DIR / "apps" / "lesson-wizard" / "data" / "schedule.json"
 
-TEACHER_CODE = "teacher2026"                           # ίδιος κωδικός με όλη την πύλη
 COOKIE_NAME = "classroom_teacher"
 IDENT_COOKIE = "classroom_ident"                       # HttpOnly HMAC ταυτότητα σύνδεσης
-COOKIE_MAX_AGE = 8 * 3600                              # μία σχολική ημέρα
 
 HEARTBEAT_TIMEOUT = 45                                 # χωρίς ping τόσο → αποσύνδεση
-DAYS = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή"]
 ROLES = ("guest", "student", "teacher")
 NAME_RE = re.compile(r"^[\w\u0370-\u03ff\u1f00-\u1fff .'-]{1,40}$")
+
+log = logging.getLogger("classroom-hub")
 
 app = FastAPI(
     title="Classroom Hub — Ζωντανή Τάξη",
@@ -76,43 +80,11 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 
 # ---------------------------------------------------------------------------
-# Αυθεντικοποίηση: HMAC cookies (ίδιο μοτίβο με lesson-wizard / live-quiz)
+# Αυθεντικοποίηση: HMAC cookies (common.auth — ίδιο μοτίβο με όλη την πύλη)
 # ---------------------------------------------------------------------------
-def _secret_key() -> bytes:
-    key_file = BASE_DIR / ".cookie-secret"
-    if not key_file.exists():
-        key_file.write_text(secrets.token_hex(32))
-        key_file.chmod(0o600)
-    return key_file.read_text().strip().encode()
-
-
-SECRET_KEY = _secret_key()
-
-
-def make_token(payload: str, max_age: int = COOKIE_MAX_AGE) -> str:
-    # base64url: τα ονόματα είναι ελληνικά — τα cookies πρέπει να είναι latin-1 safe
-    expires = int(time.time()) + max_age
-    b64 = base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
-    body = f"{expires}:{b64}"
-    sig = hmac.new(SECRET_KEY, body.encode(), hashlib.sha256).hexdigest()
-    return f"{body}.{sig}"
-
-
-def token_payload(token: str | None) -> str | None:
-    """Επιστρέφει το payload αν η υπογραφή & η λήξη είναι έγκυρες, αλλιώς None."""
-    if not token or "." not in token:
-        return None
-    body, _, sig = token.rpartition(".")
-    expected = hmac.new(SECRET_KEY, body.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        return None
-    exp, _, b64 = body.partition(":")
-    try:
-        if int(exp) <= time.time():
-            return None
-        return base64.urlsafe_b64decode(b64 + "=" * (-len(b64) % 4)).decode("utf-8")
-    except (ValueError, UnicodeDecodeError):
-        return None
+auth = TeacherAuth(BASE_DIR, COOKIE_NAME)
+make_token = auth.signed_token                         # payload μορφή (ελληνικά ονόματα)
+token_payload = auth.token_payload
 
 
 def is_teacher(request: Request) -> bool:
@@ -141,14 +113,10 @@ def set_identity(response: Response, uid: str, role: str, name: str, tmima: str)
 
 
 # ---------------------------------------------------------------------------
-# SQLite — chat, forum, polls, quiz & αποτελέσματα (μόνο μαθητών)
+# SQLite — chat, forum, polls, quiz & αποτελέσματα (μόνο μαθητών) — common.db
 # ---------------------------------------------------------------------------
 def db() -> sqlite3.Connection:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+    return connect(DB_PATH, create_parent=True)
 
 
 def init_db() -> None:
@@ -206,15 +174,12 @@ def init_db() -> None:
         );
         """)
         # --- Ήπιες migrations για υπάρχουσες βάσεις (νέες στήλες lifecycle) ---
-        for table, col, ddl in (
+        add_columns(conn, (
             ("polls", "auto_close", "INTEGER NOT NULL DEFAULT 0"),
             ("polls", "ends_at", "REAL NOT NULL DEFAULT 0"),
             ("quizzes", "auto_close", "INTEGER NOT NULL DEFAULT 0"),
             ("quizzes", "ends_at", "REAL NOT NULL DEFAULT 0"),
-        ):
-            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
-            if col not in cols:
-                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+        ))
 
 
 init_db()
@@ -233,6 +198,36 @@ def recent_announcements(limit: int = 20) -> list[dict]:
         except ValueError:
             d["links"] = []
         out.append(d)
+    return out
+
+
+def visible_announcements(ident: dict | None, teacher: bool, limit: int = 20) -> list[dict]:
+    """Ανακοινώσεις ΟΡΑΤΕΣ στον συγκεκριμένο χρήστη (όχι προσωπικά ξένων).
+
+    Τα προσωπικά βραβεία/συγχαρητήρια (target_uid) και οι στοχευμένες
+    ανακοινώσεις (audience/tmima) δεν πρέπει να διαρρέουν σε άλλους μέσω
+    του /api/config/public ή του WS welcome μετά από reconnect.
+    """
+    out = []
+    for a in recent_announcements(limit):
+        if teacher:
+            out.append(a)                       # ο καθηγητής βλέπει τα πάντα
+            continue
+        target = a.get("target_uid", "")
+        if target and (not ident or ident["uid"] != target):
+            continue                            # προσωπικό μήνυμα ΑΛΛΟΥ χρήστη
+        role = ident["role"] if ident else "guest"
+        tmima = ident.get("tmima", "") if ident else ""
+        aud = a.get("audience", "all")
+        ok = (aud == "all"
+              or (aud == "students" and role in ("student", "guest"))
+              or (aud == "guests" and role == "guest")
+              or (aud == "teachers" and False)
+              or (aud.startswith("role:") and aud[5:] == role))
+        if ok and a.get("tmima") and a["tmima"] != tmima:
+            ok = False                          # φίλτρο τμήματος
+        if ok:
+            out.append(a)
     return out
 
 
@@ -541,7 +536,7 @@ def api_config_public(request: Request):
         "timers_cfg": CONFIG["timers"] if role == "teacher" else [],
         "events_cfg": CONFIG["events"] if role == "teacher" else [],
         "announce_links": CONFIG.get("announce_links", []) if role == "teacher" else [],
-        "announcements": recent_announcements(20),
+        "announcements": visible_announcements(ident, role == "teacher"),
         "server_now": time.time(),
     }
 
@@ -991,21 +986,9 @@ async def api_quiz_results_bulk_delete(request: Request):
 # Timers — ιδιωτικοί/δημόσιοι, με anchor στο ωράριο + offset ±λεπτών
 # ---------------------------------------------------------------------------
 def schedule_deadline(tmima: str, day: str, period: int, edge: str, offset_min: float) -> float | None:
-    """Υπολογίζει epoch deadline από διδακτική ώρα του ωραρίου + offset.
+    """Υπολογίζει epoch deadline από διδακτική ώρα του ωραρίου + offset (common.schedule).
     edge: start|end· day='' → σημερινή ημέρα."""
-    periods = CONFIG["schedule"]["periods"]
-    if not (1 <= period <= len(periods)):
-        return None
-    day_idx = DAYS.index(day) if day in DAYS else datetime.now().weekday()
-    hhmm = periods[period - 1]["start" if edge == "start" else "end"]
-    try:
-        h, m = map(int, str(hhmm).split(":"))
-    except ValueError:
-        return None
-    now = datetime.now()
-    base = now.replace(hour=h, minute=m, second=0, microsecond=0)
-    # μεταφορά στη σωστή ημέρα της εβδομάδας (ίδια εβδομάδα)
-    return base.timestamp() + (day_idx - now.weekday()) * 86400 + offset_min * 60
+    return _schedule_deadline(CONFIG["schedule"]["periods"], day, period, edge, offset_min)
 
 
 @app.post("/api/cmd/timer")
@@ -1060,27 +1043,8 @@ EVENTS_FIRED: set[str] = set()                          # "event_id:YYYY-MM-DD" 
 
 def event_deadline(ev: dict) -> float | None:
     """trigger: day_end (τέλος τελευταίας ώρας), period_end (συγκεκριμένη ώρα),
-    time (συγκεκριμένη HH:MM) — πάντα με offset ±λεπτών."""
-    trigger = ev.get("trigger", "day_end")
-    offset = float(ev.get("offset_min", 0))
-    periods = CONFIG["schedule"]["periods"]
-    now = datetime.now()
-    if trigger == "day_end" and periods:
-        hhmm = periods[-1]["end"]
-    elif trigger == "period_end":
-        p = int(ev.get("period", 0))
-        if not (1 <= p <= len(periods)):
-            return None
-        hhmm = periods[p - 1]["end"]
-    elif trigger == "time":
-        hhmm = str(ev.get("time", ""))
-    else:
-        return None
-    try:
-        h, m = map(int, hhmm.split(":"))
-    except ValueError:
-        return None
-    return now.replace(hour=h, minute=m, second=0, microsecond=0).timestamp() + offset * 60
+    time (συγκεκριμένη HH:MM) — πάντα με offset ±λεπτών (common.schedule)."""
+    return _event_deadline(ev, CONFIG["schedule"]["periods"])
 
 
 async def fire_event(kind: str, text: str, audience: str = "all", tmima: str = "",
@@ -1150,7 +1114,7 @@ async def housekeeping() -> None:
                                      ev.get("audience", "all"), ev.get("tmima", ""),
                                      ev.get("url", ""))
         except Exception:
-            pass                                        # ποτέ δεν σκοτώνει το loop
+            log.exception("housekeeping: απρόσμενο σφάλμα (το loop συνεχίζει)")
         await asyncio.sleep(1)
 
 
@@ -1257,7 +1221,9 @@ async def hub_socket(ws: WebSocket):
     mute = active_mute(c.uid)
     await send_json(ws, {"type": "welcome", "identity": c.public(),
                          "server_now": time.time(),
-                         "announcements": recent_announcements(20),
+                         "announcements": visible_announcements(
+                             {"uid": c.uid, "role": c.role, "tmima": c.tmima},
+                             c.role == "teacher"),
                          "muted_until": mute["until_ts"] if mute else 0,
                          "timers": [t for t in ACTIVE_TIMERS.values()
                                     if t["visibility"] == "public" or c.role == "teacher"],
@@ -1508,6 +1474,9 @@ async def api_forum_new_thread(request: Request):
         raise HTTPException(401, "Συνδέσου πρώτα.")
     if ident["role"] == "guest" and not CONFIG["access"].get("guest_forum"):
         raise HTTPException(403, "Το forum δεν είναι διαθέσιμο στους επισκέπτες.")
+    mute = active_mute(ident["uid"])            # 🔇 η σιωπή ισχύει και στο REST forum
+    if mute and ident["role"] != "teacher":
+        raise HTTPException(403, "Έχεις προσωρινή σιωπή (mute) από τον καθηγητή.")
     body = await request.json()
     title = str(body.get("title", "")).strip()[:150]
     text = str(body.get("text", "")).strip()[:2000]
@@ -1570,52 +1539,15 @@ def api_roster(request: Request):
 
 
 # ---------------------------------------------------------------------------
-# 📚 Κατάλογος μαθημάτων & σύνδεσμοι για τη ΣΥΝΘΕΤΗ ανακοίνωση
+# 📚 Κατάλογος μαθημάτων & σύνδεσμοι για τη ΣΥΝΘΕΤΗ ανακοίνωση (common.lessons)
 # ---------------------------------------------------------------------------
-FM_TAGS_INLINE = re.compile(r"^tags:\s*\[(.*?)\]\s*$", re.MULTILINE)
-FM_TAGS_BLOCK = re.compile(r"^tags:\s*\n((?:\s+-\s+.+\n?)+)", re.MULTILINE)
-FM_FAV = re.compile(r"^favorite:\s*(true|yes|1)\s*$", re.MULTILINE | re.IGNORECASE)
-FM_RE_LOCAL = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
-CLASS_LABELS_LOCAL = {"gymnasio-a": "Α' Γυμνασίου", "gymnasio-b": "Β' Γυμνασίου",
-                      "gymnasio-g": "Γ' Γυμνασίου", "lykeio-a": "Α' Λυκείου",
-                      "lykeio-b": "Β' Λυκείου", "lykeio-g": "Γ' Λυκείου"}
-
-
 @app.get("/api/lessons-catalog")
 def api_lessons_catalog(request: Request):
     """Read-only κατάλογος μαθημάτων (τίτλος/tags/favorite/τάξη) από τα front-matter
-    του mkdocs-site — ίδια ελαφριά λογική με το Lesson Wizard, χωρίς εξαρτήσεις."""
+    του mkdocs-site — κοινή ελαφριά λογική με το Lesson Wizard (common.lessons)."""
     require_teacher(request)
     math_dir = PORTAL_DIR / "mkdocs-site" / "docs" / "mathimata"
-    out = []
-    if math_dir.is_dir():
-        for idx in sorted(math_dir.glob("*/*/*/index.md")):
-            parts = idx.relative_to(math_dir).parts
-            if len(parts) != 4 or parts[0] not in CLASS_LABELS_LOCAL:
-                continue
-            try:
-                text = idx.read_text(encoding="utf-8", errors="ignore")[:8000]
-            except OSError:
-                continue
-            fm_m = FM_RE_LOCAL.match(text)
-            fm = fm_m.group(1) if fm_m else ""
-            tags = []
-            m = FM_TAGS_INLINE.search(fm)
-            if m:
-                tags = [t.strip().strip("'\"") for t in m.group(1).split(",") if t.strip()]
-            else:
-                m = FM_TAGS_BLOCK.search(fm)
-                if m:
-                    tags = [x.strip().lstrip("-").strip().strip("'\"")
-                            for x in m.group(1).strip().splitlines() if x.strip()]
-            hm = re.search(r"^# (.+)$", text, re.MULTILINE)
-            title = hm.group(1).strip() if hm else parts[2]
-            out.append({"title": title[:120], "class_slug": parts[0],
-                        "class_label": CLASS_LABELS_LOCAL[parts[0]], "subject": parts[1],
-                        "lesson": parts[2], "tags": tags,
-                        "favorite": bool(FM_FAV.search(fm)),
-                        "url": f"/docs/mathimata/{parts[0]}/{parts[1]}/{parts[2]}/"})
-    return {"lessons": out,
+    return {"lessons": lessons_catalog(math_dir),
             "apps": [{"title": m["title"], "url": m["url"]}
                      for m in CONFIG["menu"] if m["url"].startswith("/")],
             "custom_links": CONFIG.get("announce_links", [])}
@@ -1882,18 +1814,7 @@ def make_template_xlsx() -> None:
 # ---------------------------------------------------------------------------
 # Parser ενιαίου Excel → config.json (δέχεται και το παλιό 4-φυλλο ωράριο)
 # ---------------------------------------------------------------------------
-def _hhmm(v) -> str:
-    """Δέχεται '8:15', datetime.time ή κλάσμα ημέρας του Excel (όπως lesson-wizard)."""
-    if hasattr(v, "strftime"):
-        return v.strftime("%H:%M")
-    if isinstance(v, (int, float)):
-        mins = round(float(v) * 24 * 60)
-        return f"{mins // 60:02d}:{mins % 60:02d}"
-    s = str(v).strip()
-    m = re.match(r"^(\d{1,2}):(\d{2})", s)
-    return f"{int(m.group(1)):02d}:{m.group(2)}" if m else s
-
-
+# _hhmm: common.schedule (ίδιο με lesson-wizard)
 def _bool(v, default=False) -> bool:
     s = str(v or "").strip().upper()
     if s in ("ΝΑΙ", "NAI", "YES", "TRUE", "1"):
@@ -1909,28 +1830,11 @@ def parse_config_xlsx(path: Path) -> dict:
     wb = load_workbook(path, read_only=True, data_only=True)
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
 
-    # --- Ωράριο: ΙΔΙΑ λογική με parse_schedule_xlsx του Lesson Wizard ---------
-    tmimata = []
-    if "Τμήματα" in wb.sheetnames:
-        for row in wb["Τμήματα"].iter_rows(min_row=2, values_only=True):
-            if row and row[0]:
-                tmimata.append({"name": str(row[0]).strip(),
-                                "class_slug": str(row[1] or "").strip()})
-    periods = []
-    if "Ωρες" in wb.sheetnames:
-        for row in wb["Ωρες"].iter_rows(min_row=2, values_only=True):
-            if row and row[1] and row[2]:
-                periods.append({"start": _hhmm(row[1]), "end": _hhmm(row[2])})
-    timetable: dict = {}
-    if "Ωραριο" in wb.sheetnames:
-        for row in wb["Ωραριο"].iter_rows(min_row=2, values_only=True):
-            if row and row[0] and row[1] and row[2]:
-                tm, day, per = str(row[0]).strip(), str(row[1]).strip(), str(int(row[2]))
-                timetable.setdefault(tm, {}).setdefault(day, {})[per] = {
-                    "title": str(row[3] or "").strip(),
-                    "url": str(row[4] or "").strip() if len(row) > 4 else ""}
-    if tmimata:
-        cfg["schedule"] = {"tmimata": tmimata, "periods": periods, "timetable": timetable}
+    # --- Ωράριο: ΙΔΙΑ λογική με το Lesson Wizard (common.schedule) -----------
+    sched = parse_schedule_xlsx(path)
+    if sched["tmimata"]:
+        cfg["schedule"] = {"tmimata": sched["tmimata"], "periods": sched["periods"],
+                           "timetable": sched["timetable"]}
 
     # --- Μενού ---------------------------------------------------------------
     if "Μενού" in wb.sheetnames:
