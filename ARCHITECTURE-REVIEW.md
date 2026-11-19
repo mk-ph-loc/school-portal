@@ -5,7 +5,7 @@
 > · Task 3 (classroom-hub → APIRouters) ✅ + εκκρεμότητες Βήματος 2 (ενιαίος κωδικός, backup/list_lessons) ✅ — commit `e5b92cc`, pushed στο origin/main (19/11/2026)
 > · Task 3 ΟΛΟΚΛΗΡΩΘΗΚΕ: h5p-studio & lesson-wizard → APIRouters ✅ — commit `ebb73b0`, pushed στο origin/main (19/11/2026, ίδιο μοτίβο· ίδια routes/API contracts, όλα τα e2e πράσινα)
 > · Task 4 (Αξιοπιστία) ✅: common/nav.py single-owner + flock, lifespan livequiz/weblab, logging παντού, SQLite session() με closing — commit `2e4afab`, pushed στο origin/main (19/11/2026, όλα τα e2e §5 πράσινα)
-> · Task 5 (Ποιότητα ζωής) ✅: κοινό test harness scripts/lib.py (Client/WS/CDP/check) σε ΟΛΑ τα 14 Python tests + common/xlsx.py styling helpers — όλα τα e2e §5 + ΟΛΑ τα browser tests πράσινα (19/11/2026)
+> · Task 5 (Ποιότητα ζωής) ✅: κοινό test harness scripts/lib.py (Client/WS/CDP/check) σε ΟΛΑ τα 14 Python tests + common/xlsx.py styling helpers — commit `449ee2a`, pushed στο origin/main (19/11/2026, όλα τα e2e §5 + ΟΛΑ τα browser tests πράσινα)
 > **Σκοπός αρχείου:** αρχειακή καταγραφή του review + αυτόνομος οδηγός για τα επόμενα tasks
 > (κάθε ενότητα «Task» μπορεί να δοθεί αυτούσια ως prompt σε νέα συνομιλία).
 
