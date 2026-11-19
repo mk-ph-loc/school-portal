@@ -13,108 +13,23 @@ browser-test.py — Έλεγχος των διαδραστικών στοιχε�
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 import sys
-import time
-import urllib.request
-
-import websocket
 
 sys.path.insert(0, "/opt/school-portal/scripts")
-from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+from lib import TEACHER_CODE, check, launch_chrome, results, stop_chrome, wait_for
 
-CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9333
 BASE = "http://127.0.0.1"
 
 
-class CDP:
-    """Ελάχιστο CDP client πάνω από WebSocket."""
-
-    def __init__(self, ws_url: str):
-        self.ws = websocket.create_connection(ws_url, timeout=200)
-        self._id = 0
-
-    def send(self, method: str, params: dict | None = None) -> dict:
-        self._id += 1
-        mid = self._id
-        self.ws.send(json.dumps({"id": mid, "method": method, "params": params or {}}))
-        while True:
-            msg = json.loads(self.ws.recv())
-            if msg.get("id") == mid:
-                if "error" in msg:
-                    raise RuntimeError(f"{method}: {msg['error']}")
-                return msg.get("result", {})
-
-    def evaluate(self, expression: str):
-        res = self.send("Runtime.evaluate", {
-            "expression": expression, "returnByValue": True,
-        })
-        if "exceptionDetails" in res:
-            raise RuntimeError(res["exceptionDetails"].get("text", "JS exception"))
-        return res.get("result", {}).get("value")
-
-    def close(self):
-        try:
-            self.ws.close()
-        except Exception:
-            pass
-
-
-def wait_for(cdp: CDP, expr: str, timeout: float = 60, interval: float = 0.5):
-    """Περιμένει μέχρι η JS έκφραση να γίνει truthy."""
-    deadline = time.time() + timeout
-    last = None
-    while time.time() < deadline:
-        try:
-            last = cdp.evaluate(expr)
-            if last:
-                return last
-        except Exception as exc:
-            last = str(exc)
-        time.sleep(interval)
-    return last
 def main() -> int:
-    if not CHROME:
-        print("✗ Δεν βρέθηκε chromium")
+    try:
+        proc, cdp = launch_chrome(PORT, timeout=200)
+    except RuntimeError as exc:
+        print(f"✗ {exc}")
         return 1
 
-    proc = subprocess.Popen(
-        [CHROME, "--headless=new", "--no-sandbox", "--disable-gpu",
-         "--disable-dev-shm-usage", f"--remote-debugging-port={PORT}",
-         "--window-size=1400,1000", "about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-
-    passed = failed = 0
-
-    def check(label: str, ok: bool, detail: str = ""):
-        nonlocal passed, failed
-        mark = "\033[0;32m✓\033[0m" if ok else "\033[0;31m✗\033[0m"
-        print(f"  {mark} {label}" + (f" — {detail}" if detail else ""))
-        if ok:
-            passed += 1
-        else:
-            failed += 1
-
-    cdp = None
     try:
-        targets = None
-        for _ in range(60):
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json/list", timeout=3) as r:
-                    targets = json.load(r)
-                if targets:
-                    break
-            except Exception:
-                time.sleep(0.5)
-        if not targets:
-            print("✗ Το Chromium δεν ξεκίνησε")
-            return 1
-
-        page = next((t for t in targets if t["type"] == "page"), targets[0])
-        cdp = CDP(page["webSocketDebuggerUrl"])
         cdp.send("Page.enable")
         cdp.send("Runtime.enable")
 
@@ -211,35 +126,31 @@ def main() -> int:
         cdp.send("Page.navigate", {"url": f"{BASE}/"})
         cards = wait_for(cdp, "document.querySelectorAll('#mathites a[href^=\"/docs/\"]').length", timeout=40)
         check("6 κάρτες τάξεων", cards == 6, f"{cards} κάρτες")
-        unlocked = cdp.evaluate("""(() => {
+        unlocked = cdp.evaluate(f"""(() => {{
             const el=document.querySelector('[x-data]');
             const app=el._x_dataStack ? el._x_dataStack[0] : null;
             if(!app) return 'no-alpine';
-            app.password=TEACHER_CODE; app.unlock();
+            app.password={json.dumps(TEACHER_CODE)}; app.unlock();
             return app.unlocked;
-        })()""")
+        }})()""")
         check("Ξεκλείδωμα με τον κοινό κωδικό καθηγητή", unlocked is True, str(unlocked))
 
     except Exception as exc:
         print(f"\n\033[0;31m✗ Σφάλμα ελέγχου: {exc}\033[0m")
-        failed += 1
+        check("Χωρίς απρόσμενο σφάλμα ελέγχου", False, str(exc))
     finally:
-        if cdp:
-            cdp.close()
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except Exception:
-            proc.kill()
+        cdp.close()
+        stop_chrome(proc)
 
-    total = passed + failed
+    r = results()
+    total = r.passed + r.failed
     print("\n" + "=" * 58)
-    if failed == 0:
-        print(f"  \033[0;32m✅ ΟΛΟΙ ΟΙ BROWSER ΕΛΕΓΧΟΙ ΠΕΡΑΣΑΝ ({passed}/{total})\033[0m")
+    if r.failed == 0:
+        print(f"  \033[0;32m✅ ΟΛΟΙ ΟΙ BROWSER ΕΛΕΓΧΟΙ ΠΕΡΑΣΑΝ ({r.passed}/{total})\033[0m")
     else:
-        print(f"  \033[0;31m⚠️  {failed} αποτυχίες σε {total} ελέγχους\033[0m")
+        print(f"  \033[0;31m⚠️  {r.failed} αποτυχίες σε {total} ελέγχους\033[0m")
     print("=" * 58 + "\n")
-    return failed
+    return r.exit_code()
 
 
 if __name__ == "__main__":

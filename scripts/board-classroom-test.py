@@ -17,17 +17,14 @@ import pathlib
 import re
 import shutil
 import ssl
-import subprocess
 import sys
 import time
 import urllib.request
 
-import websocket
-
 sys.path.insert(0, "/opt/school-portal/scripts")
-from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+from lib import (TEACHER_CODE, check, launch_chrome, new_tab, results,
+                 stop_chrome, wait_for)
 
-CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9381
 BASE = "https://127.0.0.1"
 
@@ -47,76 +44,29 @@ if "--patched" in sys.argv:
         print('✗ Δεν βρέθηκε το κύριο bundle στο /board/ index.html')
         sys.exit(1)
 
-PASSED = FAILED = 0
+
+def make_interceptor(cdp):
+    """on_event για το κοινό CDP: σερβίρει το δοκιμαστικό bundle αντί του live."""
+    def on_event(m):
+        if m.get("method") != "Fetch.requestPaused":
+            return
+        params = m["params"]
+        if MAIN_BUNDLE_NAME and MAIN_BUNDLE_NAME in params["request"]["url"]:
+            cdp.ws.send(json.dumps({"id": 999999, "method": "Fetch.fulfillRequest", "params": {
+                "requestId": params["requestId"], "responseCode": 200,
+                "responseHeaders": [{"name": "Content-Type", "value": "application/javascript"}],
+                "body": B64}}))
+        else:
+            cdp.ws.send(json.dumps({"id": 999999, "method": "Fetch.continueRequest",
+                                    "params": {"requestId": params["requestId"]}}))
+    return on_event
 
 
-def check(label, ok, detail=""):
-    global PASSED, FAILED
-    print(("  ✓ " if ok else "  ✗ ") + label + (f" — {detail}" if detail else ""))
-    if ok:
-        PASSED += 1
-    else:
-        FAILED += 1
-
-
-def intercept(ws, msg_id, params):
-    """Σερβίρει το δοκιμαστικό bundle αντί του live (μόνο με --patched)."""
-    if MAIN_BUNDLE_NAME and MAIN_BUNDLE_NAME in params['request']['url']:
-        ws.send(json.dumps({"id": msg_id, "method": "Fetch.fulfillRequest", "params": {
-            "requestId": params["requestId"], "responseCode": 200,
-            "responseHeaders": [{"name": "Content-Type", "value": "application/javascript"}],
-            "body": B64}}))
-    else:
-        ws.send(json.dumps({"id": msg_id, "method": "Fetch.continueRequest",
-                            "params": {"requestId": params["requestId"]}}))
-
-
-class CDP:
-    def __init__(self, ws_url):
-        self.ws = websocket.create_connection(ws_url, timeout=120)
-        self._id = 0
-
-    def send(self, method, params=None):
-        self._id += 1
-        mid = self._id
-        self.ws.send(json.dumps({"id": mid, "method": method, "params": params or {}}))
-        while True:
-            m = json.loads(self.ws.recv())
-            if PATCHED_FILE and m.get("method") == "Fetch.requestPaused":
-                intercept(self.ws, 999999, m["params"])
-                continue
-            if m.get("id") == mid:
-                if "error" in m:
-                    raise RuntimeError(f"{method}: {m['error']}")
-                return m.get("result", {})
-
-    def ev(self, expression):
-        r = self.send("Runtime.evaluate", {"expression": expression, "returnByValue": True})
-        return r.get("result", {}).get("value")
-
-    def click(self, x, y):
-        self.send("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1})
-        self.send("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1})
-
-    def close(self):
-        try:
-            self.ws.close()
-        except Exception:
-            pass
-
-
-def wait_for(cdp, expr, timeout=30, interval=0.5):
-    deadline = time.time() + timeout
-    last = None
-    while time.time() < deadline:
-        try:
-            last = cdp.ev(expr)
-            if last:
-                return last
-        except Exception as exc:
-            last = str(exc)
-        time.sleep(interval)
-    return last
+def attach_events(cdp):
+    """Δένει τον interceptor σε ήδη δημιουργημένο CDP (launch/new_tab)."""
+    if PATCHED_FILE:
+        cdp._on_event = make_interceptor(cdp)
+    return cdp
 
 
 A = "document.querySelector('body')._x_dataStack[0]"
@@ -132,32 +82,16 @@ def frame_pos(cdp, selector):
 
 
 def main():
-    if not CHROME:
-        print("✗ Δεν βρέθηκε chromium")
-        return 1
     profile_dir = f"/tmp/chrome-board-test-{PORT}-{int(time.time())}"
-    proc = subprocess.Popen(
-        [CHROME, "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
-         "--ignore-certificate-errors", f"--remote-debugging-port={PORT}",
-         "--window-size=1400,1000", "about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    cdps = []
     try:
-        targets = None
-        for _ in range(60):
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json/list", timeout=3) as r:
-                    targets = json.load(r)
-                if targets:
-                    break
-            except Exception:
-                time.sleep(0.5)
-        if not targets:
-            print("✗ Το Chromium δεν ξεκίνησε")
-            return 1
-        page = next(t for t in targets if t["type"] == "page")
-        teacher = CDP(page["webSocketDebuggerUrl"])
-        cdps.append(teacher)
+        proc, teacher = launch_chrome(PORT, extra_args=["--ignore-certificate-errors"],
+                                      timeout=120)
+    except RuntimeError as exc:
+        print(f"✗ {exc}")
+        return 1
+    attach_events(teacher)
+    cdps = [teacher]
+    try:
         teacher.send("Page.enable"); teacher.send("Runtime.enable")
         if PATCHED_FILE:
             teacher.send("Fetch.enable", {"patterns": [{"urlPattern": f"*{MAIN_BUNDLE_NAME}*"}]})
@@ -245,10 +179,7 @@ def main():
 
         print("\n=== 4. Guest μπαίνει στο room & βλέπει τις πινελιές ζωντανά ===")
         if link:
-            req = urllib.request.Request(f"http://127.0.0.1:{PORT}/json/new?{BASE}/classroom/", method="PUT")
-            with urllib.request.urlopen(req, timeout=10) as r:
-                t2 = json.load(r)
-            guest = CDP(t2["webSocketDebuggerUrl"])
+            guest = attach_events(new_tab(PORT, f"{BASE}/classroom/", timeout=120))
             cdps.append(guest)
             guest.send("Page.enable"); guest.send("Runtime.enable")
             if PATCHED_FILE:
@@ -285,16 +216,13 @@ def main():
             check("Ο guest βλέπει τις πινελιές του καθηγητή (canvas ink)",
                   isinstance(g_ink, int) and g_ink > 100, f"{g_ink} px")
 
-        print(f"\n{'✓ ΟΛΟΙ οι έλεγχοι πέρασαν — ο πίνακας δουλεύει στη Ζωντανή Τάξη!' if not FAILED else '✗ ΑΠΟΤΥΧΙΑ'} ({PASSED} ✓ / {FAILED} ✗)")
-        return 1 if FAILED else 0
+        r = results()
+        print(f"\n{'✓ ΟΛΟΙ οι έλεγχοι πέρασαν — ο πίνακας δουλεύει στη Ζωντανή Τάξη!' if not r.failed else '✗ ΑΠΟΤΥΧΙΑ'} ({r.passed} ✓ / {r.failed} ✗)")
+        return r.exit_code()
     finally:
         for c in cdps:
             c.close()
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except Exception:
-            proc.kill()
+        stop_chrome(proc)
         shutil.rmtree(profile_dir, ignore_errors=True)
 
 

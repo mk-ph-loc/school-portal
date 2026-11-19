@@ -13,71 +13,19 @@ import io
 import json
 import sys
 import time
-import urllib.request
-import urllib.error
-import http.cookiejar
-import uuid
 import zipfile
 from pathlib import Path
 
 sys.path.insert(0, "/opt/school-portal/scripts")
-from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+from lib import TEACHER_CODE, Client as HTTPClient, check, finish, get_url, results
 
 BASE = "http://127.0.0.1/app-builder/"
 PORTAL = Path("/opt/school-portal")
-FAILED = 0
 
 
-def check(label, cond, detail=""):
-    global FAILED
-    print(("  ✓ " if cond else "  ✗ ") + label + (f" — {detail}" if detail else ""))
-    if not cond:
-        FAILED += 1
-
-
-class Client:
+class Client(HTTPClient):
     def __init__(self):
-        self.jar = http.cookiejar.CookieJar()
-        self.opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(self.jar))
-
-    def call(self, path, payload=None, method=None):
-        data = json.dumps(payload).encode() if payload is not None else None
-        req = urllib.request.Request(BASE + path, data=data, method=method,
-                                     headers={"Content-Type": "application/json"})
-        try:
-            with self.opener.open(req, timeout=60) as res:
-                return res.status, json.loads(res.read() or b"{}")
-        except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read() or b"{}")
-
-    def multipart(self, path, fields, files=()):
-        """files: λίστα (field_name, filename, bytes)."""
-        boundary = uuid.uuid4().hex
-        buf = io.BytesIO()
-        for k, v in fields.items():
-            buf.write(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode())
-        for field, fname, data in files:
-            buf.write(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{field}\"; filename=\"{fname}\"\r\n"
-                      f"Content-Type: application/octet-stream\r\n\r\n".encode())
-            buf.write(data)
-            buf.write(b"\r\n")
-        buf.write(f"--{boundary}--\r\n".encode())
-        req = urllib.request.Request(BASE + path, data=buf.getvalue(), method="POST",
-                                     headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-        try:
-            with self.opener.open(req, timeout=120) as res:
-                return res.status, json.loads(res.read() or b"{}")
-        except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read() or b"{}")
-
-
-def get_url(url):
-    try:
-        with urllib.request.urlopen(url, timeout=30) as res:
-            return res.status, res.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as e:
-        return e.code, e.read().decode("utf-8", errors="replace")
+        super().__init__(BASE, timeout=60)
 
 
 def main():
@@ -240,8 +188,9 @@ def main():
     code, _ = t.call("api/list")
     check("Μετά το logout → 401", code == 401, str(code))
 
-    print(f"\n{'✓ ΟΛΟΙ ΟΙ ΕΛΕΓΧΟΙ ΠΕΡΑΣΑΝ' if FAILED == 0 else '✗ ΥΠΑΡΧΟΥΝ ΑΠΟΤΥΧΙΕΣ'} ({FAILED} αποτυχίες)")
-    return 1 if FAILED else 0
+    r = results()
+    print(f"\n{'✓ ΟΛΟΙ ΟΙ ΕΛΕΓΧΟΙ ΠΕΡΑΣΑΝ' if r.failed == 0 else '✗ ΥΠΑΡΧΟΥΝ ΑΠΟΤΥΧΙΕΣ'} ({r.failed} αποτυχίες)")
+    return r.exit_code()
 
 
 if __name__ == "__main__":

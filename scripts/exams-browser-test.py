@@ -12,103 +12,46 @@ exams-browser-test.py — Έλεγχος του /exams/ σε ΠΡΑΓΜΑΤΙΚ�
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 import sys
-import time
-import urllib.request
-
-import websocket
 
 sys.path.insert(0, "/opt/school-portal/scripts")
-from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+from lib import TEACHER_CODE, Client, check, launch_chrome, results, stop_chrome, wait_for
 
-CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9335  # διαφορετική θύρα από τα υπόλοιπα browser tests
 BASE = "http://127.0.0.1"
 
 
-class CDP:
-    def __init__(self, ws_url):
-        self.ws = websocket.create_connection(ws_url, timeout=120)
-        self._id = 0
+class AsyncCDP:
+    """Λεπτό wrapper του κοινού CDP: κάθε evaluate/wait_for με awaitPromise=True
+    (οι έλεγχοι εδώ χρησιμοποιούν async fetch expressions)."""
+
+    def __init__(self, cdp):
+        self._cdp = cdp
 
     def send(self, method, params=None):
-        self._id += 1
-        mid = self._id
-        self.ws.send(json.dumps({"id": mid, "method": method, "params": params or {}}))
-        while True:
-            msg = json.loads(self.ws.recv())
-            if msg.get("id") == mid:
-                if "error" in msg:
-                    raise RuntimeError(f"{method}: {msg['error']}")
-                return msg.get("result", {})
+        return self._cdp.send(method, params)
 
-    def evaluate(self, expression):
-        res = self.send("Runtime.evaluate", {
-            "expression": expression, "returnByValue": True, "awaitPromise": True,
-        })
-        if "exceptionDetails" in res:
-            raise RuntimeError(json.dumps(res["exceptionDetails"])[:400])
-        return res.get("result", {}).get("value")
+    def evaluate(self, expr):
+        return self._cdp.evaluate(expr, await_promise=True)
 
-
-def wait_for(cdp, expr, timeout=60, interval=0.5):
-    deadline = time.time() + timeout
-    last = None
-    while time.time() < deadline:
-        try:
-            last = cdp.evaluate(expr)
-            if last:
-                return last
-        except Exception as exc:
-            last = str(exc)
-        time.sleep(interval)
-    return last
-
-
-passed = failed = 0
-
-
-def check(label, ok, detail=""):
-    global passed, failed
-    mark = "\033[0;32m✓\033[0m" if ok else "\033[0;31m✗\033[0m"
-    print(f"  {mark} {label}" + (f" — {detail}" if detail else ""))
-    passed += bool(ok)
-    failed += (not ok)
-
-
-def api(path, payload=None, cookie=None, method=None):
-    req = urllib.request.Request(BASE + "/exams/api/" + path)
-    req.add_header("Content-Type", "application/json")
-    if cookie:
-        req.add_header("Cookie", cookie)
-    if method:
-        req.method = method
-    data = json.dumps(payload).encode() if payload is not None else None
-    with urllib.request.urlopen(req, data=data, timeout=20) as r:
-        headers = r.headers
-        body = json.load(r)
-    return body, headers
+    def close(self):
+        self._cdp.close()
 
 
 def main():
-    if not CHROME:
-        print("✗ Δεν βρέθηκε chromium")
-        return 1
+    api = Client(BASE + "/exams/api/", timeout=20)
 
     # --- Προετοιμασία μέσω API: καθαρισμός παλιών δοκιμών & νέες δραστηριότητες ---
-    _, hdrs = api("teacher/login", {"password": TEACHER_CODE})
-    cookie = hdrs.get("Set-Cookie", "").split(";")[0]
-    acts, _ = api("teacher/activities", cookie=cookie)
+    api.call("teacher/login", {"password": TEACHER_CODE})
+    _, acts = api.call("teacher/activities")
     for a in acts["activities"]:
         if a["title"].startswith("BROWSER TEST"):
-            api(f"teacher/activities/{a['id']}", cookie=cookie, method="DELETE")
-    assignment, _ = api("teacher/activities", {
+            api.call(f"teacher/activities/{a['id']}", method="DELETE")
+    _, assignment = api.call("teacher/activities", {
         "title": "BROWSER TEST Εργασία", "class_slug": "lykeio-a",
         "kind": "assignment", "active": True,
-    }, cookie=cookie)
-    test_act, _ = api("teacher/activities", {
+    })
+    _, test_act = api.call("teacher/activities", {
         "title": "BROWSER TEST Διαγώνισμα", "class_slug": "lykeio-b",
         "kind": "test", "duration": 10, "active": True,
         "questions": [
@@ -116,27 +59,17 @@ def main():
              "options": ["512", "1024", "2048"], "correct": 1, "points": 3},
             {"type": "essay", "text": "Εξήγησε τι είναι η αναδρομή.", "points": 7},
         ],
-    }, cookie=cookie)
+    })
     with open("/tmp/exams-browser-upload.py", "w", encoding="utf-8") as f:
         f.write('print("Έλεγχος browser upload")\n')
 
-    proc = subprocess.Popen(
-        [CHROME, "--headless=new", "--no-sandbox", "--disable-gpu",
-         "--disable-dev-shm-usage", f"--remote-debugging-port={PORT}",
-         "--window-size=1400,1000", "about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
-        targets = None
-        for _ in range(60):
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json/list", timeout=3) as r:
-                    targets = json.load(r)
-                if targets:
-                    break
-            except Exception:
-                time.sleep(0.5)
-        page = next(t for t in targets if t["type"] == "page")
-        cdp = CDP(page["webSocketDebuggerUrl"])
+        proc, raw_cdp = launch_chrome(PORT, timeout=120)
+    except RuntimeError as exc:
+        print(f"✗ {exc}")
+        return 1
+    cdp = AsyncCDP(raw_cdp)
+    try:
         cdp.send("Page.enable")
         cdp.send("Runtime.enable")
         cdp.send("DOM.enable")
@@ -248,22 +181,20 @@ def main():
         check("Κάρτα «Παράδοση Εργασιών & Τεστ» στο Dashboard", bool(got))
 
     finally:
-        try:
-            proc.terminate()
-            proc.wait(timeout=10)
-        except Exception:
-            proc.kill()
+        cdp.close()
+        stop_chrome(proc)
         # Καθαρισμός δοκιμαστικών δραστηριοτήτων
         try:
-            acts, _ = api("teacher/activities", cookie=cookie)
+            _, acts = api.call("teacher/activities")
             for a in acts["activities"]:
                 if a["title"].startswith("BROWSER TEST"):
-                    api(f"teacher/activities/{a['id']}", cookie=cookie, method="DELETE")
+                    api.call(f"teacher/activities/{a['id']}", method="DELETE")
         except Exception:
             pass
 
-    print(f"\n{'✅ ΟΛΑ ΠΕΡΑΣΑΝ' if not failed else '⚠️ ΑΠΟΤΥΧΙΕΣ'}: {passed}/{passed+failed}")
-    return 0 if not failed else 1
+    r = results()
+    print(f"\n{'✅ ΟΛΑ ΠΕΡΑΣΑΝ' if not r.failed else '⚠️ ΑΠΟΤΥΧΙΕΣ'}: {r.passed}/{r.passed + r.failed}")
+    return r.exit_code()
 
 
 if __name__ == "__main__":

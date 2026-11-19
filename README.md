@@ -159,7 +159,8 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   ├── db.py               # SQLite connect (WAL/Row/FK) + session() που ΚΛΕΙΝΕΙ τη σύνδεση
 │   ├── nav.py              # single owner του mkdocs.yml nav: folder-driven rebuild + flock
 │   ├── fs.py               # backup_history/backup_beside (.bak πριν από κάθε εγγραφή)
-│   └── schedule.py         # ωράριο Excel→JSON, HH:MM, deadlines ±offset, JSON helpers
+│   ├── schedule.py         # ωράριο Excel→JSON, HH:MM, deadlines ±offset, JSON helpers
+│   └── xlsx.py             # κοινό styling προτύπων Excel (κεφαλίδες/χρώματα/dropdowns)
 │   # Τα apps το βρίσκουν μέσω Environment=PYTHONPATH=/opt/school-portal στα units.
 │   # Τα δεδομένα (DB, .cookie-secret, schedule.json) μένουν στους φακέλους των apps.
 ├── dashboard/              # Κεντρική πύλη (/)
@@ -238,6 +239,8 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   ├── nginx/school-portal
 │   └── systemd/school-{pandoc,exams,filebrowser,livequiz}.service, school-mkdocs.{service,path}
 ├── scripts/build-docs.sh   # Ανακατασκευή MkDocs → /var/www/docs
+├── scripts/lib.py          # 🧪 Κοινό test harness (Client/cookiejar, WS, CDP/browser,
+│                           # check/finish, TEACHER_CODE) — το χρησιμοποιούν ΟΛΑ τα e2e tests
 ├── install.sh              # Αυτόματη εγκατάσταση/ενημέρωση
 ├── requirements.txt        # Pinned εκδόσεις Python
 └── venv/                   # Python virtual environment
@@ -439,6 +442,12 @@ bash /opt/school-portal/scripts/smoke-test.sh
 > Ο `browser-test.py` απαιτεί `chromium` (`apt install chromium`) και
 > `websocket-client` στο venv. Δεν χρειάζεται για τη λειτουργία της πύλης —
 > είναι μόνο εργαλείο επαλήθευσης.
+
+> 🧪 **Κοινό test harness:** όλα τα e2e/browser scripts χρησιμοποιούν το
+> `scripts/lib.py` (HTTP `Client` με αυτόματο cookiejar, `WSClient`/`ws_recv`,
+> `CDP`/`launch_chrome`/`wait_for` για headless Chromium, `check()`/`finish()`
+> για ✓/✗ καταγραφή). Ο κωδικός καθηγητή διαβάζεται από την ίδια πηγή με τα
+> apps (`common.auth.TEACHER_CODE`) — καμία hardcoded τιμή στα tests.
 
 ### 📚 Ημερήσια Μαθήματα (νέα δομή) & Lesson Wizard
 

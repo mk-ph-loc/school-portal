@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse
 
 from common.schedule import hhmm as _hhmm, parse_schedule_xlsx
+from common.xlsx import style_sheet, yesno_validation
 
 import state
 from presence import broadcast
@@ -22,46 +23,22 @@ router = APIRouter()
 
 # ---------------------------------------------------------------------------
 # Ενιαίο πρότυπο Excel — δημιουργία (12 καρτέλες, χρωματικοί κώδικες, οδηγίες)
+# Styling helpers: common.xlsx (κοινά με το πρότυπο ωραρίου του Lesson Wizard).
 # ---------------------------------------------------------------------------
-# Χρωματικός κώδικας (ίδιος σε όλες τις καρτέλες — εξηγείται στο φύλλο Οδηγίες):
+# Χρώμα tab ανά θεματική ομάδα (εξηγείται στο φύλλο Οδηγίες):
 TAB_COLORS = {"Οδηγίες": "9E9E9E", "Τμήματα": "1E88E5", "Ωρες": "1E88E5",
               "Ωραριο": "1E88E5", "Μενού": "8E24AA", "Εργαλειοθήκες": "8E24AA",
               "Ρόλοι": "FB8C00", "Ονόματα Guest": "43A047", "Timers": "FDD835",
               "Γεγονότα": "FDD835", "Μηνύματα": "E53935", "Poll-Quiz": "E53935"}
-HEAD_FILL = "3F51B5"      # 🟦 κεφαλίδες — ΜΗΝ τις αλλάζετε
-REQ_FILL = "FFF9C4"       # 🟨 υποχρεωτικά πεδία
-OPT_FILL = "E8F5E9"       # 🟩 προαιρετικά πεδία
-WARN_FILL = "FFEBEE"      # 🟥 ευαίσθητα (κωδικοί) — προσοχή
 
 
 def _style_sheet(ws, headers: list[str], widths: list[int], req_cols: set[int],
                  warn_cols: set[int] | None = None):
-    from openpyxl.styles import Font, PatternFill, Alignment
-    from openpyxl.utils import get_column_letter
-    ws.append(headers)
-    for i, cell in enumerate(ws[1], 1):
-        cell.font = Font(bold=True, color="FFFFFF")
-        cell.fill = PatternFill("solid", fgColor=HEAD_FILL)
-        cell.alignment = Alignment(vertical="center", wrap_text=True)
-        ws.column_dimensions[get_column_letter(i)].width = widths[i - 1] if i <= len(widths) else 18
-    ws.freeze_panes = "A2"
-    ws.sheet_properties.tabColor = TAB_COLORS.get(ws.title, "607D8B")
-    # χρωματισμός περιοχής εισαγωγής (πρώτες 60 γραμμές) ανά τύπο πεδίου
-    for r in range(2, 62):
-        for i in range(1, len(headers) + 1):
-            fill = WARN_FILL if (warn_cols and i in warn_cols) else (
-                REQ_FILL if i in req_cols else OPT_FILL)
-            ws.cell(row=r, column=i).fill = PatternFill("solid", fgColor=fill)
+    style_sheet(ws, headers, widths, req_cols, warn_cols, tab_colors=TAB_COLORS)
 
 
 def _yesno_validation(ws, cols: list[int]):
-    from openpyxl.worksheet.datavalidation import DataValidation
-    from openpyxl.utils import get_column_letter
-    dv = DataValidation(type="list", formula1='"ΝΑΙ,ΟΧΙ"', allow_blank=True)
-    ws.add_data_validation(dv)
-    for col in cols:
-        letter = get_column_letter(col)
-        dv.add(f"{letter}2:{letter}200")
+    yesno_validation(ws, cols)
 
 
 def make_template_xlsx() -> None:

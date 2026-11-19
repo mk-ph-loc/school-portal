@@ -10,76 +10,15 @@ Headless Chromium (CDP, ίδιο μοτίβο με το browser-test.py): είσ
 """
 from __future__ import annotations
 
-import json
-import shutil
-import subprocess
 import sys
 import time
-import urllib.request
-
-import websocket
 
 sys.path.insert(0, "/opt/school-portal/scripts")
-from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+from lib import (TEACHER_CODE, check, launch_chrome, new_tab, results,
+                 stop_chrome, wait_for)
 
-CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9345
 BASE = "http://127.0.0.1"
-
-
-class CDP:
-    def __init__(self, ws_url: str):
-        self.ws = websocket.create_connection(ws_url, timeout=60)
-        self._id = 0
-
-    def send(self, method: str, params: dict | None = None) -> dict:
-        self._id += 1
-        mid = self._id
-        self.ws.send(json.dumps({"id": mid, "method": method, "params": params or {}}))
-        while True:
-            msg = json.loads(self.ws.recv())
-            if msg.get("id") == mid:
-                if "error" in msg:
-                    raise RuntimeError(f"{method}: {msg['error']}")
-                return msg.get("result", {})
-
-    def evaluate(self, expression: str):
-        res = self.send("Runtime.evaluate", {"expression": expression, "returnByValue": True})
-        if "exceptionDetails" in res:
-            raise RuntimeError(res["exceptionDetails"].get("text", "JS exception"))
-        return res.get("result", {}).get("value")
-
-    def close(self):
-        try:
-            self.ws.close()
-        except Exception:
-            pass
-
-
-def wait_for(cdp: CDP, expr: str, timeout: float = 30, interval: float = 0.4):
-    deadline = time.time() + timeout
-    last = None
-    while time.time() < deadline:
-        try:
-            last = cdp.evaluate(expr)
-            if last:
-                return last
-        except Exception as exc:
-            last = str(exc)
-        time.sleep(interval)
-    return last
-
-
-PASSED = FAILED = 0
-
-
-def check(label, ok, detail=""):
-    global PASSED, FAILED
-    print(("  ✓ " if ok else "  ✗ ") + label + (f" — {detail}" if detail else ""))
-    if ok:
-        PASSED += 1
-    else:
-        FAILED += 1
 
 
 def alpine(cdp):
@@ -89,31 +28,13 @@ def alpine(cdp):
 
 
 def main() -> int:
-    if not CHROME:
-        print("✗ Δεν βρέθηκε chromium")
-        return 1
-    proc = subprocess.Popen(
-        [CHROME, "--headless=new", "--no-sandbox", "--disable-gpu",
-         "--disable-dev-shm-usage", f"--remote-debugging-port={PORT}",
-         "--window-size=1400,1000", "about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    cdps = []
     try:
-        targets = None
-        for _ in range(60):
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json/list", timeout=3) as r:
-                    targets = json.load(r)
-                if targets:
-                    break
-            except Exception:
-                time.sleep(0.5)
-        if not targets:
-            print("✗ Το Chromium δεν ξεκίνησε")
-            return 1
-        page = next(t for t in targets if t["type"] == "page")
-        guest = CDP(page["webSocketDebuggerUrl"])
-        cdps.append(guest)
+        proc, guest = launch_chrome(PORT, timeout=60)
+    except RuntimeError as exc:
+        print(f"✗ {exc}")
+        return 1
+    cdps = [guest]
+    try:
         guest.send("Page.enable"); guest.send("Runtime.enable")
 
         print("\n=== 1. Είσοδος guest & παιχνιδιάρικο όνομα ===")
@@ -185,10 +106,7 @@ def main() -> int:
 
 
         print("\n=== 4. Καθηγητής σε 2η καρτέλα: roster & ανακοίνωση ζωντανά ===")
-        req = urllib.request.Request(f"http://127.0.0.1:{PORT}/json/new?{BASE}/classroom/", method="PUT")
-        with urllib.request.urlopen(req, timeout=10) as r:
-            t2 = json.load(r)
-        teacher = CDP(t2["webSocketDebuggerUrl"])
+        teacher = new_tab(PORT, f"{BASE}/classroom/", timeout=60)
         cdps.append(teacher)
         teacher.send("Page.enable"); teacher.send("Runtime.enable")
         wait_for(teacher, f"!!({alpine(teacher)})", timeout=30)
@@ -245,16 +163,13 @@ def main() -> int:
         fav_filter = teacher.evaluate(f"(()=>{{const a={alpine(teacher)};a.linkFilter.fav=true;const n=a.filteredCatalog().length;a.linkFilter.fav=false;return n}})()")
         check("Φίλτρο ⭐ αγαπημένων λειτουργεί", isinstance(fav_filter, int) and fav_filter >= 1, str(fav_filter))
 
-        print(f"\n{'✓ ΟΛΟΙ οι browser έλεγχοι πέρασαν' if not FAILED else '✗ ΑΠΟΤΥΧΙΑ'} ({PASSED} ✓ / {FAILED} ✗)")
-        return 1 if FAILED else 0
+        r = results()
+        print(f"\n{'✓ ΟΛΟΙ οι browser έλεγχοι πέρασαν' if not r.failed else '✗ ΑΠΟΤΥΧΙΑ'} ({r.passed} ✓ / {r.failed} ✗)")
+        return r.exit_code()
     finally:
         for c in cdps:
             c.close()
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except Exception:
-            proc.kill()
+        stop_chrome(proc)
 
 
 if __name__ == "__main__":

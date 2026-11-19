@@ -1,67 +1,40 @@
 #!/opt/school-portal/venv/bin/python
 """Έλεγχος των 4 νέων εργαλείων σε ΠΡΑΓΜΑΤΙΚΟ headless Chromium (CDP)."""
-import json, shutil, subprocess, sys, time, urllib.request
-import websocket
+import json, sys, time
 
 sys.path.insert(0, "/opt/school-portal/scripts")
-from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+from lib import TEACHER_CODE, check, launch_chrome, results, stop_chrome, wait_for
 
-CHROME = shutil.which("chromium")
 PORT = 9334  # διαφορετική θύρα από το browser-test.py
 BASE = "http://127.0.0.1"
 
-class CDP:
-    def __init__(self, ws_url):
-        self.ws = websocket.create_connection(ws_url, timeout=120)
-        self._id = 0
+
+class AsyncCDP:
+    """Wrapper του κοινού CDP με awaitPromise=True (async bake/fetch expressions)."""
+
+    def __init__(self, cdp):
+        self._cdp = cdp
+
     def send(self, method, params=None):
-        self._id += 1
-        mid = self._id
-        self.ws.send(json.dumps({"id": mid, "method": method, "params": params or {}}))
-        while True:
-            msg = json.loads(self.ws.recv())
-            if msg.get("id") == mid:
-                if "error" in msg: raise RuntimeError(f"{method}: {msg['error']}")
-                return msg.get("result", {})
-    def evaluate(self, expression):
-        res = self.send("Runtime.evaluate", {"expression": expression, "returnByValue": True, "awaitPromise": True})
-        if "exceptionDetails" in res:
-            raise RuntimeError(json.dumps(res["exceptionDetails"])[:400])
-        return res.get("result", {}).get("value")
+        return self._cdp.send(method, params)
 
-def wait_for(cdp, expr, timeout=60, interval=0.5):
-    deadline = time.time() + timeout
-    last = None
-    while time.time() < deadline:
-        try:
-            last = cdp.evaluate(expr)
-            if last: return last
-        except Exception as exc:
-            last = str(exc)
-        time.sleep(interval)
-    return last
+    def evaluate(self, expr):
+        return self._cdp.evaluate(expr, await_promise=True)
 
-passed = failed = 0
-def check(label, ok, detail=""):
-    global passed, failed
-    mark = "\033[0;32m✓\033[0m" if ok else "\033[0;31m✗\033[0m"
-    print(f"  {mark} {label}" + (f" — {detail}" if detail else ""))
-    passed += ok; failed += (not ok)
+    def click(self, x, y):
+        self._cdp.click(x, y)
 
-proc = subprocess.Popen(
-    [CHROME, "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
-     f"--remote-debugging-port={PORT}", "--window-size=1400,1000", "about:blank"],
-    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    def close(self):
+        self._cdp.close()
+
+
 try:
-    targets = None
-    for _ in range(60):
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json/list", timeout=3) as r:
-                targets = json.load(r)
-            if targets: break
-        except Exception: time.sleep(0.5)
-    page = next(t for t in targets if t["type"] == "page")
-    cdp = CDP(page["webSocketDebuggerUrl"])
+    proc, raw_cdp = launch_chrome(PORT, timeout=120)
+except RuntimeError as exc:
+    print(f"✗ {exc}")
+    sys.exit(1)
+cdp = AsyncCDP(raw_cdp)
+try:
     cdp.send("Page.enable"); cdp.send("Runtime.enable")
 
     print("\n=== 1. CyberChef (/crypto/) ===")
@@ -95,44 +68,56 @@ try:
     check("Direct deep-link /tools/token-generator (nginx SPA fallback)", bool(got))
 
 
-    print("\n=== 3. Ψηφιακός Πίνακας (/board/) ===")
+    print("\n=== 3. Ψηφιακός Πίνακας Excalidraw (/board/) ===")
+    # Το /board/ είναι πλέον το πλήρες static build του Excalidraw (αντικατέστησε
+    # τον παλιό custom canvas πίνακα) — έλεγχοι με πραγματικά CDP input events,
+    # ίδιο μοτίβο με το board-classroom-test.py.
+    INK = ("(()=>{const c=document.querySelector('canvas.static');if(!c)return -1;"
+           "const ctx=c.getContext('2d');const img=ctx.getImageData(0,0,c.width,c.height).data;"
+           "let n=0;for(let i=0;i<img.length;i+=4){const r=img[i],g=img[i+1],b=img[i+2];"
+           "if(img[i+3]>0&&(r<240||g<240||b<240))n++}return n})()")
+
+    def stroke(x, y, steps=14):
+        cdp.send("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y,
+                                              "button": "left", "buttons": 1, "clickCount": 1, "pointerType": "pen"})
+        for i in range(1, steps + 1):
+            cdp.send("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x + i * 18, "y": y + i * 7,
+                                                  "button": "left", "buttons": 1, "pointerType": "pen", "force": 0.5})
+        cdp.send("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x + steps * 18, "y": y + steps * 7,
+                                              "button": "left", "buttons": 0, "clickCount": 1, "pointerType": "pen"})
+
     cdp.send("Page.navigate", {"url": f"{BASE}/board/"})
-    got = wait_for(cdp, "typeof redraw==='function' && document.getElementById('board').width>0", timeout=30)
-    check("Canvas αρχικοποιείται", bool(got))
-    n_tools = cdp.evaluate("document.querySelectorAll('.tbtn[data-tool]').length")
-    check("7 εργαλεία σχεδίασης", n_tools == 7, f"{n_tools}")
-    draw = cdp.evaluate("""(() => {
-        const cv=document.getElementById('board'), r=cv.getBoundingClientRect();
-        function pe(type,x,y){cv.dispatchEvent(new PointerEvent(type,{pointerId:1,pointerType:'mouse',button:0,clientX:r.left+x,clientY:r.top+y,bubbles:true}));}
-        setTool('pen'); pe('pointerdown',50,50); pe('pointermove',120,90); pe('pointermove',200,140); pe('pointerup',200,140);
-        setTool('arrow'); pe('pointerdown',60,200); pe('pointermove',260,240); pe('pointerup',260,240);
-        setTool('rect'); pe('pointerdown',300,60); pe('pointermove',420,160); pe('pointerup',420,160);
-        setTool('text'); pe('pointerdown',80,300); pe('pointerup',80,300);
-        const ti=document.getElementById('textInput'); ti.value='Γεια σου τάξη!';
-        ti.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
-        return shapes.map(s=>s.tool);
-    })()""")
-    check("Σχεδίαση pen/arrow/rect/text μέσω pointer events", draw == ["pen","arrow","rect","text"], str(draw))
-    saved = wait_for(cdp, "JSON.parse(localStorage.getItem('school-board-v1')||'null')?.shapes?.length", timeout=10)
-    check("Autosave στο localStorage", saved == 4, f"{saved} αντικείμενα")
-    undo_ok = cdp.evaluate("undo(); shapes.length")
-    check("Αναίρεση (undo)", undo_ok == 3, f"{undo_ok} αντικείμενα")
-    erased = cdp.evaluate("setTool('eraser'); eraseAt({x:120,y:90}); shapes.length")
-    check("Σβήστρα (object eraser)", erased == 2, f"{erased} αντικείμενα")
-    time.sleep(1.2)  # αναμονή για το debounced autosave πριν το reload
-    png = cdp.evaluate("""(() => {
-        const out=document.createElement('canvas'); out.width=canvas.width; out.height=canvas.height;
-        const c=out.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0);
-        c.fillStyle='#fff'; c.fillRect(0,0,out.width/dpr,out.height/dpr);
-        for(const s of shapes) drawShape(c,s);
-        return out.toDataURL('image/png').slice(0,22);
-    })()""")
-    check("Εξαγωγή PNG (data URL)", png == "data:image/png;base64,", str(png))
+    got = wait_for(cdp, "!!document.querySelector('.excalidraw') && !!document.querySelector('canvas.interactive')", timeout=45)
+    check("Το Excalidraw φορτώνει (UI + canvases)", bool(got))
+    txt = cdp.evaluate("document.body.innerText.slice(0,300)")
+    check("ΔΕΝ εμφανίζεται το μήνυμα «I'm not a pretzel!»", "pretzel" not in str(txt))
+    time.sleep(2)
+    cdp.click(700, 400)   # focus στον καμβά
+    time.sleep(0.3)
+    # Πλήκτρο 7 = ελεύθερη σχεδίαση (freedraw)
+    cdp.send("Input.dispatchKeyEvent", {"type": "keyDown", "key": "7", "code": "Digit7", "windowsVirtualKeyCode": 55})
+    cdp.send("Input.dispatchKeyEvent", {"type": "keyUp", "key": "7", "code": "Digit7", "windowsVirtualKeyCode": 55})
+    time.sleep(0.3)
+    stroke(300, 300)
+    time.sleep(3)
+    ink1 = cdp.evaluate(INK)
+    check("Σχεδίαση στον καμβά (ink pixels)", isinstance(ink1, int) and ink1 > 100, f"{ink1} px")
+    # Ctrl+Z → αναίρεση
+    cdp.send("Input.dispatchKeyEvent", {"type": "keyDown", "key": "z", "code": "KeyZ", "windowsVirtualKeyCode": 90, "modifiers": 2})
+    cdp.send("Input.dispatchKeyEvent", {"type": "keyUp", "key": "z", "code": "KeyZ", "windowsVirtualKeyCode": 90, "modifiers": 2})
+    time.sleep(2)
+    ink_undo = cdp.evaluate(INK)
+    check("Αναίρεση (Ctrl+Z) αδειάζει τον καμβά", ink_undo == 0, f"{ink_undo} px")
+    # Νέα πινελιά → επιβιώνει μετά από reload (browser storage του Excalidraw)
+    stroke(500, 500, steps=11)
+    time.sleep(4)
+    before = cdp.evaluate(INK)
     cdp.send("Page.navigate", {"url": f"{BASE}/board/"})
-    restored = wait_for(cdp, "typeof shapes!=='undefined' && shapes.length===2", timeout=20)
-    check("Επαναφορά σχεδίων μετά από reload", bool(restored))
-    vh = cdp.evaluate("Math.abs(document.body.getBoundingClientRect().height - window.innerHeight) < 2")
-    check("Πλήρης οθόνη 100vh", bool(vh))
+    wait_for(cdp, "!!document.querySelector('canvas.static')", timeout=45)
+    time.sleep(4)
+    after = cdp.evaluate(INK)
+    check("Επαναφορά σχεδίων μετά από reload (browser storage)",
+          isinstance(before, int) and before > 100 and after == before, f"{before} → {after} px")
 
     print("\n=== 4. FileBrowser (/share/) ===")
     cdp.send("Page.navigate", {"url": f"{BASE}/share/"})
@@ -144,17 +129,20 @@ try:
     }})()""")
     check("Login admin/κοινός κωδικός μέσω nginx", login == 200, f"HTTP {login}")
 
-    print("\n=== 5. Dashboard — 4 νέες κάρτες ===")
+    print("\n=== 5. Dashboard — κάρτες εργαλείων ===")
+    # Η ενότητα μεγάλωσε μετά την αρχική γραφή του test (pad/circuits/blockly/
+    # sql/pdf-tools) — ελέγχουμε ότι ΟΛΑ τα βασικά εργαλεία έχουν κάρτα.
     cdp.send("Page.navigate", {"url": f"{BASE}/"})
     got = wait_for(cdp, "document.getElementById('ergaleia') && document.querySelectorAll('#ergaleia a.card-hover').length", timeout=30)
-    check("Ενότητα «Εργαλεία & Εφαρμογές Εργαστηρίου» με 4 κάρτες", got == 4, f"{got} κάρτες")
-    hrefs = cdp.evaluate("[...document.querySelectorAll('#ergaleia a.card-hover')].map(a=>a.getAttribute('href')).join(',')")
-    check("Σωστά links καρτών", hrefs == "/crypto/,/tools/,/board/,/share/", hrefs)
+    check("Ενότητα «Εργαλεία & Εφαρμογές Εργαστηρίου» με κάρτες", isinstance(got, int) and got >= 4, f"{got} κάρτες")
+    hrefs = cdp.evaluate("[...document.querySelectorAll('#ergaleia a.card-hover')].map(a=>a.getAttribute('href'))")
+    expected = ["/crypto/", "/tools/", "/board/", "/share/"]
+    check("Κάρτες για crypto/tools/board/share", all(h in hrefs for h in expected), ",".join(hrefs))
 
 finally:
-    proc.terminate()
-    try: proc.wait(timeout=10)
-    except Exception: proc.kill()
+    cdp.close()
+    stop_chrome(proc)
 
-print(f"\n{'✅ ΟΛΑ ΠΕΡΑΣΑΝ' if failed==0 else '⚠️ ΑΠΟΤΥΧΙΕΣ'}: {passed}/{passed+failed}")
-sys.exit(1 if failed else 0)
+r = results()
+print(f"\n{'✅ ΟΛΑ ΠΕΡΑΣΑΝ' if r.failed==0 else '⚠️ ΑΠΟΤΥΧΙΕΣ'}: {r.passed}/{r.passed+r.failed}")
+sys.exit(r.exit_code())

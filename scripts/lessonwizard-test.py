@@ -16,99 +16,42 @@ lessonwizard-test.py — Έλεγχος του πιλότου ημερήσιων
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 import sys
 import time
 import urllib.request
 
-import websocket
-
 sys.path.insert(0, "/opt/school-portal/scripts")
-from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+from lib import (TEACHER_CODE, Client, check, launch_chrome, results,
+                 stop_chrome, wait_for)
 
-CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9334
 BASE = "http://127.0.0.1"
 LESSON = BASE + "/docs/mathimata/gymnasio-g/pliroforiki/m02-pyrgoi-anoy/"
 
 
-class CDP:
-    def __init__(self, ws_url: str):
-        self.ws = websocket.create_connection(ws_url, timeout=120)
-        self._id = 0
-
-    def send(self, method: str, params: dict | None = None) -> dict:
-        self._id += 1
-        mid = self._id
-        self.ws.send(json.dumps({"id": mid, "method": method, "params": params or {}}))
-        while True:
-            msg = json.loads(self.ws.recv())
-            if msg.get("id") == mid:
-                if "error" in msg:
-                    raise RuntimeError(f"{method}: {msg['error']}")
-                return msg.get("result", {})
-
-    def evaluate(self, expression: str):
-        res = self.send("Runtime.evaluate", {"expression": expression, "returnByValue": True})
-        if "exceptionDetails" in res:
-            raise RuntimeError(res["exceptionDetails"].get("text", "JS exception"))
-        return res.get("result", {}).get("value")
-
-    def close(self):
-        try:
-            self.ws.close()
-        except Exception:
-            pass
-
-
-def wait_for(cdp: CDP, expr: str, timeout: float = 30, interval: float = 0.5):
-    deadline = time.time() + timeout
-    last = None
-    while time.time() < deadline:
-        try:
-            last = cdp.evaluate(expr)
-            if last:
-                return last
-        except Exception as exc:
-            last = str(exc)
-        time.sleep(interval)
-    return last
-
-
-def http_json(path: str, data: dict | None = None, cookie: str = ""):
-    req = urllib.request.Request(BASE + path)
-    if cookie:
-        req.add_header("Cookie", cookie)
-    body = None
-    if data is not None:
-        body = json.dumps(data).encode()
-        req.add_header("Content-Type", "application/json")
-    try:
-        with urllib.request.urlopen(req, body, timeout=15) as r:
-            return r.status, r.headers, json.loads(r.read() or b"{}")
-    except urllib.error.HTTPError as e:
-        return e.code, e.headers, {}
 def main() -> int:
-    passed = failed = 0
+    client = Client(BASE)          # αυτόματο cookiejar (login καθηγητή παρακάτω)
 
-    def check(label: str, ok: bool, detail: str = ""):
-        nonlocal passed, failed
-        mark = "\033[0;32m✓\033[0m" if ok else "\033[0;31m✗\033[0m"
-        print(f"  {mark} {label}" + (f" — {detail}" if detail else ""))
-        passed += ok
-        failed += not ok
+    def http_json(path, data=None, cookie=""):
+        """(status, headers, dict) — το cookie param μένει για συμβατότητα·
+        τα cookies του login κρατιούνται αυτόματα στο jar του client."""
+        body = json.dumps(data).encode() if data is not None else None
+        code, resp, headers = client._request(
+            path, data=body, ctype="application/json" if data is not None else None)
+        try:
+            return code, headers, json.loads(resp or b"{}")
+        except ValueError:
+            return code, headers, {}
 
     print("== API checks ==")
     st, _, _ = http_json("/lesson-wizard/healthz")
     check("wizard healthz", st == 200)
     st, _, _ = http_json("/lesson-wizard/api/lessons")
     check("api/lessons χωρίς cookie → 401", st == 401)
-    st, hdrs, _ = http_json("/lesson-wizard/api/login", {"code": TEACHER_CODE})
-    cookie = ""
-    for h in hdrs.get_all("Set-Cookie") or []:
-        if h.startswith("lessonwizard_teacher="):
-            cookie = h.split(";")[0]
+    st, _, _ = http_json("/lesson-wizard/api/login", {"code": TEACHER_CODE})
+    # Το HMAC cookie μπαίνει αυτόματα στο jar του client (κοινό harness).
+    cookie_val = client.cookie("lessonwizard_teacher")
+    cookie = f"lessonwizard_teacher={cookie_val}" if cookie_val else ""
     check("login καθηγητή", st == 200 and bool(cookie))
     st, _, data = http_json("/lesson-wizard/api/lessons", cookie=cookie)
     lessons = data.get("lessons", [])
@@ -178,33 +121,13 @@ def main() -> int:
     with urllib.request.urlopen(req, timeout=10) as r:
         check("teacher notes με cookie → 200", r.status == 200)
 
-    if not CHROME:
-        print("✗ Δεν βρέθηκε chromium — παράλειψη browser tests")
-        return 1 if failed else 0
-
     print("== Browser checks (headless Chromium) ==")
-    proc = subprocess.Popen(
-        [CHROME, "--headless=new", "--no-sandbox", "--disable-gpu",
-         "--disable-dev-shm-usage", f"--remote-debugging-port={PORT}",
-         "--window-size=1400,1000", "about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    cdp = None
     try:
-        targets = None
-        for _ in range(60):
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json/list", timeout=3) as r:
-                    targets = json.load(r)
-                if targets:
-                    break
-            except Exception:
-                time.sleep(0.5)
-        if not targets:
-            print("✗ Το Chromium δεν ξεκίνησε")
-            return 1
-        page = next(t for t in targets if t["type"] == "page")
-        cdp = CDP(page["webSocketDebuggerUrl"])
+        proc, cdp = launch_chrome(PORT, timeout=120)
+    except RuntimeError as exc:
+        print(f"✗ {exc} — παράλειψη browser tests")
+        return results().exit_code()
+    try:
         cdp.send("Page.enable")
         cdp.send("Network.enable")
 
@@ -386,16 +309,12 @@ def main() -> int:
         check("broadcast: banner «Ο καθηγητής προβάλλει» στον μαθητή", bool(banner))
         http_json("/lesson-wizard/api/broadcast", {"clear": True}, cookie=cookie)
     finally:
-        if cdp:
-            cdp.close()
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except Exception:
-            proc.kill()
+        cdp.close()
+        stop_chrome(proc)
 
-    print(f"\nΑποτέλεσμα: {passed} ✓ / {failed} ✗")
-    return 1 if failed else 0
+    r = results()
+    print(f"\nΑποτέλεσμα: {r.passed} ✓ / {r.failed} ✗")
+    return r.exit_code()
 
 
 if __name__ == "__main__":

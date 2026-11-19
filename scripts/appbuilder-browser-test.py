@@ -14,103 +14,30 @@ appbuilder-browser-test.py — Έλεγχος του App Builder Wizard UI σε 
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 import sys
 import time
 import urllib.request
 
-import websocket
-
 sys.path.insert(0, "/opt/school-portal/scripts")
-from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+from lib import TEACHER_CODE, check, launch_chrome, results, stop_chrome, wait_for
 
-CHROME = shutil.which("chromium") or shutil.which("chromium-browser")
 PORT = 9347
 BASE = "http://127.0.0.1"
 
 
-class CDP:
-    def __init__(self, ws_url: str):
-        self.ws = websocket.create_connection(ws_url, timeout=60)
-        self._id = 0
-
-    def send(self, method: str, params: dict | None = None) -> dict:
-        self._id += 1
-        mid = self._id
-        self.ws.send(json.dumps({"id": mid, "method": method, "params": params or {}}))
-        while True:
-            msg = json.loads(self.ws.recv())
-            if msg.get("id") == mid:
-                if "error" in msg:
-                    raise RuntimeError(f"{method}: {msg['error']}")
-                return msg.get("result", {})
-
-    def evaluate(self, expression: str):
-        res = self.send("Runtime.evaluate", {"expression": expression, "returnByValue": True})
-        if "exceptionDetails" in res:
-            raise RuntimeError(res["exceptionDetails"].get("text", "JS exception"))
-        return res.get("result", {}).get("value")
-
-    def close(self):
-        try:
-            self.ws.close()
-        except Exception:
-            pass
-
-
-def wait_for(cdp: CDP, expr: str, timeout: float = 30, interval: float = 0.4):
-    deadline = time.time() + timeout
-    last = None
-    while time.time() < deadline:
-        try:
-            last = cdp.evaluate(expr)
-            if last:
-                return last
-        except Exception as exc:
-            last = str(exc)
-        time.sleep(interval)
-    return last
-
-
 def main() -> int:
-    if not CHROME:
-        print("✗ Δεν βρέθηκε chromium")
-        return 1
-    proc = subprocess.Popen(
-        [CHROME, "--headless=new", "--no-sandbox", "--disable-gpu",
-         "--disable-dev-shm-usage", f"--remote-debugging-port={PORT}",
-         "--window-size=1400,1000", "about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    passed = failed = 0
-
-    def check(label, ok, detail=""):
-        nonlocal passed, failed
-        mark = "\033[0;32m✓\033[0m" if ok else "\033[0;31m✗\033[0m"
-        print(f"  {mark} {label}" + (f" — {detail}" if detail else ""))
-        passed += ok
-        failed += (not ok)
-
-    cdp = None
     try:
-        targets = None
-        for _ in range(60):
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json/list", timeout=3) as r:
-                    targets = json.load(r)
-                if targets:
-                    break
-            except Exception:
-                time.sleep(0.5)
-        page = next((t for t in targets if t["type"] == "page"), targets[0])
-        cdp = CDP(page["webSocketDebuggerUrl"])
+        proc, cdp = launch_chrome(PORT, timeout=60)
+    except RuntimeError as exc:
+        print(f"✗ {exc}")
+        return 1
+    try:
         cdp.send("Page.enable")
         cdp.send("Runtime.enable")
         print("\n=== 1. Dashboard — κάρτα στη Ζώνη Καθηγητών ===")
         cdp.send("Page.navigate", {"url": f"{BASE}/"})
         wait_for(cdp, "typeof Alpine !== 'undefined' && document.querySelector('[x-data]')")
-        cdp.evaluate("(()=>{const st=Alpine.$data(document.querySelector('[x-data]'));st.password=TEACHER_CODE;st.unlock();})()")
+        cdp.evaluate(f"(()=>{{const st=Alpine.$data(document.querySelector('[x-data]'));st.password={json.dumps(TEACHER_CODE)};st.unlock();}})()")
         time.sleep(0.6)
         card = cdp.evaluate("""(()=>{
             const a=document.querySelector('#kathigites a[href="/app-builder/"]');
@@ -191,16 +118,12 @@ def main() -> int:
             manifest = r.read().decode()
         check("Το manifest ενημερώθηκε (χωρίς ui-e2e-app)", "ui-e2e-app" not in manifest)
 
-        print(f"\n{'✓ ΟΛΟΙ ΟΙ ΕΛΕΓΧΟΙ ΠΕΡΑΣΑΝ' if failed == 0 else '✗ ΥΠΑΡΧΟΥΝ ΑΠΟΤΥΧΙΕΣ'}: {passed} OK, {failed} FAIL")
-        return 0 if failed == 0 else 1
+        r = results()
+        print(f"\n{'✓ ΟΛΟΙ ΟΙ ΕΛΕΓΧΟΙ ΠΕΡΑΣΑΝ' if r.failed == 0 else '✗ ΥΠΑΡΧΟΥΝ ΑΠΟΤΥΧΙΕΣ'}: {r.passed} OK, {r.failed} FAIL")
+        return r.exit_code()
     finally:
-        if cdp:
-            cdp.close()
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        cdp.close()
+        stop_chrome(proc)
 
 
 if __name__ == "__main__":

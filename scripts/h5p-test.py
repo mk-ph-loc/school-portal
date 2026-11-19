@@ -13,77 +13,33 @@ from __future__ import annotations
 
 import io
 import json
-import shutil
-import subprocess
 import sys
 import time
-import urllib.request
 import zipfile
 from pathlib import Path
 
 sys.path.insert(0, "/opt/school-portal/scripts")
-from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+from lib import (TEACHER_CODE, Client as HTTPClient, check,
+                 launch_chrome, multipart_body, results, stop_chrome)
 
 BASE = "http://127.0.0.1/h5p-studio"
 PORTAL = Path("/opt/school-portal")
-PASS = 0
-FAIL = 0
 
 
-def check(name: str, cond: bool, extra: str = "") -> None:
-    global PASS, FAIL
-    if cond:
-        PASS += 1
-        print(f"  ✅ {name}")
-    else:
-        FAIL += 1
-        print(f"  ❌ {name} {extra}")
+class Client(HTTPClient):
+    """Κοινό harness Client — το call() εδώ γυρίζει bytes (exports/uploads)."""
 
-
-class Client:
     def __init__(self):
-        self.cookie = ""
+        super().__init__(BASE, timeout=300)
 
-    def call(self, path: str, payload=None, method: str | None = None, raw: bytes | None = None,
-             ctype: str = "application/json"):
-        url = f"{BASE}/{path}"
-        data = raw if raw is not None else (json.dumps(payload).encode() if payload is not None else None)
-        req = urllib.request.Request(url, data=data, method=method or ("POST" if data else "GET"))
-        if data is not None:
-            req.add_header("Content-Type", ctype)
-        if self.cookie:
-            req.add_header("Cookie", self.cookie)
-        try:
-            with urllib.request.urlopen(req, timeout=300) as r:
-                body = r.read()
-                sc = r.headers.get("Set-Cookie", "")
-                if sc:
-                    self.cookie = sc.split(";")[0]
-                return r.status, body
-        except urllib.error.HTTPError as e:
-            return e.code, e.read()
-
-    def json(self, path, payload=None, method=None, raw=None, ctype="application/json"):
-        code, body = self.call(path, payload, method, raw=raw, ctype=ctype)
-        try:
-            return code, json.loads(body)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return code, {}
+    def call(self, path, payload=None, method=None, raw=None, ctype="application/json"):
+        return self.raw(path, payload, method, raw=raw, ctype=ctype)
 
 
-BOUNDARY = "----h5ptestboundary"
-
-
-def multipart(filename, blob, mime):
-    buf = io.BytesIO()
-    buf.write(f"--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n"
-              f"Content-Type: {mime}\r\n\r\n".encode())
-    buf.write(blob)
-    buf.write(f"\r\n--{BOUNDARY}--\r\n".encode())
-    return buf.getvalue()
-
-
-MP_CTYPE = f"multipart/form-data; boundary={BOUNDARY}"
+def upload(t, path, filename, blob, mime):
+    """Upload ενός αρχείου (πεδίο 'file') → (status, dict)."""
+    body, ctype = multipart_body(files=[("file", filename, blob, mime)])
+    return t.json(path, raw=body, ctype=ctype)
 
 SAMPLES = {
     "multichoice": {"question": "Πόσα bits έχει ένα byte;", "answers": [
@@ -117,7 +73,7 @@ def main() -> int:
     code, _ = anon.json("api/login", {"password": "λάθος"})
     check("Λάθος κωδικός → 401", code == 401)
     code, _ = t.json("api/login", {"password": TEACHER_CODE})
-    check("Σωστός κωδικός → 200 + cookie", code == 200 and "h5pstudio_teacher" in t.cookie)
+    check("Σωστός κωδικός → 200 + cookie", code == 200 and t.cookie("h5pstudio_teacher"))
     code, _ = anon.json("api/activities", {"type": "multichoice", "title": "x", "data": {}})
     check("Δημιουργία χωρίς login → 401", code == 401)
 
@@ -133,8 +89,7 @@ def main() -> int:
             ids[typ] = d["id"]
 
     # Hotspots & video με dummy media (upload στο preview-tmp → μεταφορά)
-    code, d = t.json("api/upload/preview-tmp", raw=multipart("test.png", PNG, "image/png"),
-                     ctype=MP_CTYPE)
+    code, d = upload(t, "api/upload/preview-tmp", "test.png", PNG, "image/png")
     check("Upload εικόνας στο preview-tmp", code == 200 and d.get("path"), str(d))
     img_path = d.get("path", "")
     code, d = t.json("api/activities", {"type": "hotspots", "title": "TEST hotspots",
@@ -146,8 +101,7 @@ def main() -> int:
         p = PORTAL / "h5p-studio/library" / d["id"] / "content" / img_path
         check("Το media μεταφέρθηκε στον μόνιμο φάκελο", p.is_file())
 
-    code, d = t.json("api/upload/preview-tmp", raw=multipart("test.mp4", MP4, "video/mp4"),
-                     ctype=MP_CTYPE)
+    code, d = upload(t, "api/upload/preview-tmp", "test.mp4", MP4, "video/mp4")
     check("Upload βίντεο στο preview-tmp", code == 200 and d.get("path"), str(d))
     vid_path = d.get("path", "")
     code, d = t.json("api/activities", {"type": "video", "title": "TEST video",
@@ -185,8 +139,7 @@ def main() -> int:
     check("Export δεν περιέχει editor-state.json", "content/editor-state.json" not in names)
 
     imported_id = None
-    code, d = t.json("api/import", raw=multipart("roundtrip.h5p", body, "application/zip"),
-                     ctype=MP_CTYPE)
+    code, d = upload(t, "api/import", "roundtrip.h5p", body, "application/zip")
     check("Import του export (round-trip)", code == 200 and d.get("id"), str(d))
     imported_id = d.get("id")
     if imported_id:
@@ -196,8 +149,7 @@ def main() -> int:
     bad = io.BytesIO()
     with zipfile.ZipFile(bad, "w") as z:
         z.writestr("random.txt", "not h5p")
-    code, d = t.json("api/import", raw=multipart("bad.h5p", bad.getvalue(), "application/zip"),
-                     ctype=MP_CTYPE)
+    code, d = upload(t, "api/import", "bad.h5p", bad.getvalue(), "application/zip")
     check("Import άκυρου .h5p → 400 με μήνυμα", code == 400 and "h5p.json" in str(d.get("detail", "")))
 
 
@@ -259,61 +211,24 @@ def main() -> int:
     leftover = [a for a in d.get("activities", []) if a["title"].startswith("TEST")]
     check("Όλα τα TEST διαγράφηκαν", not leftover)
 
-    print(f"\n{'='*50}\nΑΠΟΤΕΛΕΣΜΑ: {PASS} επιτυχίες, {FAIL} αποτυχίες\n{'='*50}")
-    return 1 if FAIL else 0
+    r = results()
+    print(f"\n{'='*50}\nΑΠΟΤΕΛΕΣΜΑ: {r.passed} επιτυχίες, {r.failed} αποτυχίες\n{'='*50}")
+    return r.exit_code()
 
 
 
 def run_browser_test(ids: dict) -> None:
-    chrome = shutil.which("chromium") or shutil.which("chromium-browser")
-    if not chrome:
-        print("  ⚠️ Δεν βρέθηκε chromium — παράλειψη browser test")
+    try:
+        proc, cdp = launch_chrome(9351, window="1280,900", timeout=60)
+    except RuntimeError as exc:
+        print(f"  ⚠️ {exc} — παράλειψη browser test")
         return
     try:
-        import websocket
-    except ImportError:
-        print("  ⚠️ Λείπει το websocket-client — παράλειψη browser test")
-        return
-    port = 9351
-    proc = subprocess.Popen([
-        chrome, "--headless=new", "--no-sandbox", "--disable-gpu",
-        f"--remote-debugging-port={port}", "--window-size=1280,900", "about:blank",
-    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    try:
-        ws_url = None
-        for _ in range(40):
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{port}/json") as r:
-                    tabs = json.loads(r.read())
-                pages = [x for x in tabs if x.get("type") == "page"]
-                if pages:
-                    ws_url = pages[0]["webSocketDebuggerUrl"]
-                    break
-            except Exception:
-                pass
-            time.sleep(0.25)
-        if not ws_url:
-            check("Chromium CDP", False)
-            return
-        ws = websocket.create_connection(ws_url, timeout=60)
-        mid = 0
-
-        def send(method, params=None):
-            nonlocal mid
-            mid += 1
-            ws.send(json.dumps({"id": mid, "method": method, "params": params or {}}))
-            while True:
-                msg = json.loads(ws.recv())
-                if msg.get("id") == mid:
-                    return msg.get("result", {})
-
         def ev(expr):
-            r = send("Runtime.evaluate", {"expression": expr, "returnByValue": True,
-                                          "awaitPromise": True})
-            return r.get("result", {}).get("value")
+            return cdp.evaluate(expr, await_promise=True)
 
-        send("Page.enable")
-        send("Runtime.enable")
+        cdp.send("Page.enable")
+        cdp.send("Runtime.enable")
         # Ο h5p-standalone φορτώνει το περιεχόμενο σε about:blank iframe —
         # η επιθεώρηση γίνεται μέσω contentDocument (same-origin).
         inner = ("(()=>{const f=document.querySelector('iframe.h5p-iframe');"
@@ -327,7 +242,7 @@ def run_browser_test(ids: dict) -> None:
                             ("hotspots", "h5p-image-hotspots")):
             if typ not in ids:
                 continue
-            send("Page.navigate", {"url": f"{BASE}/play/{ids[typ]}/?embed=1"})
+            cdp.send("Page.navigate", {"url": f"{BASE}/play/{ids[typ]}/?embed=1"})
             found = False
             for _ in range(40):
                 time.sleep(0.5)
@@ -340,7 +255,7 @@ def run_browser_test(ids: dict) -> None:
                   bool(found and marker in (html or "") and not err), err or "(timeout)")
         # Ελληνικό UI check στο multichoice
         if "multichoice" in ids:
-            send("Page.navigate", {"url": f"{BASE}/play/{ids['multichoice']}/?embed=1"})
+            cdp.send("Page.navigate", {"url": f"{BASE}/play/{ids['multichoice']}/?embed=1"})
             greek = False
             for _ in range(30):
                 time.sleep(0.5)
@@ -348,13 +263,9 @@ def run_browser_test(ids: dict) -> None:
                     greek = True
                     break
             check("Browser: ελληνικό κουμπί «Έλεγχος»", greek)
-        ws.close()
+        cdp.close()
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        stop_chrome(proc, timeout=5)
 
 
 if __name__ == "__main__":

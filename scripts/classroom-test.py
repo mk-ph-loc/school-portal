@@ -9,88 +9,23 @@ End-to-end έλεγχος της Ζωντανής Τάξης (/classroom/) μέ�
 με τον parser του Lesson Wizard). Εκτέλεση:
     /opt/school-portal/venv/bin/python /opt/school-portal/scripts/classroom-test.py
 """
-import io
 import json
 import sys
 import time
 import urllib.request
-import http.cookiejar
-
-from websocket import create_connection
 
 sys.path.insert(0, "/opt/school-portal/scripts")
-from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+from lib import TEACHER_CODE, WSClient, check, finish
 
 BASE = "http://127.0.0.1/classroom/"
 WS_URL = "ws://127.0.0.1/classroom/ws"
-FAILED = 0
 
 
-def check(label, cond):
-    global FAILED
-    print(("  ✓ " if cond else "  ✗ ") + label)
-    if not cond:
-        FAILED += 1
+class Client(WSClient):
+    """Κοινό harness: HTTP+cookies & WS με last_roster (scripts/lib.py)."""
 
-
-class Client:
     def __init__(self):
-        self.jar = http.cookiejar.CookieJar()
-        self.opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(self.jar))
-        self.ws = None
-        self.last_roster = None
-
-    def call(self, path, payload=None, method=None):
-        data = json.dumps(payload).encode() if payload is not None else None
-        req = urllib.request.Request(BASE + path, data=data, method=method,
-                                     headers={"Content-Type": "application/json"})
-        try:
-            with self.opener.open(req, timeout=15) as res:
-                return res.status, json.loads(res.read() or b"{}")
-        except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read() or b"{}")
-
-    def cookie_header(self):
-        return "; ".join(f"{c.name}={c.value}" for c in self.jar)
-
-    def connect(self):
-        self.ws = create_connection(WS_URL, timeout=15,
-                                    header={"Cookie": self.cookie_header()})
-        return self.ws
-
-    def send(self, obj):
-        self.ws.send(json.dumps(obj))
-
-    def recv(self, types, timeout=15):
-        """Διαβάζει μέχρι να βρει ζητούμενο τύπο· τα roster κρατιούνται πάντα
-        ενημερωμένα στο self.last_roster (ώστε να μην χάνονται ενημερώσεις)."""
-        end = time.time() + timeout
-        while time.time() < end:
-            self.ws.settimeout(max(0.5, end - time.time()))
-            msg = json.loads(self.ws.recv())
-            if msg.get("type") == "roster":
-                self.last_roster = msg
-            if msg.get("type") in types:
-                return msg
-        raise TimeoutError(f"Δεν ελήφθη μήνυμα {types}")
-
-    def wait_roster(self, pred, timeout=10):
-        """Περιμένει roster που να ικανοποιεί τη συνθήκη (τρέχον ή επόμενο)."""
-        if self.last_roster and pred(self.last_roster):
-            return self.last_roster
-        end = time.time() + timeout
-        while time.time() < end:
-            msg = self.recv(["roster"], timeout=max(0.5, end - time.time()))
-            if pred(msg):
-                return msg
-        raise TimeoutError("Το roster δεν ικανοποίησε τη συνθήκη")
-
-    def close(self):
-        try:
-            self.ws and self.ws.close()
-        except Exception:
-            pass
+        super().__init__(BASE, WS_URL)
 
 
 def main():
@@ -297,16 +232,10 @@ def main():
           sched["tmimata"] == cfg["schedule"]["tmimata"]
           and sched["periods"] == cfg["schedule"]["periods"]
           and sched["timetable"] == cfg["schedule"]["timetable"])
-    # upload μέσω multipart
-    boundary = "----classroomtest"
-    body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"r.xlsx\"\r\n"
-            "Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n").encode() \
-        + xlsx_bytes + f"\r\n--{boundary}--\r\n".encode()
-    req = urllib.request.Request(BASE + "api/config/upload", data=body, method="POST",
-                                 headers={"Cookie": teacher.cookie_header(),
-                                          "Content-Type": f"multipart/form-data; boundary={boundary}"})
-    with urllib.request.urlopen(req, timeout=20) as res:
-        up = json.loads(res.read())
+    # upload μέσω multipart (κοινό helper του harness)
+    code, up = teacher.multipart("api/config/upload", files=[
+        ("file", "r.xlsx", xlsx_bytes,
+         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")])
     check("Upload Excel → εφαρμογή ρυθμίσεων", up.get("ok") and up["summary"]["tmimata"] == 3)
     student.recv(["config_updated"], timeout=10); guest.recv(["config_updated"]); teacher.recv(["config_updated"])
     check("config_updated broadcast σε όλους", True)
@@ -446,11 +375,7 @@ def main():
     check("Ο guest έφυγε από το roster άμεσα", removed)
     student.close(); teacher.close()
 
-    print()
-    if FAILED:
-        print(f"✗ {FAILED} έλεγχοι ΑΠΕΤΥΧΑΝ")
-        sys.exit(1)
-    print("✓ ΟΛΟΙ οι έλεγχοι πέρασαν — η Ζωντανή Τάξη λειτουργεί!")
+    finish("✓ ΟΛΟΙ οι έλεγχοι πέρασαν — η Ζωντανή Τάξη λειτουργεί!")
 
 
 if __name__ == "__main__":

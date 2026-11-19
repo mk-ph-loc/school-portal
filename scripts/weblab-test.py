@@ -12,61 +12,29 @@ End-to-end έλεγχος του Εργαστηρίου Web (/web-lab/) μέσω
 import json
 import sys
 import time
+import urllib.parse
 import urllib.request
-import http.cookiejar
 
 from websocket import create_connection
 
 sys.path.insert(0, "/opt/school-portal/scripts")
-from lib import TEACHER_CODE                            # ίδιος κωδικός με τα apps
+from lib import TEACHER_CODE, Client as HTTPClient, check, finish, ws_recv
 
 BASE = "http://127.0.0.1/web-lab/"
 WS_BASE = "ws://127.0.0.1/web-lab/ws/"
-FAILED = 0
 
 
-def check(label, cond):
-    global FAILED
-    print(("  ✓ " if cond else "  ✗ ") + label)
-    if not cond:
-        FAILED += 1
+class Client(HTTPClient):
+    """Κοινό harness Client + άνοιγμα WS δωματίου με PIN/όνομα."""
 
-
-class Client:
     def __init__(self):
-        self.jar = http.cookiejar.CookieJar()
-        self.opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(self.jar))
-
-    def call(self, path, payload=None, method=None):
-        data = json.dumps(payload).encode() if payload is not None else None
-        req = urllib.request.Request(BASE + path, data=data, method=method,
-                                     headers={"Content-Type": "application/json"})
-        try:
-            with self.opener.open(req, timeout=15) as res:
-                return res.status, json.loads(res.read() or b"{}")
-        except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read() or b"{}")
-
-    def cookie(self, name):
-        return next((c.value for c in self.jar if c.name == name), None)
+        super().__init__(BASE)
 
     def ws(self, pin, name):
-        cookies = "; ".join(f"{c.name}={c.value}" for c in self.jar)
+        cookies = self.cookie_header()
         return create_connection(
             WS_BASE + pin + "?name=" + urllib.parse.quote(name),
             header={"Cookie": cookies} if cookies else {}, timeout=15)
-
-
-def ws_recv(ws, types, timeout=15):
-    """Διαβάζει μηνύματα μέχρι να βρει έναν από τους ζητούμενους τύπους."""
-    end = time.time() + timeout
-    while time.time() < end:
-        ws.settimeout(max(0.5, end - time.time()))
-        msg = json.loads(ws.recv())
-        if msg.get("type") in types:
-            return msg
-    raise TimeoutError(f"Δεν ελήφθη μήνυμα {types}")
 
 
 def main():
@@ -175,11 +143,7 @@ def main():
     for w in (tws, s1, s2):
         w.close()
 
-    print()
-    if FAILED:
-        print(f"✗ {FAILED} έλεγχοι απέτυχαν!")
-        sys.exit(1)
-    print("✓ Όλοι οι έλεγχοι του Web Lab πέρασαν επιτυχώς!")
+    finish("✓ Όλοι οι έλεγχοι του Web Lab πέρασαν επιτυχώς!")
 
 
 if __name__ == "__main__":

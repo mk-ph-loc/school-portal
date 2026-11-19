@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 
 from common.classes import CLASS_SLUGS
 from common.schedule import DAYS, hhmm as _hhmm, load_json, save_json, parse_schedule_xlsx
+from common.xlsx import style_header
 
 import state
 
@@ -25,20 +26,13 @@ router = APIRouter()
 
 # ---------------------------------------------------------------------------
 # Ωράριο (Excel → JSON) & ενεργό μάθημα — parsing/JSON helpers: common.schedule
+# Styling κεφαλίδων: common.xlsx (κοινό με το ενιαίο πρότυπο του Classroom Hub).
 # ---------------------------------------------------------------------------
 def make_template_xlsx() -> None:
     """Δημιουργεί το πρότυπο Excel ωραρίου (4 φύλλα, με οδηγίες & παράδειγμα)."""
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill
 
     wb = Workbook()
-    head_font = Font(bold=True, color="FFFFFF")
-    head_fill = PatternFill("solid", fgColor="3F51B5")
-
-    def style_header(ws):
-        for c in ws[1]:
-            c.font = head_font
-            c.fill = head_fill
 
     ws = wb.active
     ws.title = "Τμήματα"

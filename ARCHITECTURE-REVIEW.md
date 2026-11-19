@@ -5,6 +5,7 @@
 > · Task 3 (classroom-hub → APIRouters) ✅ + εκκρεμότητες Βήματος 2 (ενιαίος κωδικός, backup/list_lessons) ✅ — commit `e5b92cc`, pushed στο origin/main (19/11/2026)
 > · Task 3 ΟΛΟΚΛΗΡΩΘΗΚΕ: h5p-studio & lesson-wizard → APIRouters ✅ — commit `ebb73b0`, pushed στο origin/main (19/11/2026, ίδιο μοτίβο· ίδια routes/API contracts, όλα τα e2e πράσινα)
 > · Task 4 (Αξιοπιστία) ✅: common/nav.py single-owner + flock, lifespan livequiz/weblab, logging παντού, SQLite session() με closing — commit `2e4afab`, pushed στο origin/main (19/11/2026, όλα τα e2e §5 πράσινα)
+> · Task 5 (Ποιότητα ζωής) ✅: κοινό test harness scripts/lib.py (Client/WS/CDP/check) σε ΟΛΑ τα 14 Python tests + common/xlsx.py styling helpers — όλα τα e2e §5 + ΟΛΑ τα browser tests πράσινα (19/11/2026)
 > **Σκοπός αρχείου:** αρχειακή καταγραφή του review + αυτόνομος οδηγός για τα επόμενα tasks
 > (κάθε ενότητα «Task» μπορεί να δοθεί αυτούσια ως prompt σε νέα συνομιλία).
 
@@ -105,7 +106,9 @@ livequiz ✓ · smoke 73/73 ✓ (όλα τα services active με τον νέο 
    - ~~`list_lessons()` των bridge/h5p/app-builder~~ ✅ Στο `common/lessons.py`:
      `list_lessons_grouped()` (mathimata/ + _paradeigma fallback ανά τάξη) &
      `list_lessons_flat()` (όλο το docs/, εκτός assets/teachers) — ίδια outputs.
-   - Excel template generation (`make_template_xlsx`) classroom/wizard — μοιράζονται styling helpers. **(Ακόμα ανοιχτό)**
+   - ~~Excel template generation (`make_template_xlsx`) classroom/wizard~~ ✅ Έγινε με το
+     Task 5 (19/11/2026): νέο `common/xlsx.py` (`style_header`/`style_sheet`/
+     `yesno_validation` + χρωματικές σταθερές) — ίδιο output .xlsx, μηδενικό drift.
 
 ---
 
@@ -226,15 +229,43 @@ livequiz ✓ · smoke 73/73 ✓ (όλα τα services active με τον νέο 
   entry ΜΕΣΑ στο AUTO-NAV block & επιβιώνει rebuild wizard· διαγραφή αρχείου →
   το entry φεύγει αυτόματα (folder-driven)· idempotent 2ο rebuild = no-op.
 
-### Task 5 — Ποιότητα ζωής (τελευταίο, χαμηλού ρίσκου)
-- **Test harness**: 17 scripts με copy-pasted `Client/check/cookiejar` boilerplate και
-  hardcoded `teacher2026` → `scripts/lib.py` (ή pytest με markers smoke/e2e/browser)
-  + κοινό config που διαβάζει τον ίδιο κωδικό με τα apps. Θα έπιανε αυτόματα τα Β1/Β2.
-- **Ενιαίος κωδικός** (αν δεν γίνει στο Βήμα 2): βλ. §3 εκκρεμότητα 2.
-- **Αναδιοργάνωση φακέλων** (προαιρετικό): δικά μας apps στο `apps/`, vendored upstream
-  (etherpad, hedgedoc, excalidraw-room) σε `vendor/`. Κοστίζει αλλαγές σε
-  systemd/nginx/install — μόνο αν συνδυαστεί με άλλο refactor.
-- **README split**: 638 γραμμές → ξεχωριστά docs ανά ενότητα αν μεγαλώσει κι άλλο.
+### Task 5 — Ποιότητα ζωής ✅ **Έγινε 19/11/2026**
+- ~~**Test harness**~~ ✅ Το `scripts/lib.py` έγινε πλήρες κοινό harness (από απλό
+  re-export του TEACHER_CODE): `Reporter`/`check()`/`finish()` (✓/✗ + μέτρηση +
+  exit code), HTTP `Client` με αυτόματο cookiejar (`call/json/raw/multipart/get_url`,
+  relative ή absolute paths), `WSClient` (HTTP+WS με last_roster/wait_roster —
+  Ζωντανή Τάξη), `ws_recv` (livequiz/weblab), `multipart_body`, και για ΟΛΑ τα
+  browser tests: `CDP` (send/send_session/evaluate±awaitPromise/click, on_event
+  hook για Fetch interception), `launch_chrome`/`new_tab`/`stop_chrome`/`wait_for`.
+  Και τα 14 Python test scripts μετατράπηκαν — ίδιο output/exit codes, ίδια
+  checks/ροές/API contracts· **−1314/+697 γραμμές** (net −617 μαζί με το lib.py
+  και το common/xlsx.py). Επιλέχθηκε lib.py αντί pytest: μηδενικές νέες εξαρτήσεις,
+  τα scripts παραμένουν αυτόνομα εκτελέσιμα (install.sh/docs/§5 αμετάβλητα).
+  Διορθώθηκαν 2 latent bugs που έκρυβε το boilerplate: το `TEACHER_CODE` μέσα σε
+  plain JS strings των browser-test/custom-apps/appbuilder-browser ήταν undefined
+  στον browser (το unlock «περνούσε» επειδή το Alpine gate είναι UX-only) → πλέον
+  interpolate με `json.dumps(TEACHER_CODE)`· το tools-browser-test §3 είχε μείνει
+  στον ΠΑΛΙΟ custom canvas πίνακα (το /board/ είναι Excalidraw build) και §5
+  περίμενε 4 κάρτες ενώ υπάρχουν 9 → ενημερώθηκε σε πραγματικούς ελέγχους
+  Excalidraw (UI, freedraw με CDP pen events, Ctrl+Z, επιβίωση σχεδίων σε reload)
+  και ≥4 κάρτες με υποσύνολο {crypto,tools,board,share}. Το bug υπήρχε ΚΑΙ πριν
+  το refactor (επαληθεύτηκε με το παλιό script από το git HEAD).
+- ~~**Ενιαίος κωδικός**~~ ✅ Είχε ήδη γίνει (commit `e5b92cc`, βλ. §3 εκκρεμότητα 2).
+- ~~**Excel styling helpers**~~ ✅ Νέο `common/xlsx.py`: `HEAD_FILL/REQ_FILL/
+  OPT_FILL/WARN_FILL`, `style_header()` (minimal — wizard 4-φυλλο), `style_sheet()`
+  (πλήρες: κεφαλίδες/πλάτη/freeze/tab colors/χρωματισμός 60 γραμμών — classroom
+  12-φυλλο), `yesno_validation()`. Τα δύο `make_template_xlsx()` έγιναν λεπτοί
+  callers· verify: ίδια φύλλα/τιμές/styles & round-trip με τους parsers ✓.
+- **Αναδιοργάνωση φακέλων** (προαιρετικό): ΔΕΝ έγινε — τα δικά μας apps είναι ήδη
+  στο `apps/`· η μετακίνηση των vendored (etherpad/hedgedoc/excalidraw-room) σε
+  `vendor/` κοστίζει αλλαγές σε systemd/nginx/install χωρίς λειτουργικό όφελος.
+- **README split**: ΔΕΝ έγινε — 670 γραμμές, ακόμα διαχειρίσιμο· προστέθηκαν μόνο
+  οι αναφορές σε `scripts/lib.py` & `common/xlsx.py`.
+- **Επαλήθευση (live, μέσω Nginx):** classroom 68 ✓ · livequiz 29 ✓ · weblab 24 ✓ ·
+  appbuilder ✓ · h5p 54/54 ✓ · lessonwizard 62/62 ✓ · smoke 73/73 ✓ ·
+  browser-test 16/16 ✓ · classroom-browser 28 ✓ · custom-apps 25 ✓ ·
+  appbuilder-browser 15 ✓ · exams-browser 18/18 ✓ · tools-browser 15/15 ✓ ·
+  weblab-browser 14 ✓ · board-classroom 13 ✓ (με ~60s παύση μεταξύ runs, §5).
 
 ---
 
