@@ -70,6 +70,10 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
   > μόνο **end-to-end encrypted** blobs (AES-GCM, το κλειδί μένει στο URL fragment του browser).
   > Μοιράσου το link που παράγει το «Start session» με τους μαθητές — όλοι πρέπει να είναι
   > στο ίδιο LAN και να έχουν αποδεχτεί το πιστοποιητικό HTTPS.
+  > 🏫 **Λειτουργεί και μέσα στη Ζωντανή Τάξη (`/classroom/`)**: το upstream build αρνιόταν
+  > να τρέξει σε iframe («I'm not a pretzel!»)· το `scripts/fetch-excalidraw.sh` απενεργοποιεί
+  > αυτόν τον έλεγχο (βήμα 6β3), οπότε ο πίνακας ανοίγει κανονικά από το μενού της τάξης,
+  > μαζί με σχεδίαση & ζωντανή συνεργασία. Έλεγχος: `scripts/board-classroom-test.py`.
 - **`/pad/`** — **Etherpad Lite v2.7.3**: συνεργατικός επεξεργαστής κειμένου σε πραγματικό
   χρόνο για όλη την τάξη (χρώματα ανά μαθητή, chat, ιστορικό/timeslider, εξαγωγή txt/html).
   Τρέχει native με **Node.js 22 LTS** (NodeSource) + **SQLite** (`apps/etherpad/var/etherpad.db`,
@@ -535,7 +539,10 @@ slides.pdf, διαδραστικά .html, φύλλα εργασίας, αποσ�
 - **Έλεγχοι:** `scripts/classroom-test.py` (end-to-end μέσω Nginx: ρόλοι, roster,
   εντολές, poll ορατότητα, quiz καταγραφή, timers, Excel round-trip με τον parser
   του Lesson Wizard) και `scripts/classroom-browser-test.py` (πραγματικός
-  headless Chromium: είσοδοι, iframe, dock⇄float, ζωντανές ανακοινώσεις).
+  headless Chromium: είσοδοι, iframe, dock⇄float, ζωντανές ανακοινώσεις)
+  και `scripts/board-classroom-test.py` (ο Ψηφιακός Πίνακας μέσα στην τάξη: άνοιγμα
+  `/board/` σε iframe χωρίς το «I'm not a pretzel!», Start session, σχεδίαση &
+  ζωντανή αναμετάδοση πινελιών σε 2ο χρήστη μέσω του self-hosted excalidraw-room).
 
 ### 🎪 Παράδειγμα ΟΛΩΝ των δυνατοτήτων MkDocs
 

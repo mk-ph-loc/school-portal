@@ -229,6 +229,40 @@ else:
           'το upstream άλλαξε· η συνεργασία θα χρησιμοποιεί τον δημόσιο server.')
 PYEOF
 
+# --- 6β3. Patch του κύριου bundle: λειτουργία μέσα σε iframe (Ζωντανή Τάξη) --
+# Το upstream excalidraw-app αρνείται να τρέξει σε same-origin iframe και δείχνει
+# «I'm not a pretzel!» — έτσι ο πίνακας ΔΕΝ εμφανιζόταν στο /classroom/ (iframe).
+# Απενεργοποιούμε (α) τον έλεγχο αυτό και (β) τον helper isEmbedded() ώστε το
+# collab UI (Share/Live collaboration) & το Collab wrapper να δουλεύουν και σε
+# iframe. Regex με τυχαία minified ονόματα → ανθεκτικό σε μελλοντικά builds.
+python3 - "${TMP}${MAIN_JS}" <<'PYEOF'
+import re, sys, pathlib
+
+p = pathlib.Path(sys.argv[1])
+js = p.read_text(encoding="utf-8")
+V = r'[A-Za-z_$][\w$]*'
+
+# (α) Pretzel guard: let VAR=!1;if(window.self!==window.top)try{...referrer
+#     origin check...&&(VAR=!0)}catch{}  →  let VAR=!1;
+guard = re.compile(
+    r'let (' + V + r')=!1;if\(window\.self!==window\.top\)try\{'
+    r'const ' + V + r'=new URL\(document\.referrer\),'
+    + V + r'=new URL\(window\.location\.href\);'
+    + V + r'\.origin===' + V + r'\.origin&&\(' + V + r'=!0\)\}catch\{\}')
+js, n1 = guard.subn(lambda m: f'let {m.group(1)}=!1;', js)
+
+# (β) isEmbedded helper: VAR=()=>OTHER()==="iframe"  →  VAR=()=>!1
+helper = re.compile(r'(' + V + r')=\(\)=>' + V + r'\(\)==="iframe"')
+js, n2 = helper.subn(lambda m: f'{m.group(1)}=()=>!1', js)
+
+if n1 == 1 and n2 == 1:
+    p.write_text(js, encoding="utf-8")
+    print('[✓] Bundle patch: iframe mode → ο πίνακας ανοίγει στη Ζωντανή Τάξη (/classroom/)')
+else:
+    print(f'[!] Προσοχή: iframe patch βρήκε guard={n1}, helper={n2} (αναμενόταν 1/1) — '
+          'το upstream άλλαξε· ο πίνακας ενδέχεται να δείχνει «I\'m not a pretzel!» σε iframe.')
+PYEOF
+
 # PWA manifest με σωστό scope/start_url για το /board/
 cat > "${TMP}/manifest.webmanifest" <<MANIFEST_EOF
 {"name":"Ψηφιακός Πίνακας — Excalidraw","short_name":"Πίνακας","start_url":"${SUBPATH}","scope":"${SUBPATH}","display":"standalone","background_color":"#ffffff","theme_color":"#121212","lang":"el","icons":[{"src":"android-chrome-192x192.png","sizes":"192x192","type":"image/png"},{"src":"apple-touch-icon.png","sizes":"180x180","type":"image/png"},{"src":"favicon-32x32.png","sizes":"32x32","type":"image/png"},{"src":"favicon-16x16.png","sizes":"16x16","type":"image/png"}]}
