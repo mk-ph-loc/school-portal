@@ -1,7 +1,7 @@
 # 🏫 Architecture Review — Ψηφιακή Πύλη Σχολείου & Εργαστηρίου
 
 > **Ημερομηνία review:** 19 Νοεμβρίου 2026
-> **Κατάσταση:** Βήμα 1 (bug fixes) ✅ · Βήμα 2 (κοινό πακέτο `common/`) ✅ — μη committed ακόμα
+> **Κατάσταση:** Βήμα 1 (bug fixes) ✅ · Βήμα 2 (κοινό πακέτο `common/`) ✅ — commit `2e0f814`, pushed στο origin/main
 > **Σκοπός αρχείου:** αρχειακή καταγραφή του review + αυτόνομος οδηγός για τα επόμενα tasks
 > (κάθε ενότητα «Task» μπορεί να δοθεί αυτούσια ως prompt σε νέα συνομιλία).
 
@@ -85,8 +85,8 @@ joins/PIN δεν περνούν από τα login locations (εκτός του `
 livequiz ✓ · smoke 73/73 ✓ (όλα τα services active με τον νέο κώδικα).
 
 ### ⚠️ Εκκρεμότητες Βήματος 2
-1. **Git commit** — ΟΛΕΣ οι αλλαγές (Βήμα 1+2) είναι στο working tree, μη committed
-   (23 αρχεία + `common/` + `config/nginx/school-proxy-headers.conf`).
+1. ~~Git commit~~ ✅ Έγινε: commit `2e0f814` (31 αρχεία, +1126/−801), pushed στο
+   `origin/main` (github.com/mk-ph-loc/school-portal) στις 19/11/2026.
 2. **Ενιαίος κωδικός από env**: το `common/auth.py` έχει ακόμα hardcoded
    `TEACHER_CODE = "teacher2026"`. Το `TEACHER_PASS` του install.sh αλλάζει μόνο το
    Basic Auth, ΟΧΙ τα apps. Θέλει: `TEACHER_CODE = os.environ.get("TEACHER_PASS", "teacher2026")`
