@@ -2,7 +2,7 @@
 
 > **Ημερομηνία review:** 19 Νοεμβρίου 2026
 > **Κατάσταση:** Βήμα 1 (bug fixes) ✅ · Βήμα 2 (κοινό πακέτο `common/`) ✅ — commit `2e0f814`, pushed στο origin/main
-> · Task 3 (classroom-hub → APIRouters) ✅ + εκκρεμότητες Βήματος 2 (ενιαίος κωδικός, backup/list_lessons) ✅ — 19/11/2026, εκκρεμεί commit
+> · Task 3 (classroom-hub → APIRouters) ✅ + εκκρεμότητες Βήματος 2 (ενιαίος κωδικός, backup/list_lessons) ✅ — commit `e5b92cc`, pushed στο origin/main (19/11/2026)
 > **Σκοπός αρχείου:** αρχειακή καταγραφή του review + αυτόνομος οδηγός για τα επόμενα tasks
 > (κάθε ενότητα «Task» μπορεί να δοθεί αυτούσια ως prompt σε νέα συνομιλία).
 
