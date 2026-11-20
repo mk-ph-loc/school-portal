@@ -2,7 +2,7 @@
   "id": "screen-resolution-wizard",
   "title": "Pixel, Ανάλυση Οθόνης & PPI",
   "description": "Διαδραστικός οδηγός 4 βημάτων: ζωγράφισε με pixels, δες πώς αλλάζει η ανάλυση και υπολόγισε την πυκνότητα PPI μιας οθόνης.",
-  "category": "Γενικά",
+  "category": "Γραφικά & Πολυμέσα",
   "icon": "💻",
   "access": "all"
 }

@@ -51,6 +51,7 @@ def load_app(app_dir: Path) -> tuple[dict | None, list[str]]:
     category = str(meta.get("category", "")).strip() or "Γενικά"
     icon = str(meta.get("icon", "")).strip() or "🚀"
     access = str(meta.get("access", "all")).strip()
+    pinned_raw = meta.get("pinned", False)
 
     if not ID_RE.match(app_id):
         errors.append(f"{app_dir.name}: το id '{app_id}' πρέπει να είναι lowercase λατινικά/ψηφία/παύλες")
@@ -60,6 +61,8 @@ def load_app(app_dir: Path) -> tuple[dict | None, list[str]]:
         errors.append(f"{app_dir.name}: λείπει το πεδίο title")
     if access not in VALID_ACCESS:
         errors.append(f"{app_dir.name}: το access πρέπει να είναι 'all' ή 'teachers' (βρέθηκε '{access}')")
+    if not isinstance(pinned_raw, bool):
+        errors.append(f"{app_dir.name}: το pinned πρέπει να είναι boolean true/false (βρέθηκε {pinned_raw!r})")
     if not (app_dir / "index.html").is_file():
         errors.append(f"{app_dir.name}: λείπει το index.html")
 
@@ -70,6 +73,7 @@ def load_app(app_dir: Path) -> tuple[dict | None, list[str]]:
         "category": category,
         "icon": icon,
         "access": access,
+        "pinned": pinned_raw is True,
         "url": f"/apps/{app_dir.name}/",
     }
     return entry, errors
@@ -107,8 +111,9 @@ def main() -> int:
         print("Το apps-manifest.json ΔΕΝ ενημερώθηκε — διόρθωσε τα παραπάνω και ξανατρέξε.", file=sys.stderr)
         return 1
 
-    # Σταθερή σειρά εμφάνισης στο Dashboard: αλφαβητικά κατά τίτλο (ελληνικά)
-    entries.sort(key=lambda e: e["title"].casefold())
+    # Σταθερή σειρά εμφάνισης στο Dashboard: pinned πρώτα («Εργαλείο Ημέρας»),
+    # μετά αλφαβητικά κατά τίτλο (ελληνικά). Το Dashboard ΔΙΑΤΗΡΕΙ αυτή τη σειρά.
+    entries.sort(key=lambda e: (not e["pinned"], e["title"].casefold()))
     payload = {"apps": entries}
     text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
@@ -126,7 +131,8 @@ def main() -> int:
     print(f"✓ apps-manifest.json: {len(entries)} εφαρμογές → {MANIFEST}")
     for e in entries:
         badge = "καθηγητές" if e["access"] == "teachers" else "όλοι"
-        print(f"    {e['icon']} {e['title']}  →  {e['url']}  [{badge}]")
+        pin = " 📌" if e["pinned"] else ""
+        print(f"    {e['icon']} {e['title']}{pin}  →  {e['url']}  [{badge}]")
     return 0
 
 

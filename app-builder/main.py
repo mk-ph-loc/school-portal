@@ -61,6 +61,12 @@ MAX_TOTAL_BYTES = 50 * 1024 * 1024   # 50 MB (ίδιο με το client_max_body
 EMBED_MARKER = "custom-app-embed"
 
 CATEGORIES = [
+    # Τυποποιημένες θεματικές κατηγορίες (ίδια με τα tabs του Dashboard)
+    "Προγραμματισμός",
+    "Γραφικά & Πολυμέσα",
+    "Τεχνολογία & ΤΝ",
+    "Υλικό & Δεδομένα",
+    # Backward compat: οι 6 ταξικές + «Γενικά» παραμένουν διαθέσιμες
     "Γενικά",
     "Α' Γυμνασίου / Πληροφορική",
     "Β' Γυμνασίου / Πληροφορική",
@@ -135,6 +141,7 @@ def read_app_meta(app_dir: Path) -> dict:
         "category": str(meta.get("category", "Γενικά")),
         "icon": str(meta.get("icon", "🚀")),
         "access": str(meta.get("access", "all")),
+        "pinned": bool(meta.get("pinned", False)),
         "url": f"/apps/{app_dir.name}/",
     }
 
@@ -359,6 +366,7 @@ async def create_app(
     category: str = Form("Γενικά"),
     icon: str = Form("🚀"),
     access: str = Form("all"),
+    pinned: str = Form("false"),
     replace: str = Form("false"),
     mode: str = Form("upload"),               # upload | paste
     paste_html: str = Form(""),               # πλήρες HTML ή μόνο <main> περιεχόμενο
@@ -380,6 +388,7 @@ async def create_app(
     category = category.strip() or "Γενικά"
     icon = icon.strip() or "🚀"
     do_replace = replace.lower() in ("1", "true", "on", "yes")
+    pinned_flag = pinned.strip().lower() in ("1", "true", "on", "yes")
 
     dest = APPS_DIR / app_id
     if dest.exists() and not do_replace:
@@ -451,6 +460,7 @@ async def create_app(
         meta = {
             "id": app_id, "title": title, "description": description.strip(),
             "category": category, "icon": icon, "access": access,
+            "pinned": pinned_flag,  # πάντα ως bool — ίδια μορφή με το manifest script
         }
         (staging / "app.json").write_text(
             json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

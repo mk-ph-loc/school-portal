@@ -49,17 +49,122 @@ def main() -> int:
         })()""")
         check("Κάρτα binary-converter ορατή", bool(card and card["visible"]))
         check("Σωστός τίτλος κάρτας", bool(card and "Μετατροπέας Δυαδικού" in card["text"]))
-        check("Badge κατηγορίας", bool(card and "Γυμνασίου" in card["text"]))
+        check("Badge κατηγορίας", bool(card and "Υλικό & Δεδομένα" in card["text"]))
+
+        # ---------------------------------------------------------------
+        print("\n=== 1β. Tabs κατηγοριών, αναζήτηση & pinned ===")
+        tabs = wait_for(cdp, """(() => {
+            const btns=[...document.querySelectorAll('#custom-apps-tabs button')];
+            if(!btns.length) return null;
+            return btns.map(b=>({cat:b.dataset.category, text:b.textContent.replace(/\\s+/g,' ').trim()}));
+        })()""")
+        check("Μπάρα tabs ορατή", bool(tabs), f"{len(tabs or [])} tabs")
+        tab_ids = [t["cat"] for t in (tabs or [])]
+        check("Tabs: Όλες + οι 4 τυποποιημένες κατηγορίες",
+              all(c in tab_ids for c in ("all", "Προγραμματισμός", "Γραφικά & Πολυμέσα",
+                                         "Τεχνολογία & ΤΝ", "Υλικό & Δεδομένα")), str(tab_ids))
+        counts = cdp.evaluate("Alpine.$data(document.querySelector('[x-data]')).categoryCounts()")
+        n_all = cdp.evaluate("document.querySelectorAll('#custom-apps a[href^=\"/apps/\"]').length")
+        check("Μετρητής «Όλες» = πλήθος ορατών καρτών", bool(counts) and counts.get("all") == n_all,
+              f"all={counts.get('all') if counts else None}, κάρτες={n_all}")
+        tab_count = cdp.evaluate("""(() => {
+            const b=document.querySelector('#custom-apps-tabs button[data-category="Υλικό & Δεδομένα"]');
+            return b ? parseInt(b.querySelector('span:last-child').textContent, 10) : -1;
+        })()""")
+        check("Μετρητής tab «Υλικό & Δεδομένα» σωστός",
+              bool(counts) and tab_count == counts.get("Υλικό & Δεδομένα"), str(tab_count))
+
+        # Πραγματικό κλικ σε tab → φιλτράρει τις κάρτες (instant scroll ώστε οι
+        # συντεταγμένες του CDP mouse event να είναι έγκυρες αμέσως)
+        rect = cdp.evaluate("""(() => {
+            const b=document.querySelector('#custom-apps-tabs button[data-category="Γραφικά & Πολυμέσα"]');
+            if(!b) return null;
+            b.scrollIntoView({block:'center', behavior:'instant'});
+            const r=b.getBoundingClientRect();
+            return {x:r.x+r.width/2, y:r.y+r.height/2};
+        })()""")
+        check("Tab «Γραφικά & Πολυμέσα» υπάρχει για κλικ", bool(rect))
+        time.sleep(0.3)
+        if rect:
+            cdp.click(rect["x"], rect["y"])
+        got = wait_for(cdp, """(() => {
+            const st=Alpine.$data(document.querySelector('[x-data]'));
+            return st.categoryFilter==='Γραφικά & Πολυμέσα' &&
+                   [...document.querySelectorAll('#custom-apps a[href^="/apps/"]')]
+                     .every(a=>a.getAttribute('href')==='/apps/screen-resolution-wizard/');
+        })()""")
+        n_filtered = cdp.evaluate("document.querySelectorAll('#custom-apps a[href^=\"/apps/\"]').length")
+        check("Κλικ σε tab φιλτράρει τις κάρτες", bool(got) and n_filtered >= 1, f"{n_filtered} κάρτες")
+        active = cdp.evaluate("""(() => {
+            const b=document.querySelector('#custom-apps-tabs button[data-category="Γραφικά & Πολυμέσα"]');
+            return b && b.className.includes('bg-blue-700');
+        })()""")
+        check("Active state στο επιλεγμένο tab", bool(active))
+        cdp.evaluate("""(() => {
+            const b=document.querySelector('#custom-apps-tabs button[data-category="all"]');
+            if(b) b.click(); return true;
+        })()""")
+        time.sleep(0.4)
+
+        # Αναζήτηση «δυαδικ» (χωρίς τόνους) → μόνο binary-converter
+        cdp.evaluate("""(() => {
+            const el=document.getElementById('custom-apps-search');
+            el.value='δυαδικ'; el.dispatchEvent(new Event('input',{bubbles:true})); return true;
+        })()""")
+        got = wait_for(cdp, """(() => {
+            const st=Alpine.$data(document.querySelector('[x-data]'));
+            const links=[...document.querySelectorAll('#custom-apps a[href^="/apps/"]')];
+            return st.searchQuery==='δυαδικ' && links.length===1 &&
+                   links[0].getAttribute('href')==='/apps/binary-converter/';
+        })()""")
+        check("Αναζήτηση «δυαδικ» βρίσκει μόνο το binary-converter", bool(got))
+
+        # Αναζήτηση χωρίς αποτέλεσμα → ξεχωριστό μήνυμα «Δεν βρέθηκε εφαρμογή…»
+        cdp.evaluate("""(() => {
+            const el=document.getElementById('custom-apps-search');
+            el.value='zzz-ανυπαρκτο'; el.dispatchEvent(new Event('input',{bubbles:true})); return true;
+        })()""")
+        got = wait_for(cdp, """(() => {
+            const sec=document.getElementById('custom-apps');
+            const empty=[...sec.querySelectorAll('div')].find(d=>d.textContent.includes('Δεν βρέθηκε εφαρμογή'));
+            return empty && getComputedStyle(empty).display!=='none' &&
+                   document.querySelectorAll('#custom-apps a[href^="/apps/"]').length===0;
+        })()""")
+        check("Κενή αναζήτηση → μήνυμα «Δεν βρέθηκε εφαρμογή…»", bool(got))
+        cdp.evaluate("""(() => {
+            const el=document.getElementById('custom-apps-search');
+            el.value=''; el.dispatchEvent(new Event('input',{bubbles:true})); return true;
+        })()""")
+        time.sleep(0.4)
+
+        # Pinned: badge 📌, ring και σειρά (πρώτη κάρτα)
+        pin = cdp.evaluate("""(() => {
+            const a=document.querySelector('#custom-apps a[href="/apps/binary-converter/"]');
+            if(!a) return null;
+            const first=document.querySelector('#custom-apps a[href^="/apps/"]');
+            return {badge:a.textContent.includes('📌 Επιλεγμένο'),
+                    ring:a.className.includes('ring-amber-300'),
+                    first:first && first.getAttribute('href')==='/apps/binary-converter/'};
+        })()""")
+        check("Pinned badge «📌 Επιλεγμένο» ορατό", bool(pin and pin["badge"]))
+        check("Pinned κάρτα με ring-amber-300", bool(pin and pin["ring"]))
+        check("Pinned-first σειρά manifest διατηρείται", bool(pin and pin["first"]))
 
         # access:"teachers" — προσωρινή δοκιμαστική εγγραφή στο Alpine state
         hidden = cdp.evaluate("""(() => {
             const st=Alpine.$data(document.querySelector('[x-data]'));
-            st.customApps.push({id:'t',title:'TEACHERS-ONLY',description:'',category:'',icon:'🔐',access:'teachers',url:'/apps/t/'});
+            st.customApps.push({id:'t',title:'TEACHERS-ONLY',description:'',category:'Προγραμματισμός',icon:'🔐',access:'teachers',pinned:false,url:'/apps/t/'});
             return true;
         })()""")
         time.sleep(0.5)
         n = cdp.evaluate("document.querySelectorAll('#custom-apps a[href=\"/apps/t/\"]').length")
         check("Κάρτα teachers ΚΡΥΒΕΤΑΙ από μαθητές", bool(hidden) and n == 0, f"{n} ορατές")
+        cnt = cdp.evaluate("""(() => {
+            const c=Alpine.$data(document.querySelector('[x-data]')).categoryCounts();
+            return {all:c.all, prog:c['Προγραμματισμός']||0};
+        })()""")
+        check("Teachers-only κάρτα ΔΕΝ μετράει στους μετρητές μαθητή",
+              bool(cnt) and cnt["all"] == n_all and cnt["prog"] == 0, str(cnt))
 
         cdp.evaluate(f"""(() => {{
             const st=Alpine.$data(document.querySelector('[x-data]'));
@@ -68,6 +173,12 @@ def main() -> int:
         time.sleep(0.5)
         n = cdp.evaluate("document.querySelectorAll('#custom-apps a[href=\"/apps/t/\"]').length")
         check("Κάρτα teachers ΕΜΦΑΝΙΖΕΤΑΙ μετά το ξεκλείδωμα", n == 1, f"{n} ορατές")
+        cnt = cdp.evaluate("""(() => {
+            const c=Alpine.$data(document.querySelector('[x-data]')).categoryCounts();
+            return {all:c.all, prog:c['Προγραμματισμός']||0};
+        })()""")
+        check("Μετά το ξεκλείδωμα η teachers κάρτα μετράει κανονικά",
+              bool(cnt) and cnt["all"] == n_all + 1 and cnt["prog"] == 1, str(cnt))
         cdp.evaluate("Alpine.$data(document.querySelector('[x-data]')).lock(); true")
 
         # ---------------------------------------------------------------

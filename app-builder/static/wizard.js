@@ -13,7 +13,7 @@ function wizard(loggedIn) {
     mode: 'upload',
     busy: false,
     error: '',
-    form: { id: '', title: '', description: '', access: 'all', icon: '🚀', replace: false },
+    form: { id: '', title: '', description: '', access: 'all', icon: '🚀', pinned: false, replace: false },
     categoryChoice: 'Γενικά',
     customCategory: '',
     paste: { html: '', css: '', js: '' },
@@ -116,6 +116,7 @@ function wizard(loggedIn) {
         fd.append('category', this.categoryChoice === '__custom__' ? this.customCategory.trim() : this.categoryChoice);
         fd.append('icon', this.form.icon.trim() || '🚀');
         fd.append('access', this.form.access);
+        fd.append('pinned', this.form.pinned ? 'true' : 'false');
         fd.append('replace', this.form.replace ? 'true' : 'false');
         fd.append('mode', this.mode);
         if (this.mode === 'paste') {
@@ -148,7 +149,7 @@ function wizard(loggedIn) {
       this.embedTarget = null;
       this.embedMsg = '';
       this.copied = false;
-      this.form = { id: '', title: '', description: '', access: 'all', icon: '🚀', replace: false };
+      this.form = { id: '', title: '', description: '', access: 'all', icon: '🚀', pinned: false, replace: false };
       this.categoryChoice = 'Γενικά';
       this.customCategory = '';
       this.paste = { html: '', css: '', js: '' };

@@ -24,6 +24,10 @@ function portal() {
     customAppsLoaded: false,
     customAppsError: false,
 
+    // Ομαδοποίηση & αναζήτηση στην ενότητα «Δικές μου Εφαρμογές»
+    categoryFilter: 'all',
+    searchQuery: '',
+
     classes: [
       { slug: 'gymnasio-a', title: "Α' Γυμνασίου", level: 'Γυμνάσιο', icon: '🅰️',
         desc: 'Πρώτα βήματα στην Πληροφορική, αλγόριθμοι και εισαγωγή στην ψευδογλώσσα.',
@@ -84,10 +88,77 @@ function portal() {
       }
     },
 
-    // Κάρτες ορατές στον τρέχοντα χρήστη: access "all" → όλοι,
-    // "teachers" → μόνο σε ξεκλείδωτη Λειτουργία Καθηγητή (UX gate, βλ. σημείωση ασφαλείας).
-    visibleCustomApps() {
+    // Κανονικοποίηση για αναζήτηση: πεζά + αφαίρεση τόνων (NFD), ώστε π.χ.
+    // «δυαδικό» να βρίσκει «Δυαδικού» ανεξάρτητα από τόνους/κεφαλαία.
+    normalizeText(s) {
+      return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    },
+
+    // Πρόσβαση ανά ρόλο: access "all" → όλοι, "teachers" → μόνο σε ξεκλείδωτη
+    // Λειτουργία Καθηγητή (UX gate, βλ. σημείωση ασφαλείας στην κορυφή του αρχείου).
+    accessibleCustomApps() {
       return this.customApps.filter(a => a.access !== 'teachers' || this.unlocked);
+    },
+
+    // Κάρτες ορατές στον τρέχοντα χρήστη: access-filter + tab κατηγορίας +
+    // αναζήτηση σε title/description. ΔΙΑΤΗΡΕΙ τη σειρά του manifest
+    // (pinned-first, μετά αλφαβητικά) — δεν γίνεται επαναταξινόμηση εδώ.
+    visibleCustomApps() {
+      const q = this.normalizeText(this.searchQuery.trim());
+      return this.accessibleCustomApps().filter(a => {
+        if (this.categoryFilter !== 'all' && a.category !== this.categoryFilter) return false;
+        if (!q) return true;
+        return this.normalizeText(a.title + ' ' + a.description).includes(q);
+      });
+    },
+
+    // Μετρητές ανά κατηγορία ΥΠΟΨΗ του access-filter: οι teachers-only κάρτες
+    // δεν μετράνε όσο η Λειτουργία Καθηγητή είναι κλειδωμένη.
+    categoryCounts() {
+      const counts = { all: 0 };
+      for (const a of this.accessibleCustomApps()) {
+        counts.all++;
+        counts[a.category] = (counts[a.category] || 0) + 1;
+      }
+      return counts;
+    },
+
+    // Σταθερές τυποποιημένες κατηγορίες + δυναμικά όποιες άλλες υπάρχουν στο
+    // manifest (π.χ. παλιές ταξικές ή ελεύθερες), ώστε να μη χάνονται κάρτες.
+    categoryTabs() {
+      const tabs = [
+        { id: 'all', label: '🗂️ Όλες' },
+        { id: 'Προγραμματισμός', icon: '💻' },
+        { id: 'Γραφικά & Πολυμέσα', icon: '🎨' },
+        { id: 'Τεχνολογία & ΤΝ', icon: '🤖' },
+        { id: 'Υλικό & Δεδομένα', icon: '🔢' }
+      ];
+      const known = new Set(tabs.map(t => t.id));
+      for (const a of this.customApps) {
+        if (a.category && !known.has(a.category)) {
+          known.add(a.category);
+          tabs.push({ id: a.category, icon: '🏷️' });
+        }
+      }
+      return tabs;
+    },
+
+    // Χρώματα badge ανά κατηγορία — ΜΟΝΟ κλάσεις που χρησιμοποιούνται ήδη στο
+    // dashboard (sky/violet/amber/emerald), με ασφαλές slate fallback.
+    categoryBadgeClass(cat) {
+      const map = {
+        'Προγραμματισμός': 'bg-sky-100 text-sky-700',
+        'Γραφικά & Πολυμέσα': 'bg-violet-100 text-violet-700',
+        'Τεχνολογία & ΤΝ': 'bg-amber-100 text-amber-700',
+        'Υλικό & Δεδομένα': 'bg-emerald-100 text-emerald-700'
+      };
+      return map[cat] || 'bg-slate-100 text-slate-600';
+    },
+
+    // Κενή κατάσταση αναζήτησης/φίλτρου: υπάρχουν εφαρμογές αλλά καμία δεν ταιριάζει.
+    noCustomAppMatches() {
+      return this.customAppsLoaded && !this.customAppsError &&
+             this.accessibleCustomApps().length > 0 && this.visibleCustomApps().length === 0;
     },
 
     openModal() {
