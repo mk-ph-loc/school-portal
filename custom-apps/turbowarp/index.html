@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Προγραμματισμός με Μπλοκ (TurboWarp) — Ψηφιακή Πύλη</title>
+  <!-- Wrapper: σπέρνει τα Ελληνικά ως default γλώσσα (key του detect-locale.js)
+       και ανακατευθύνει στον τοπικό editor. ΟΧΙ iframe — το GUI ελέγχει window.top.
+       ΣΗΜΕΙΩΣΗ: στο upstream build το index.html είναι ο player· εδώ αντικαθίσταται
+       από το wrapper (ο editor ανοίγει στο ./editor.html, fullscreen/embed μένουν). -->
+  <script>
+    try { localStorage.setItem('tw:language', 'el'); } catch (e) { /* private mode */ }
+    location.replace('./editor.html');
+  </script>
+  <meta http-equiv="refresh" content="0;url=./editor.html"/>
+</head>
+<body>
+  <p>Φόρτωση του TurboWarp… <a href="./editor.html">Συνέχεια</a></p>
+</body>
+</html>

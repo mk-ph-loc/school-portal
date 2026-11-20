@@ -70,6 +70,8 @@ check "/apps/minipaint/dist/bundle.js" 200
 check "/apps/piskel/"                  200
 check "/apps/basthon/"                 200
 check "/apps/basthon/console/index.html" 200
+check "/apps/turbowarp/"               200
+check "/apps/turbowarp/editor.html"    200
 check "/apps/_template/"               404
 check "/app-builder/"                  200
 check "/app-builder/healthz"           200

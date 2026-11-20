@@ -37,6 +37,10 @@ mkdocs-site/docs/assets/pyodide/
 # Basthon: τοπικό Pyodide του kernel (κατεβαίνει από το scripts/fetch-basthon-pyodide.py).
 # ΜΟΝΟ ο φάκελος pyodide/ αγνοείται — το pyodide-lock.json (subset) ΜΕΝΕΙ στο git.
 custom-apps/basthon/console/assets/*/python3/pyodide/
+# TurboWarp: τοπικό mirror των Scratch library assets (~25 MB, 1300+ αρχεία,
+# κατεβαίνει από το scripts/fetch-turbowarp-assets.py). Τα JSON βιβλιοθηκών
+# (scripts/turbowarp-libraries/) ΜΕΝΟΥΝ στο git — είναι η πηγή του mirror.
+custom-apps/turbowarp/scratch-assets/
 
 # --- Vendor βιβλιοθήκες MkDocs (MathJax/Mermaid/Reveal — κατεβαίνουν από install.sh) ---
 mkdocs-site/docs/assets/vendor/

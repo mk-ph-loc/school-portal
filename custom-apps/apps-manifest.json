@@ -31,6 +31,16 @@
       "url": "/apps/binary-converter/"
     },
     {
+      "id": "turbowarp",
+      "title": "Προγραμματισμός με Μπλοκ (TurboWarp)",
+      "description": "Γρήγορο περιβάλλον Scratch για δημιουργία παιχνιδιών και αλγορίθμων — στα Ελληνικά, 100% offline.",
+      "category": "Προγραμματισμός",
+      "icon": "🐱",
+      "access": "all",
+      "pinned": true,
+      "url": "/apps/turbowarp/"
+    },
+    {
       "id": "piskel",
       "title": "Pixel Art & Κινούμενα Σχέδια (Piskel)",
       "description": "Σχεδίαση pixel art, εικονιδίων και sprites για παιχνίδια, με animation preview.",

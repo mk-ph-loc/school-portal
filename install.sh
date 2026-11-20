@@ -889,6 +889,23 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 6ιζ. TurboWarp — offline Scratch editor στο /apps/turbowarp/
+#      Το static build (ελληνικά, τοπικά assets βιβλιοθήκης) έρχεται από το git·
+#      εδώ μόνο το τοπικό mirror των Scratch library assets (~53 MB, εκτός git).
+#      Idempotent: τρέχει μόνο αν λείπει το marker .complete (όπως το Basthon).
+#      FORCE=1 για override.
+# ---------------------------------------------------------------------------
+if [[ -x "${PORTAL_DIR}/scripts/fetch-turbowarp-assets.py" ]]; then
+    if python3 "${PORTAL_DIR}/scripts/fetch-turbowarp-assets.py"; then
+        ok "Ο Scratch editor TurboWarp είναι έτοιμος στο /apps/turbowarp/ (local assets)."
+    else
+        warn "Αποτυχία λήψης assets για το TurboWarp — οι βιβλιοθήκες του /apps/turbowarp/ δεν θα λειτουργούν offline."
+    fi
+else
+    warn "Δεν βρέθηκε scripts/fetch-turbowarp-assets.py — το /apps/turbowarp/ δεν θα ενημερωθεί."
+fi
+
+# ---------------------------------------------------------------------------
 # 7. Δικαιώματα (setgid ώστε root & www-data να συνεργάζονται)
 # ---------------------------------------------------------------------------
 log "Ρύθμιση δικαιωμάτων…"
