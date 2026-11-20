@@ -63,6 +63,11 @@ echo "${B}=== 2γ. Δικές μου Εφαρμογές (custom-apps) ===${N}"
 check "/apps/apps-manifest.json"       200
 check "/apps/binary-converter/"        200
 check "/apps/binary-converter/app.js"  200
+check "/apps/drawio/"                  200
+check "/apps/drawio/app/js/app.min.js" 200
+check "/apps/minipaint/"               200
+check "/apps/minipaint/dist/bundle.js" 200
+check "/apps/piskel/"                  200
 check "/apps/_template/"               404
 check "/app-builder/"                  200
 check "/app-builder/healthz"           200

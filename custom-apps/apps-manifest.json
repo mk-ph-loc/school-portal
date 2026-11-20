@@ -1,6 +1,16 @@
 {
   "apps": [
     {
+      "id": "drawio",
+      "title": "Διαγράμματα & Κυκλώματα (draw.io)",
+      "description": "Σχεδίαση διαγραμμάτων ροής, δικτύων, UML και λογικών κυκλωμάτων offline — στα Ελληνικά.",
+      "category": "Τεχνολογία & ΤΝ",
+      "icon": "📐",
+      "access": "all",
+      "pinned": true,
+      "url": "/apps/drawio/"
+    },
+    {
       "id": "binary-converter",
       "title": "Μετατροπέας Δυαδικού & Βάρη Bits",
       "description": "Δεκαδικό ↔ Δυαδικό ↔ Δεκαεξαδικό με 8 διαδραστικά διακοπτάκια bits: πάτα τα bits και δες ζωντανά την τιμή και το άθροισμα των βαρών (128…1).",
@@ -11,6 +21,16 @@
       "url": "/apps/binary-converter/"
     },
     {
+      "id": "piskel",
+      "title": "Pixel Art & Κινούμενα Σχέδια (Piskel)",
+      "description": "Σχεδίαση pixel art, εικονιδίων και sprites για παιχνίδια, με animation preview.",
+      "category": "Γραφικά & Πολυμέσα",
+      "icon": "👾",
+      "access": "all",
+      "pinned": false,
+      "url": "/apps/piskel/"
+    },
+    {
       "id": "screen-resolution-wizard",
       "title": "Pixel, Ανάλυση Οθόνης & PPI",
       "description": "Διαδραστικός οδηγός 4 βημάτων: ζωγράφισε με pixels, δες πώς αλλάζει η ανάλυση και υπολόγισε την πυκνότητα PPI μιας οθόνης.",
@@ -19,6 +39,16 @@
       "access": "all",
       "pinned": false,
       "url": "/apps/screen-resolution-wizard/"
+    },
+    {
+      "id": "minipaint",
+      "title": "Επεξεργασία Εικόνας (miniPaint)",
+      "description": "Δημιουργία και επεξεργασία γραφικών με layers και φίλτρα στον browser — στα Ελληνικά.",
+      "category": "Γραφικά & Πολυμέσα",
+      "icon": "🎨",
+      "access": "all",
+      "pinned": false,
+      "url": "/apps/minipaint/"
     }
   ]
 }

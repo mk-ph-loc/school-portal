@@ -87,11 +87,14 @@ def main() -> int:
         time.sleep(0.3)
         if rect:
             cdp.click(rect["x"], rect["y"])
+        # Οι κάρτες της κατηγορίας προκύπτουν ΔΥΝΑΜΙΚΑ από το manifest (όσες
+        # εφαρμογές υπάρχουν) — όχι hard-coded λίστα.
         got = wait_for(cdp, """(() => {
             const st=Alpine.$data(document.querySelector('[x-data]'));
-            return st.categoryFilter==='Γραφικά & Πολυμέσα' &&
-                   [...document.querySelectorAll('#custom-apps a[href^="/apps/"]')]
-                     .every(a=>a.getAttribute('href')==='/apps/screen-resolution-wizard/');
+            if(st.categoryFilter!=='Γραφικά & Πολυμέσα') return false;
+            const expected=st.customApps.filter(a=>a.category==='Γραφικά & Πολυμέσα' && a.access!=='teachers').map(a=>a.url).sort();
+            const shown=[...document.querySelectorAll('#custom-apps a[href^="/apps/"]')].map(a=>a.getAttribute('href')).sort();
+            return expected.length>0 && JSON.stringify(expected)===JSON.stringify(shown);
         })()""")
         n_filtered = cdp.evaluate("document.querySelectorAll('#custom-apps a[href^=\"/apps/\"]').length")
         check("Κλικ σε tab φιλτράρει τις κάρτες", bool(got) and n_filtered >= 1, f"{n_filtered} κάρτες")
@@ -137,18 +140,26 @@ def main() -> int:
         })()""")
         time.sleep(0.4)
 
-        # Pinned: badge 📌, ring και σειρά (πρώτη κάρτα)
+        # Pinned: badge 📌, ring και σειρά (pinned πρώτες, μετά αλφαβητικά κατά
+        # τίτλο — η σειρά του manifest ΔΙΑΤΗΡΕΙΤΑΙ, όσες pinned εφαρμογές κι αν υπάρχουν)
         pin = cdp.evaluate("""(() => {
             const a=document.querySelector('#custom-apps a[href="/apps/binary-converter/"]');
             if(!a) return null;
-            const first=document.querySelector('#custom-apps a[href^="/apps/"]');
+            const st=Alpine.$data(document.querySelector('[x-data]'));
+            const visible=st.customApps.filter(x=>x.access!=='teachers');
+            const nPinned=visible.filter(x=>x.pinned).length;
+            const hrefs=[...document.querySelectorAll('#custom-apps a[href^="/apps/"]')].map(x=>x.getAttribute('href'));
+            const pinnedHrefs=new Set(visible.filter(x=>x.pinned).map(x=>x.url));
+            const orderOk=hrefs.slice(0,nPinned).every(h=>pinnedHrefs.has(h)) &&
+                          hrefs.slice(nPinned).every(h=>!pinnedHrefs.has(h));
             return {badge:a.textContent.includes('📌 Επιλεγμένο'),
                     ring:a.className.includes('ring-amber-300'),
-                    first:first && first.getAttribute('href')==='/apps/binary-converter/'};
+                    first:orderOk, nPinned:nPinned};
         })()""")
         check("Pinned badge «📌 Επιλεγμένο» ορατό", bool(pin and pin["badge"]))
         check("Pinned κάρτα με ring-amber-300", bool(pin and pin["ring"]))
-        check("Pinned-first σειρά manifest διατηρείται", bool(pin and pin["first"]))
+        check("Pinned-first σειρά manifest διατηρείται", bool(pin and pin["first"]),
+              f"{pin['nPinned']} pinned πρώτες" if pin else "")
 
         # access:"teachers" — προσωρινή δοκιμαστική εγγραφή στο Alpine state
         hidden = cdp.evaluate("""(() => {
