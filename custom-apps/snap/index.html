@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Προχωρημένα Μπλοκ (Snap!) — Ψηφιακή Πύλη</title>
+  <!-- Wrapper: σπέρνει τα Ελληνικά ως default γλώσσα ΜΟΝΟ αν ο χρήστης δεν έχει
+       ήδη δική του επιλογή (key του applySavedSettings/saveSetting στο src/gui.js).
+       ΟΧΙ #lang:el — το URL anchor εξαναγκάζει νέο project σε κάθε άνοιγμα.
+       ΣΗΜΕΙΩΣΗ: το upstream index.html ήταν redirect στο snap.html· αντικαθίσταται
+       από αυτό το wrapper (ίδιο μοτίβο με turbowarp/piskel). -->
+  <script>
+    try {
+      if (localStorage.getItem('-snap-setting-language') === null) {
+        localStorage.setItem('-snap-setting-language', 'el');
+      }
+    } catch (e) { /* private mode */ }
+    location.replace('./snap.html');
+  </script>
+  <meta http-equiv="refresh" content="0;url=./snap.html"/>
+</head>
+<body>
+  <p style="font-family:system-ui,sans-serif;padding:2rem">
+    Φόρτωση του Snap!… <a href="./snap.html">Συνέχεια</a>
+  </p>
+  <script src="./portal-back.js"></script>
+</body>
+</html>

@@ -69,6 +69,26 @@
       "access": "all",
       "pinned": false,
       "url": "/apps/minipaint/"
+    },
+    {
+      "id": "tf-playground",
+      "title": "Παιχνιδότοπος Νευρωνικών Δικτύων",
+      "description": "Διαδραστική εξερεύνηση του πώς μαθαίνει ένα τεχνητό νευρωνικό δίκτυο (TensorFlow Playground).",
+      "category": "Τεχνολογία & ΤΝ",
+      "icon": "🧠",
+      "access": "all",
+      "pinned": false,
+      "url": "/apps/tf-playground/"
+    },
+    {
+      "id": "snap",
+      "title": "Προχωρημένα Μπλοκ (Snap!)",
+      "description": "Οπτικός προγραμματισμός με λίστες, συναρτήσεις, αναδρομή και first-class continuations — στα Ελληνικά.",
+      "category": "Προγραμματισμός",
+      "icon": "🧩",
+      "access": "all",
+      "pinned": false,
+      "url": "/apps/snap/"
     }
   ]
 }
