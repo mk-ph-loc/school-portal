@@ -370,7 +370,23 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6ε. CircuitJS1 — προσομοιωτής ηλεκτρονικών κυκλωμάτων στο /circuits/
+# 6ε. Basthon — offline εργαστήριο Python & Turtle στο /apps/basthon/
+#     Το static console έρχεται από το git· εδώ μόνο τα τοπικά Pyodide
+#     binaries (~57 MB, εκτός git). Idempotent: τρέχει μόνο αν λείπει το
+#     marker .complete (όπως το βήμα 6 του Pyodide). FORCE=1 για override.
+# ---------------------------------------------------------------------------
+if [[ -x "${PORTAL_DIR}/scripts/fetch-basthon-pyodide.py" ]]; then
+    if python3 "${PORTAL_DIR}/scripts/fetch-basthon-pyodide.py"; then
+        ok "Το εργαστήριο Python Basthon είναι έτοιμο στο /apps/basthon/ (local Pyodide)."
+    else
+        warn "Αποτυχία λήψης Pyodide για το Basthon — το /apps/basthon/ δεν θα λειτουργεί offline."
+    fi
+else
+    warn "Δεν βρέθηκε scripts/fetch-basthon-pyodide.py — το /apps/basthon/ δεν θα ενημερωθεί."
+fi
+
+# ---------------------------------------------------------------------------
+# 6στ. CircuitJS1 — προσομοιωτής ηλεκτρονικών κυκλωμάτων στο /circuits/
 #     Στατικό build (HTML/JS/CSS + έτοιμα κυκλώματα) από το επίσημο site
 #     του pfalstad/circuitjs1. Δεν υπάρχει release zip → mirror των αρχείων.
 # ---------------------------------------------------------------------------
@@ -430,7 +446,7 @@ if [[ -s "${PORTAL_DIR}/config/circuits/index.html" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 6στ. Blockly Games — εκμάθηση προγραμματισμού με μπλοκ στο /blockly/
+# 6ζ. Blockly Games — εκμάθηση προγραμματισμού με μπλοκ στο /blockly/
 #      Επίσημο offline static πακέτο της Google (bundles + ελληνικά msg).
 # ---------------------------------------------------------------------------
 if [[ -s "${TOOLS_OUT}/blockly/maze/generated/compressed.js" ]]; then
@@ -517,7 +533,7 @@ for p in root.glob('*.html'):
 PYEOF
 
 # ---------------------------------------------------------------------------
-# 6ζ. SQL Playground — εργαστήριο βάσεων δεδομένων στο /sql/ (sql.js WASM)
+# 6η. SQL Playground — εργαστήριο βάσεων δεδομένων στο /sql/ (sql.js WASM)
 # ---------------------------------------------------------------------------
 fetch_asset "https://cdn.jsdelivr.net/npm/sql.js@${SQLJS_VERSION}/dist/sql-wasm.js" \
             "${TOOLS_OUT}/sql/vendor/sql-wasm.js" "sql.js (SQLite WASM loader)"
@@ -533,7 +549,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6η. PDF Studio — εργαλεία PDF στον browser στο /pdf-tools/ (pdf-lib)
+# 6θ. PDF Studio — εργαλεία PDF στον browser στο /pdf-tools/ (pdf-lib)
 # ---------------------------------------------------------------------------
 fetch_asset "https://cdn.jsdelivr.net/npm/pdf-lib@${PDFLIB_VERSION}/dist/pdf-lib.min.js" \
             "${TOOLS_OUT}/pdf-tools/vendor/pdf-lib.min.js" "pdf-lib"
@@ -568,7 +584,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6θ. FileBrowser — single Go binary στο /share/ (~15 MB RAM)
+# 6ι. FileBrowser — single Go binary στο /share/ (~15 MB RAM)
 # ---------------------------------------------------------------------------
 if [[ -x /usr/local/bin/filebrowser ]]; then
     ok "Το filebrowser binary υπάρχει ήδη ($(/usr/local/bin/filebrowser version 2>/dev/null | head -1))."
@@ -611,7 +627,7 @@ if [[ -x /usr/local/bin/filebrowser ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 6ι. Etherpad Lite — συνεργατικός επεξεργαστής κειμένου τάξης στο /pad/
+# 6ια. Etherpad Lite — συνεργατικός επεξεργαστής κειμένου τάξης στο /pad/
 #     Node.js + SQLite (ueberdb2), ακούει ΜΟΝΟ στο 127.0.0.1:8006 πίσω από
 #     τον Nginx. Η πηγή αλήθειας των ρυθμίσεων είναι το config/etherpad/.
 # ---------------------------------------------------------------------------
@@ -669,7 +685,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6ια. Excalidraw Room Server — self-hosted ζωντανή συνεργασία πίνακα (/board-ws/)
+# 6ιβ. Excalidraw Room Server — self-hosted ζωντανή συνεργασία πίνακα (/board-ws/)
 #      Node.js + Socket.IO @127.0.0.1:8010, stateless (in-memory rooms, κανένα
 #      δεδομένο στον δίσκο — αναμετάδοση end-to-end encrypted blobs μόνο).
 #      Το static build του /board/ patchάρεται από το fetch-excalidraw.sh ώστε
@@ -706,7 +722,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6ιβ. HedgeDoc — συνεργατικό Markdown τάξης στο /md-pad/ (ΧΩΡΙΣ Docker)
+# 6ιγ. HedgeDoc — συνεργατικό Markdown τάξης στο /md-pad/ (ΧΩΡΙΣ Docker)
 #      Επίσημο release tarball (προ-χτισμένο frontend) + yarn production deps.
 #      Node.js + SQLite @127.0.0.1:8007. Ανώνυμη ελεύθερη επεξεργασία (freely),
 #      FreeURL aliases, τοπικά uploads & ελληνικό πρότυπο δυνατοτήτων.
@@ -810,7 +826,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6ιγ. Γέφυρα Δημοσίευσης HedgeDoc → MkDocs (/md-publish/, FastAPI @8009)
+# 6ιδ. Γέφυρα Δημοσίευσης HedgeDoc → MkDocs (/md-publish/, FastAPI @8009)
 #      Ο κώδικας (apps/hedgedoc-bridge/) έρχεται από το git· εδώ μόνο το
 #      .cookie-secret ownership & τα δικαιώματα (όπως στο app-builder).
 # ---------------------------------------------------------------------------
@@ -827,7 +843,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6ιδ. Lesson Wizard — Ημερήσια Μαθήματα (/lesson-wizard/, FastAPI @8013)
+# 6ιε. Lesson Wizard — Ημερήσια Μαθήματα (/lesson-wizard/, FastAPI @8013)
 #      Ο κώδικας (apps/lesson-wizard/) έρχεται από το git· εδώ μόνο τα
 #      δικαιώματα φακέλων data/backups & .cookie-secret (όπως στο md-bridge).
 # ---------------------------------------------------------------------------
@@ -849,7 +865,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6ιε. Classroom Hub — Ζωντανή Τάξη (/classroom/, FastAPI + WS @8014)
+# 6ιστ. Classroom Hub — Ζωντανή Τάξη (/classroom/, FastAPI + WS @8014)
 #      Παρουσία guest/μαθητή/καθηγητή, εντολές τάξης, timers ωραρίου,
 #      ενιαίο Excel ρυθμίσεων. Δικαιώματα όπως στο lesson-wizard.
 # ---------------------------------------------------------------------------

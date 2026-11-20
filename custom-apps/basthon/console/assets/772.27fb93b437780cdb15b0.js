@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunk_basthon_basthon_console=self.webpackChunk_basthon_basthon_console||[]).push([[772],{8772(s,a,e){s.exports=e.p+"assets/4c384b19c1a90659402b.wasm"}}]);

@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunk_basthon_basthon_console=self.webpackChunk_basthon_basthon_console||[]).push([[112],{9112(e,n,r){r.d(n,{RKernel:()=>t});var s=r(7051);class t extends s.Ij{constructor(e){super(e)}newWorker(){return new Worker(new URL(r.p+r.u(210),r.b),{sandboxed:!0})}language(){return"r"}languageName(){return"R"}moduleExts(){return["R","r"]}banner(){return"R 4.6.0 (webR 0.6.0, WebAssembly)\n"}ps1(){return"> "}ps2(){return"+ "}}}}]);
+//# sourceMappingURL=112.82589fa86395031d3542.js.map

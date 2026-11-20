@@ -1,0 +1,413 @@
+{
+ "info": {
+  "abi_version": "2024_0",
+  "arch": "wasm32",
+  "platform": "emscripten_3_1_58",
+  "python": "3.12.1",
+  "version": "0.26.4"
+ },
+ "packages": {
+  "basthon": {
+   "name": "basthon",
+   "version": "0.0.1",
+   "file_name": "{basthonRoot}/basthon.tar",
+   "install_dir": "site",
+   "sha256": "97a2087cc2956726b317a25f49079a25f78fe4611ca43bbc7e6c30bfdc9022ce",
+   "depends": [],
+   "imports": [
+    "basthon"
+   ]
+  },
+  "cycler": {
+   "depends": [
+    "six"
+   ],
+   "file_name": "cycler-0.12.1-py3-none-any.whl",
+   "imports": [
+    "cycler"
+   ],
+   "install_dir": "site",
+   "name": "cycler",
+   "package_type": "package",
+   "sha256": "decbe5b1367b9890a30d8b1f0d5d5a062af628d3b3ccc59112cf3c53f7c6b84b",
+   "shared_library": false,
+   "unvendored_tests": false,
+   "version": "0.12.1"
+  },
+  "fonttools": {
+   "depends": [],
+   "file_name": "fonttools-4.51.0-py3-none-any.whl",
+   "imports": [
+    "fontTools"
+   ],
+   "install_dir": "site",
+   "name": "fonttools",
+   "package_type": "package",
+   "sha256": "02bfb3707f47724672e28951be5a47e8669edc556bc79873cb1b96c8f83fc15b",
+   "shared_library": false,
+   "unvendored_tests": false,
+   "version": "4.51.0"
+  },
+  "graphviz": {
+   "name": "graphviz",
+   "version": "0.0.1",
+   "file_name": "{basthonRoot}/modules/graphviz-0.0.1-py3-none-any.whl",
+   "install_dir": "site",
+   "sha256": "291f859733390849d597189d3bfa649e9f28b645f30a191afdc713398e619546",
+   "imports": [
+    "graphviz"
+   ],
+   "depends": []
+  },
+  "hashlib": {
+   "depends": [
+    "openssl"
+   ],
+   "file_name": "hashlib-1.0.0.zip",
+   "imports": [
+    "_hashlib"
+   ],
+   "install_dir": "stdlib",
+   "name": "hashlib",
+   "package_type": "cpython_module",
+   "sha256": "c3dd1e123cb0bee67ed0e53415dd9cd872c22a9c07381f2851c435a322709591",
+   "shared_library": true,
+   "unvendored_tests": false,
+   "version": "1.0.0"
+  },
+  "ipython": {
+   "name": "IPython",
+   "version": "0.0.1",
+   "file_name": "{basthonRoot}/modules/ipython-0.0.1-py3-none-any.whl",
+   "install_dir": "site",
+   "sha256": "91d45fb5de1455ec848246f1ff168dbd708aac909910a2a0e5ee50b557a92515",
+   "imports": [
+    "IPython"
+   ],
+   "depends": []
+  },
+  "kiwisolver": {
+   "depends": [],
+   "file_name": "kiwisolver-1.4.5-cp312-cp312-pyodide_2024_0_wasm32.whl",
+   "imports": [
+    "kiwisolver"
+   ],
+   "install_dir": "site",
+   "name": "kiwisolver",
+   "package_type": "package",
+   "sha256": "7cb47be55135cfb57f65be10d173b09c162097e3242ff120306d7b55f887d634",
+   "shared_library": false,
+   "unvendored_tests": false,
+   "version": "1.4.5"
+  },
+  "lzma": {
+   "depends": [],
+   "file_name": "lzma-1.0.0.zip",
+   "imports": [
+    "lzma",
+    "_lzma"
+   ],
+   "install_dir": "stdlib",
+   "name": "lzma",
+   "package_type": "cpython_module",
+   "sha256": "15d2c06dc9f118ab59d1970b5a6bf7b68b57eeab15d31f710fbbe64adc894fab",
+   "shared_library": true,
+   "unvendored_tests": false,
+   "version": "1.0.0"
+  },
+  "matplotlib": {
+   "depends": [
+    "cycler",
+    "fonttools",
+    "kiwisolver",
+    "numpy",
+    "packaging",
+    "pillow",
+    "pyparsing",
+    "python-dateutil",
+    "pytz",
+    "matplotlib-pyodide",
+    "matplotlib-basthon-backend"
+   ],
+   "file_name": "matplotlib-3.5.2-cp312-cp312-pyodide_2024_0_wasm32.whl",
+   "imports": [
+    "pylab",
+    "mpl_toolkits",
+    "matplotlib",
+    "pylab"
+   ],
+   "install_dir": "site",
+   "name": "matplotlib",
+   "package_type": "package",
+   "sha256": "7321e0aa4dcd53cc7826fb558bed79ec6624a6430b00fa048b21fbe21fa0cc2e",
+   "shared_library": false,
+   "unvendored_tests": true,
+   "version": "3.5.2"
+  },
+  "matplotlib-basthon-backend": {
+   "name": "matplotlib-basthon-backend",
+   "version": "0.0.1",
+   "file_name": "{basthonRoot}/modules/matplotlib_basthon_backend-0.0.1-py3-none-any.whl",
+   "install_dir": "site",
+   "sha256": "40770295425d5f8e4160230d637d55e5e6a0cbaeb9fcc6ac7ab32fc28b4553e3",
+   "imports": [
+    "matplotlib_basthon_backend"
+   ],
+   "depends": []
+  },
+  "matplotlib-pyodide": {
+   "depends": [],
+   "file_name": "matplotlib_pyodide-0.2.2-py3-none-any.whl",
+   "imports": [
+    "matplotlib_pyodide"
+   ],
+   "install_dir": "site",
+   "name": "matplotlib-pyodide",
+   "package_type": "package",
+   "sha256": "41e8016ed2f586b99b8e4e506b511fd324a466e7c1d01ebd6c47fdbf158ccc16",
+   "shared_library": false,
+   "unvendored_tests": false,
+   "version": "0.2.2"
+  },
+  "numpy": {
+   "depends": [],
+   "file_name": "numpy-1.26.4-cp312-cp312-pyodide_2024_0_wasm32.whl",
+   "imports": [
+    "numpy"
+   ],
+   "install_dir": "site",
+   "name": "numpy",
+   "package_type": "package",
+   "sha256": "4a2f5303a88a0747c5e6c80701e0ff4ff5667e487c0c9f9c73875e4d88f4cf9a",
+   "shared_library": false,
+   "unvendored_tests": true,
+   "version": "1.26.4"
+  },
+  "openssl": {
+   "depends": [],
+   "file_name": "openssl-1.1.1n.zip",
+   "imports": [],
+   "install_dir": "dynlib",
+   "name": "openssl",
+   "package_type": "shared_library",
+   "sha256": "0e1adc16ed1a2c4be3c0b16e0777f8185c9b02ad8f95cd416ef4b96a4359ecfe",
+   "shared_library": true,
+   "unvendored_tests": false,
+   "version": "1.1.1n"
+  },
+  "p5": {
+   "name": "p5",
+   "version": "0.0.1",
+   "file_name": "{basthonRoot}/modules/p5-0.0.1-py3-none-any.whl",
+   "install_dir": "site",
+   "sha256": "7fe02d1b2230132c9dab051545e6643e8c60feef908fbe4a252cc279973c47cc",
+   "imports": [
+    "p5"
+   ],
+   "depends": []
+  },
+  "packaging": {
+   "depends": [],
+   "file_name": "packaging-23.2-py3-none-any.whl",
+   "imports": [
+    "packaging"
+   ],
+   "install_dir": "site",
+   "name": "packaging",
+   "package_type": "package",
+   "sha256": "3c30fe6689a35520f2040f4963eae8dbdf6aaa8e326674a13bca3f11514c674a",
+   "shared_library": false,
+   "unvendored_tests": false,
+   "version": "23.2"
+  },
+  "pillow": {
+   "depends": [],
+   "file_name": "pillow-10.2.0-cp312-cp312-pyodide_2024_0_wasm32.whl",
+   "imports": [
+    "PIL"
+   ],
+   "install_dir": "site",
+   "name": "Pillow",
+   "package_type": "package",
+   "sha256": "9f3ae58c481ade2a88f794a5aa130b9514d315ef549f254e474f9593a73428cf",
+   "shared_library": false,
+   "unvendored_tests": false,
+   "version": "10.2.0"
+  },
+  "proj4py": {
+   "name": "proj4py",
+   "version": "0.0.1",
+   "file_name": "{basthonRoot}/modules/proj4py-0.0.1-py3-none-any.whl",
+   "install_dir": "site",
+   "sha256": "eb7548b6ddb46b5a8f9ebe975c238955bbb1e3c5a5ffda9ca3233775bd1f8ad3",
+   "imports": [
+    "proj4py"
+   ],
+   "depends": []
+  },
+  "pydecimal": {
+   "depends": [],
+   "file_name": "pydecimal-1.0.0.zip",
+   "imports": [
+    "_pydecimal"
+   ],
+   "install_dir": "stdlib",
+   "name": "pydecimal",
+   "package_type": "cpython_module",
+   "sha256": "8e894faf088dfa50753e2e9d3c6ebfacdcf45b3f6af46191ac93935c9ae9f67b",
+   "shared_library": true,
+   "unvendored_tests": false,
+   "version": "1.0.0"
+  },
+  "pydoc-data": {
+   "depends": [],
+   "file_name": "pydoc_data-1.0.0.zip",
+   "imports": [
+    "pydoc_data"
+   ],
+   "install_dir": "stdlib",
+   "name": "pydoc_data",
+   "package_type": "cpython_module",
+   "sha256": "d61e7d478ddbef25ca701c6947f452da1f6bd18aaf9c23bb29386254850405e0",
+   "shared_library": true,
+   "unvendored_tests": false,
+   "version": "1.0.0"
+  },
+  "pyparsing": {
+   "depends": [],
+   "file_name": "pyparsing-3.1.2-py3-none-any.whl",
+   "imports": [
+    "pyparsing"
+   ],
+   "install_dir": "site",
+   "name": "pyparsing",
+   "package_type": "package",
+   "sha256": "346cc485c0fb067121825224c5bfe258991f4f2509e1c56adbe7237ea58bb16b",
+   "shared_library": false,
+   "unvendored_tests": false,
+   "version": "3.1.2"
+  },
+  "python-dateutil": {
+   "depends": [
+    "six"
+   ],
+   "file_name": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+   "imports": [
+    "dateutil"
+   ],
+   "install_dir": "site",
+   "name": "python-dateutil",
+   "package_type": "package",
+   "sha256": "302d74af893af51ee8b52e2c06a1fc2bc73cfe645eed3f35a17f082cdf101c7d",
+   "shared_library": false,
+   "unvendored_tests": false,
+   "version": "2.9.0.post0"
+  },
+  "pytz": {
+   "depends": [],
+   "file_name": "pytz-2024.1-py2.py3-none-any.whl",
+   "imports": [
+    "pytz"
+   ],
+   "install_dir": "site",
+   "name": "pytz",
+   "package_type": "package",
+   "sha256": "561652a008b98ef7b66a6acf816e3f4d1c0e17e8ed9eb8dbb993037413cda597",
+   "shared_library": false,
+   "unvendored_tests": false,
+   "version": "2024.1"
+  },
+  "rcviz": {
+   "name": "rcviz",
+   "version": "0.0.1",
+   "file_name": "{basthonRoot}/modules/rcviz-0.0.1-py3-none-any.whl",
+   "install_dir": "site",
+   "sha256": "65a11405136d9fe3796f9c875b8c6987a8c7f6e5e2374335411312576a4e0b31",
+   "imports": [
+    "rcviz"
+   ],
+   "depends": [
+    "graphviz"
+   ]
+  },
+  "requests": {
+   "name": "requests",
+   "version": "0.0.1",
+   "file_name": "{basthonRoot}/modules/requests-0.0.1-py3-none-any.whl",
+   "install_dir": "site",
+   "sha256": "5af80d6af052ce3bdbf013dc698255ad0ef24658e8f313149c6e06b21fbc6eaa",
+   "imports": [
+    "requests"
+   ],
+   "depends": []
+  },
+  "six": {
+   "depends": [],
+   "file_name": "six-1.16.0-py2.py3-none-any.whl",
+   "imports": [
+    "six"
+   ],
+   "install_dir": "site",
+   "name": "six",
+   "package_type": "package",
+   "sha256": "f359c3850331f250d1a5e394aae58193774c6358676340aba992718589b9dcf1",
+   "shared_library": false,
+   "unvendored_tests": false,
+   "version": "1.16.0"
+  },
+  "sqlite3": {
+   "depends": [],
+   "file_name": "sqlite3-1.0.0.zip",
+   "imports": [
+    "sqlite3",
+    "_sqlite3"
+   ],
+   "install_dir": "stdlib",
+   "name": "sqlite3",
+   "package_type": "cpython_module",
+   "sha256": "e05c4defc15eac256607c87c3533af267fc072f3a1749a4f6b8bfe074e1be7f6",
+   "shared_library": true,
+   "unvendored_tests": false,
+   "version": "1.0.0"
+  },
+  "ssl": {
+   "depends": [
+    "openssl"
+   ],
+   "file_name": "ssl-1.0.0.zip",
+   "imports": [
+    "ssl",
+    "_ssl"
+   ],
+   "install_dir": "stdlib",
+   "name": "ssl",
+   "package_type": "cpython_module",
+   "sha256": "1124a6f1c5ccb3124491596363ebd5701548927c2fb5538dc02ca8e6874ac7a1",
+   "shared_library": true,
+   "unvendored_tests": false,
+   "version": "1.0.0"
+  },
+  "turtle": {
+   "name": "turtle",
+   "version": "0.0.1",
+   "file_name": "{basthonRoot}/modules/turtle-0.0.1-py3-none-any.whl",
+   "install_dir": "site",
+   "sha256": "b22f289fd4785605b3b997f24c1c58f7798a3e2d9868c6f679c1885a43543e75",
+   "imports": [
+    "turtle"
+   ],
+   "depends": []
+  },
+  "tutor": {
+   "name": "tutor",
+   "version": "0.0.1",
+   "file_name": "{basthonRoot}/modules/tutor-0.0.1-py3-none-any.whl",
+   "install_dir": "site",
+   "sha256": "2b19541830cd259e97a91b22572485e28c7bc8831e5b114b9f38a4a914e300d6",
+   "imports": [
+    "tutor"
+   ],
+   "depends": []
+  }
+ }
+}

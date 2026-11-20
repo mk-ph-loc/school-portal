@@ -170,12 +170,19 @@ def main() -> int:
         time.sleep(0.5)
         n = cdp.evaluate("document.querySelectorAll('#custom-apps a[href=\"/apps/t/\"]').length")
         check("Κάρτα teachers ΚΡΥΒΕΤΑΙ από μαθητές", bool(hidden) and n == 0, f"{n} ορατές")
+        # Οι πραγματικές κάρτες «Προγραμματισμός» προκύπτουν δυναμικά από το
+        # manifest (π.χ. basthon) — η δοκιμαστική teachers κάρτα δεν πρέπει να
+        # αλλάξει τους μετρητές όσο είναι κρυμμένη.
+        n_prog = cdp.evaluate("""(() => {
+            const st=Alpine.$data(document.querySelector('[x-data]'));
+            return st.customApps.filter(a=>a.category==='Προγραμματισμός' && a.access!=='teachers').length;
+        })()""")
         cnt = cdp.evaluate("""(() => {
             const c=Alpine.$data(document.querySelector('[x-data]')).categoryCounts();
             return {all:c.all, prog:c['Προγραμματισμός']||0};
         })()""")
         check("Teachers-only κάρτα ΔΕΝ μετράει στους μετρητές μαθητή",
-              bool(cnt) and cnt["all"] == n_all and cnt["prog"] == 0, str(cnt))
+              bool(cnt) and cnt["all"] == n_all and cnt["prog"] == n_prog, str(cnt))
 
         cdp.evaluate(f"""(() => {{
             const st=Alpine.$data(document.querySelector('[x-data]'));
@@ -189,7 +196,7 @@ def main() -> int:
             return {all:c.all, prog:c['Προγραμματισμός']||0};
         })()""")
         check("Μετά το ξεκλείδωμα η teachers κάρτα μετράει κανονικά",
-              bool(cnt) and cnt["all"] == n_all + 1 and cnt["prog"] == 1, str(cnt))
+              bool(cnt) and cnt["all"] == n_all + 1 and cnt["prog"] == n_prog + 1, str(cnt))
         cdp.evaluate("Alpine.$data(document.querySelector('[x-data]')).lock(); true")
 
         # ---------------------------------------------------------------

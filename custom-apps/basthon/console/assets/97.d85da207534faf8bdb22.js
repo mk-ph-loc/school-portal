@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunk_basthon_basthon_console=self.webpackChunk_basthon_basthon_console||[]).push([[97],{4097(e,r,n){n.d(r,{JavaScriptKernel:()=>a});var s=n(7051);class a extends s.Ij{constructor(e){super(e)}newWorker(){return new Worker(new URL(n.p+n.u(634),n.b),{sandboxed:!0})}language(){return"javascript"}languageName(){return"JavaScript"}moduleExts(){return["js"]}ps1(){return" js> "}ps2(){return"...> "}}}}]);
+//# sourceMappingURL=97.d85da207534faf8bdb22.js.map

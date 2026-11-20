@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunk_basthon_basthon_console=self.webpackChunk_basthon_basthon_console||[]).push([[754],{2754(e,s,n){n.d(s,{SQLKernel:()=>t});var r=n(7051);class t extends r.Ij{constructor(e){super(e)}newWorker(){return new Worker(new URL(n.p+n.u(307),n.b),{sandboxed:!0})}language(){return"sql"}languageName(){return"SQL"}moduleExts(){return["sql","db","sqlite"]}ps1(){return"sql> "}ps2(){return"...> "}}}}]);
+//# sourceMappingURL=754.41c2ebe15cb50161f815.js.map

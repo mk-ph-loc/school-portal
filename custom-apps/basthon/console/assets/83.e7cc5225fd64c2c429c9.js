@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunk_basthon_basthon_console=self.webpackChunk_basthon_basthon_console||[]).push([[83],{8083(e,n,r){r.d(n,{XCASKernel:()=>a});var s=r(7051);class a extends s.Ij{constructor(e){super(e)}newWorker(){return new Worker(new URL(r.p+r.u(921),r.b),{sandboxed:!0})}language(){return"xcas"}languageName(){return"XCAS"}moduleExts(){return[]}ps1(){return"xcas> "}ps2(){return"...> "}}}}]);
+//# sourceMappingURL=83.e7cc5225fd64c2c429c9.js.map

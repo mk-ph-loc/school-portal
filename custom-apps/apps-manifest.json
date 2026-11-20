@@ -11,6 +11,16 @@
       "url": "/apps/drawio/"
     },
     {
+      "id": "basthon",
+      "title": "Εργαστήριο Python (Basthon)",
+      "description": "Εκτέλεση κώδικα Python και γραφικών Turtle 100% στον browser, χωρίς Internet. Περιβάλλον στα Γαλλικά/Αγγλικά.",
+      "category": "Προγραμματισμός",
+      "icon": "🐍",
+      "access": "all",
+      "pinned": true,
+      "url": "/apps/basthon/"
+    },
+    {
       "id": "binary-converter",
       "title": "Μετατροπέας Δυαδικού & Βάρη Bits",
       "description": "Δεκαδικό ↔ Δυαδικό ↔ Δεκαεξαδικό με 8 διαδραστικά διακοπτάκια bits: πάτα τα bits και δες ζωντανά την τιμή και το άθροισμα των βαρών (128…1).",

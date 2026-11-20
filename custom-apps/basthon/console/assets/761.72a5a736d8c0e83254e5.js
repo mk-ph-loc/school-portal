@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunk_basthon_basthon_console=self.webpackChunk_basthon_basthon_console||[]).push([[761],{761(e,n,r){r.d(n,{CKernel:()=>t});var s=r(7051);class t extends s.Ij{constructor(e){super(e)}newWorker(){return new Worker(new URL(r.p+r.u(559),r.b),{sandboxed:!0})}language(){return"c"}languageName(){return"C"}moduleExts(){return["c","h"]}banner(){return"C99 (xcc compiled to WebAssembly)\n"}ps1(){return"c> "}ps2(){return"...> "}}}}]);
+//# sourceMappingURL=761.72a5a736d8c0e83254e5.js.map

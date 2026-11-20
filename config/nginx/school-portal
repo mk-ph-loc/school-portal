@@ -388,6 +388,21 @@ server {
     location = /apps {
         return 301 /apps/;
     }
+    # Basthon (/apps/basthon/): ο Python kernel τρέχει σε sandboxed worker και
+    # χρειάζεται SharedArrayBuffer → cross-origin isolation (COOP+COEP).
+    # ΜΟΝΟ για το basthon — τα υπόλοιπα custom apps δεν επηρεάζονται.
+    location ^~ /apps/basthon/ {
+        alias /opt/school-portal/custom-apps/basthon/;
+        index index.html;
+        try_files $uri $uri/ =404;
+
+        add_header Cache-Control "no-cache";
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        # credentialless (όχι require-corp): ο sandboxed worker του Basthon
+        # φορτώνεται από data: URL (opaque origin) — το require-corp θα μπλόκαρε
+        # τα same-origin importScripts· το credentialless επιτρέπει COEP χωρίς CORP.
+        add_header Cross-Origin-Embedder-Policy "credentialless" always;
+    }
     location /apps/ {
         alias /opt/school-portal/custom-apps/;
         index index.html;
