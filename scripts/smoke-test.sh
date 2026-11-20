@@ -75,6 +75,11 @@ check "/apps/turbowarp/editor.html"    200
 check "/apps/snap/"                    200
 check "/apps/snap/snap.html"           200
 check "/apps/tf-playground/"           200
+check "/apps/bipes/"                   200
+check "/apps/bipes/ui/index.html"      200
+check "/apps/bipes/ui/msg/el.js"       200
+check "/apps/bipes/ui/core/blockly_compressed.js" 200
+check "/apps/screen-resolution-wizard/" 200
 check "/apps/_template/"               404
 check "/app-builder/"                  200
 check "/app-builder/healthz"           200

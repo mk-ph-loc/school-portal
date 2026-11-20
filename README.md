@@ -121,8 +121,17 @@ sudo /opt/school-portal/install.sh --no-deps  # γρήγορο re-apply (χωρ�
 `custom-apps/` με `index.html` + `app.json` σερβίρεται αυτόματα στο `/apps/<όνομα>/`
 από τον Nginx (χωρίς reload) και εμφανίζεται ως κάρτα στο Dashboard μέσω του
 `apps-manifest.json` που παράγει το `scripts/build-apps-manifest.py` (ενσωματωμένο
-στο `install.sh`). Έτοιμο παράδειγμα: **`/apps/binary-converter/`** (μετατροπέας
-δυαδικού με 8 διαδραστικά διακοπτάκια bits).
+στο `install.sh`).
+
+Συνοδεύονται **10 έτοιμες εκπαιδευτικές εφαρμογές** (static, 0 MB RAM, offline —
+οι 📌 pinned εμφανίζονται πρώτες): **drawio** 📌 (διαγράμματα, Ελληνικά),
+**basthon** 📌 (Python/Turtle στον browser), **binary-converter** 📌 (δυαδικό ↔ δεκαδικό),
+**turbowarp** 📌 (Scratch με μπλοκ, Ελληνικά), **piskel** (pixel art),
+**screen-resolution-wizard** (pixels/ανάλυση/PPI), **minipaint** (επεξεργασία εικόνας,
+Ελληνικά), **tf-playground** (νευρωνικά δίκτυα), **snap** (προχωρημένα μπλοκ, Ελληνικά),
+**bipes** (ρομποτική/μικροελεγκτές ESP32/Pico, Ελληνικά). Τα μεγάλα mirrors των
+basthon (Pyodide) & turbowarp (Scratch assets) κατεβαίνουν από το `install.sh`
+(βήματα 6ε/6ιζ, εκτός git). Πίνακας με πηγές/εκδόσεις: οδηγός παρακάτω.
 📖 **Πλήρης οδηγός: [`CUSTOM-APPS-GUIDE.md`](CUSTOM-APPS-GUIDE.md)**
 
 **🧙 App Builder Wizard (`/app-builder/`):** δημιουργία εφαρμογών μέσα από τον browser
@@ -232,7 +241,16 @@ sudo TEACHER_PASS='νέος_κωδικός' FORCE_HTPASSWD=1 /opt/school-portal/
 │   └── static/wizard.js    # Λογική wizard (σχετικά fetch URLs)
 ├── custom-apps/            # 🚀 Δικές μου εφαρμογές (/apps/<όνομα>/, static, 0 MB)
 │   ├── _template/          # Boilerplate: index.html + app.json (δεν σερβίρεται)
-│   ├── binary-converter/   # Παράδειγμα: δυαδικό ↔ δεκαδικό ↔ hex με bit switches
+│   ├── binary-converter/   # 📌 Παράδειγμα: δυαδικό ↔ δεκαδικό ↔ hex με bit switches
+│   ├── drawio/             # 📌 Διαγράμματα & κυκλώματα (draw.io, Ελληνικά)
+│   ├── basthon/            # 📌 Εργαστήριο Python & Turtle (Pyodide mirror από install.sh)
+│   ├── turbowarp/          # 📌 Scratch editor με μπλοκ (Ελληνικά, assets από install.sh)
+│   ├── minipaint/          # Επεξεργασία εικόνας με layers (Ελληνικά)
+│   ├── piskel/             # Pixel art & sprites με animation
+│   ├── screen-resolution-wizard/  # Pixels, ανάλυση οθόνης & PPI (Ελληνικά)
+│   ├── snap/               # Προχωρημένα μπλοκ Snap! (Ελληνικά, χωρίς cloud)
+│   ├── tf-playground/      # TensorFlow Playground — νευρωνικά δίκτυα (offline)
+│   ├── bipes/              # Ρομποτική BIPES: ESP32/Pico με μπλοκ (Ελληνικά, offline)
 │   └── apps-manifest.json  # Παράγεται από scripts/build-apps-manifest.py
 ├── CUSTOM-APPS-GUIDE.md    # Οδηγός προσθήκης δικών σου εφαρμογών
 ├── config/                 # Source of truth για nginx & systemd

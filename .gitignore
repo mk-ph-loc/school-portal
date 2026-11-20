@@ -110,6 +110,10 @@ h5p-studio/backups/
 h5p-studio/.export-*.h5p
 h5p-studio/library/preview-tmp/
 
+# --- Custom apps: safety nets (ποτέ node_modules ή εμφωλευμένα .git στο repository) ---
+custom-apps/*/node_modules/
+custom-apps/*/.git/
+
 # --- Λειτουργικό σύστημα ---
 .DS_Store
 Thumbs.db

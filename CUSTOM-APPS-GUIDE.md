@@ -297,6 +297,42 @@ bash /opt/school-portal/scripts/smoke-test.sh
 
 ---
 
+## 📦 Έτοιμες εκπαιδευτικές εφαρμογές
+
+Η πύλη συνοδεύεται πλέον από **10 έτοιμες εφαρμογές** (όλες static, **0 MB RAM** στον
+server, 100% offline στο σχολικό LAN). Οι 4 με 📌 είναι **pinned** («Επιλεγμένο») και
+εμφανίζονται πρώτες στο Dashboard· οι υπόλοιπες ακολουθούν αλφαβητικά κατά τίτλο.
+
+| id | Τίτλος | Κατηγορία | Πηγή / upstream version | Μέγεθος | Ιδιαιτερότητες / γλώσσα UI |
+|---|---|---|---|---|---|
+| `drawio` 📌 | Διαγράμματα & Κυκλώματα (draw.io) | Τεχνολογία & ΤΝ | jgraph/drawio v32.7.4 (static build) | ~63 MB | Ελληνικά UI, χωρίς cloud/telemetry |
+| `basthon` 📌 | Εργαστήριο Python (Basthon) | Προγραμματισμός | console.basthon.fr, kernel 0.92.0 + Pyodide 0.26.4 | ~65 MB* | UI Γαλλικά/Αγγλικά· το **Pyodide mirror κατεβαίνει από το `install.sh`** (βήμα 6ε, `scripts/fetch-basthon-pyodide.py`, εκτός git) |
+| `binary-converter` 📌 | Μετατροπέας Δυαδικού & Βάρη Bits | Υλικό & Δεδομένα | δική μας ανάπτυξη (πρότυπο ποιότητας) | ~28 KB | Ελληνικά, καθαρό HTML/JS χωρίς εξαρτήσεις |
+| `turbowarp` 📌 | Προγραμματισμός με Μπλοκ (TurboWarp) | Προγραμματισμός | TurboWarp/pentapod static build (turbowarp.org) | ~80 MB* | Ελληνικά UI· το **Scratch assets mirror (~53 MB) κατεβαίνει από το `install.sh`** (βήμα 6ιζ, `scripts/fetch-turbowarp-assets.py`, εκτός git) |
+| `piskel` | Pixel Art & Κινούμενα Σχέδια (Piskel) | Γραφικά & Πολυμέσα | piskelapp.com packaged build (piskel/piskel) | ~2.3 MB | Αγγλικά UI, static χωρίς εξαρτήσεις |
+| `screen-resolution-wizard` | Pixel, Ανάλυση Οθόνης & PPI | Γραφικά & Πολυμέσα | δική μας ανάπτυξη | ~28 KB | Ελληνικά, οδηγός 4 βημάτων |
+| `minipaint` | Επεξεργασία Εικόνας (miniPaint) | Γραφικά & Πολυμέσα | viliusle/miniPaint (dist bundle) | ~5 MB | Ελληνικά UI (`?lang=el`) |
+| `tf-playground` | Παιχνιδότοπος Νευρωνικών Δικτύων | Τεχνολογία & ΤΝ | tensorflow/playground (static build) | ~548 KB | Αγγλικά UI, τοπικές γραμματοσειρές/icons (χωρίς googleapis) |
+| `snap` | Προχωρημένα Μπλοκ (Snap!) | Προγραμματισμός | jmoenig/Snap! v12.4.0 | ~69 MB | Ελληνικά UI (default), χωρίς telemetry/cloud |
+| `bipes` | Ρομποτική & Μικροελεγκτές (BIPES) | Τεχνολογία & ΤΝ | BIPES/BIPES master (ui/, vendored Blockly) | ~19 MB | Ελληνικά UI (`msg/el.js`), χωρίς GA/appspot/CDN· σύνδεση πλακέτας WebSerial/WebUSB μόνο σε **HTTPS/localhost**, WebREPL και σε HTTP |
+
+\* Το συνολικό μέγεθος **με** τα τοπικά mirrors που κατεβάζει το `install.sh`.
+
+**Σημειώσεις για τα pinned & τα mirrors:**
+
+- Το `pinned: true` στο `app.json` βάζει την κάρτα πρώτη με badge «📌 Επιλεγμένο» —
+  η σειρά του manifest διατηρείται αυτούσια από το Dashboard (pinned-first, μετά
+  αλφαβητικά κατά τίτλο). Αλλαγή pinned → ξανατρέξε `build-apps-manifest.py`.
+- Τα mirrors των `basthon` (Pyodide) και `turbowarp` (Scratch assets) **δεν μπαίνουν
+  στο git** (`.gitignore`) — κατεβαίνουν idempotent από το `install.sh` με marker
+  `.complete` (FORCE=1 για αναγκαστική ανανέωση). Σε νέο server αρκεί
+  `sudo ./install.sh --update`.
+- Όλες οι εφαρμογές έχουν κουμπί **«← Portal»** επιστροφής (`portal-back.js`) και
+  ελέγχονται από browser tests: `scripts/custom-apps-test.py`, `graphics-apps-test.py`,
+  `basthon-test.py`, `turbowarp-test.py`, `snap-tf-test.py`, `bipes-test.py`.
+
+---
+
 ## 📚 Το έτοιμο παράδειγμα: `binary-converter`
 
 Στο `/apps/binary-converter/` υπάρχει μια πλήρης εκπαιδευτική εφαρμογή

@@ -262,6 +262,11 @@ done
 # 5β. Δικές μου εφαρμογές (custom-apps/) — manifest για το Dashboard
 #     Σαρώνει τα app.json των υποφακέλων (αγνοεί το _template) και παράγει
 #     το custom-apps/apps-manifest.json. Οδηγός: CUSTOM-APPS-GUIDE.md
+#     Περιλαμβάνονται πλέον 10 έτοιμες εκπαιδευτικές εφαρμογές: binary-converter,
+#     screen-resolution-wizard, drawio, minipaint, piskel, basthon, turbowarp,
+#     snap, tf-playground, bipes. Τα μεγάλα mirrors των basthon (Pyodide, βήμα 6ε)
+#     και turbowarp (Scratch assets, βήμα 6ιζ) κατεβαίνουν από τα fetch scripts
+#     παρακάτω — είναι εκτός git (.gitignore) και idempotent (marker .complete).
 # ---------------------------------------------------------------------------
 log "Ενημέρωση manifest δικών μου εφαρμογών (custom-apps/)…"
 if python3 "${PORTAL_DIR}/scripts/build-apps-manifest.py"; then

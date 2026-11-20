@@ -89,6 +89,16 @@
       "access": "all",
       "pinned": false,
       "url": "/apps/snap/"
+    },
+    {
+      "id": "bipes",
+      "title": "Ρομποτική & Μικροελεγκτές (BIPES)",
+      "description": "Προγραμματισμός Arduino, ESP32 και Raspberry Pi Pico με οπτικά μπλοκ — στα Ελληνικά. Η σύνδεση συσκευής γίνεται τοπικά από τον browser (WebSerial).",
+      "category": "Τεχνολογία & ΤΝ",
+      "icon": "🤖",
+      "access": "all",
+      "pinned": false,
+      "url": "/apps/bipes/"
     }
   ]
 }
